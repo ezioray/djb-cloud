@@ -1,0 +1,148 @@
+# DJB djb-cloud · CI 门禁
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: 密钥扫描
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: gitleaks（含历史）
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  redline-scan:
+    name: 红线词扫描
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 代码看实现形态 / 文档看主张式表述
+        run: |
+          set -e
+          fail=0
+
+          echo "== A. 代码里不得出现「代币化 / 绕限制 / 托管凭据」的实现 =="
+          CODE_PAT='(token_?(mint|transfer|withdraw)|airdrop\(|proxy_?(pool|rotation)|rotate_?(account|key_pool)|fingerprint_?spoof|host_?customer_?key|store_?user_?credential)'
+          if grep -rInE "$CODE_PAT" --include='*.py' --include='*.ts' --include='*.rs' --include='*.go' --include='*.js' . ; then
+            echo "::error::代码中出现红线实现形态"; fail=1
+          fi
+
+          echo "== B. 文档不得【主张】这些能力（禁令/否定表述天然不匹配）=="
+          # 只匹配「肯定动词 + 能力」的组合：禁令写成「禁止代币化」「不托管凭据」不会命中
+          DOC_PAT='(支持|提供|实现|允许|开放)(发币|空投|代币化|账号轮换池|托管.{0,4}凭据)|绕过(上游|站点)?限制的(方案|方法|功能)'
+          if grep -rInE "$DOC_PAT" --include='*.md' --include='*.yaml' --include='*.yml' . \
+             | grep -vE '(SECURITY|CONTRIBUTING|CODE_OF_CONDUCT)\.md' ; then
+            echo "::error::文档中出现主张式红线表述"; fail=1
+          fi
+
+          [ "$fail" = 0 ] && echo "✅ 无红线"
+          exit $fail
+
+  test:
+    name: 单测 + 账本复算（Postgres）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: djb_dev
+          POSTGRES_USER: djb_dev_app
+          POSTGRES_PASSWORD: ci-only-not-a-real-secret
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U djb_dev_app -d djb_dev"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DJB_DSN: postgresql://djb_dev_app:ci-only-not-a-real-secret@127.0.0.1:5432/djb_dev
+      PYTHONPATH: .
+      DJB_PRICING_FILE: config/pricing.dev.json
+      DJB_SIG_SUPPLIER_KEY: ci-supplier-key-not-a-real-secret
+      DJB_SIG_CONSUMER_KEY: ci-consumer-key-not-a-real-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: 安装依赖
+        run: |
+          python -m pip install -q --upgrade pip
+          pip install -q 'fastapi>=0.110' 'uvicorn>=0.29' 'psycopg[binary]>=3.1' 'pytest>=8.0' httpx pyyaml
+      - name: 拉取固定版本契约（djb-node）
+        run: |
+          mkdir -p spec
+          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/412f314c2dc1280127dea50562713e715c54f51b/openapi.yaml" -o spec/openapi.yaml
+          echo "spec: $(wc -l < spec/openapi.yaml) 行 @ 412f314" 
+      - name: 迁移（001 + 002）
+        run: |
+          psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f migrations/001_init.sql
+          psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f migrations/002_api_keys.sql
+      - name: 写入收据与分录
+        run: python scripts/seed_demo.py
+      - name: 全量复算（差异必须 0）
+        run: python scripts/recompute.py --expect-zero
+      - name: 单测
+        run: python -m pytest -q
+
+  dco:
+    name: DCO（Signed-off-by）
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: 检查最近一次提交
+        run: |
+          set -e
+          msg="$(git log -1 --pretty=%B)"
+          echo "$msg" | head -5
+          if ! echo "$msg" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
+            echo "::error::提交缺少 Signed-off-by（git commit -s）"; exit 1
+          fi
+
+  license-headers:
+    name: 许可证头（SPDX）
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 每个 .py 必须有 SPDX
+        run: |
+          set -e
+          bad=0
+          while IFS= read -r f; do
+            head -3 "$f" | grep -q 'SPDX-License-Identifier' || { echo "::error file=$f::缺 SPDX 头"; bad=1; }
+          done < <(find app scripts tests -name '*.py')
+          exit $bad
+
+  risk-config-guard:
+    name: 反作弊配置不得入库
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: 拦截规则/阈值/名单/权重形态
+        run: |
+          set -e
+          hits=$(grep -rIlE '(risk[-_]?rules|thresholds?\.(json|ya?ml)|blocklist|denylist|score_weight)' \
+                 --include='*.py' --include='*.json' --include='*.yaml' --include='*.yml' . \
+                 | grep -vE '^\./(\.github|tests)/' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::疑似反作弊配置入库（应放私有仓 djb/risk-config）："; echo "$hits"; exit 1
+          fi
+          echo "通过"

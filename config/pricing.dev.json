@@ -1,0 +1,9 @@
+{
+  "_comment": "开发用价格表（微单位/单位 token）。生产价格表属运营配置，不入公开仓（运营配置不入公开仓）。",
+  "currency": "COIN",
+  "platform_fee_bps": 100,
+  "models": {
+    "djb/chat-lite": { "in_micro_per_token": 300, "out_micro_per_token": 900 },
+    "djb/chat-pro":  { "in_micro_per_token": 900, "out_micro_per_token": 2700 }
+  }
+}
