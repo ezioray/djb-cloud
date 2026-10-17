@@ -14,11 +14,7 @@ import hmac
 import json
 import os
 
-from .nodes import derive_secret
-
-
-def _canonical(rid, task_id, access, usage_amount, usage_unit, price_amount) -> bytes:
-    return "|".join(map(str, (rid, task_id, access, usage_amount, usage_unit, price_amount))).encode()
+from .nodes import canonical_receipt, derive_secret
 
 
 def run(c, task_ids: list[str] | None = None, grace_seconds: int | None = None) -> dict:
@@ -36,7 +32,7 @@ def run(c, task_ids: list[str] | None = None, grace_seconds: int | None = None) 
         where.append("(r.task_id = ANY(%s) OR nr.task_id = ANY(%s))")
         params += [task_ids, task_ids]
     sql = f"""SELECT r.task_id, r.amount_micro, nr.receipt_id, nr.usage_amount, nr.price_amount,
-                     nr.sig_provider, nr.node_id, nr.access, nr.usage_unit,
+                     nr.sig_provider, nr.node_id, nr.access, nr.usage_unit, nr.raw,
                      (r.created_at IS NOT NULL AND r.created_at < now() - make_interval(secs => %s)) AS past_grace
               FROM receipts r FULL OUTER JOIN node_receipts nr ON r.task_id = nr.task_id
               WHERE {' AND '.join(where)}"""
@@ -46,7 +42,7 @@ def run(c, task_ids: list[str] | None = None, grace_seconds: int | None = None) 
 
     only_platform, pending_upload, only_node, mismatch, sig_bad = [], [], [], [], []
     matched = 0
-    for task_id, amount_micro, rid_n, usage_amount, price_amount, sig_prov, node_id, access, unit, past_grace in rows:
+    for task_id, amount_micro, rid_n, usage_amount, price_amount, sig_prov, node_id, access, unit, raw, past_grace in rows:
         if rid_n is None:
             (only_platform if past_grace else pending_upload).append(task_id)
             continue
@@ -65,9 +61,13 @@ def run(c, task_ids: list[str] | None = None, grace_seconds: int | None = None) 
         # 供方签名复验（对账时再验一次，不信任入库时的状态）
         if node_id:
             secret = derive_secret(node_id).encode()
-            want = "hmac-sha256:" + hmac.new(
-                secret, _canonical(rid_n, task_id, access, usage_amount, unit, price_amount),
-                hashlib.sha256).hexdigest()
+            u = (raw or {}).get("usage") or {}
+            pr = (raw or {}).get("price") or {}
+            norm = {"receipt_id": rid_n, "task_id": (raw or {}).get("task_id"),
+                    "access": (raw or {}).get("access"),
+                    "usage_amount": str(u.get("amount")), "usage_unit": str(u.get("unit")),
+                    "price_amount": str(pr.get("amount") if isinstance(pr, dict) else pr)}
+            want = "hmac-sha256:" + hmac.new(secret, canonical_receipt(norm), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(want, str(sig_prov)):
                 sig_bad.append(rid_n)
 

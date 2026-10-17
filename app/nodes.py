@@ -112,10 +112,17 @@ def policy(x_client_key: str | None = Header(default=None, alias="X-Client-Key")
     return doc
 
 
-def _canonical_receipt(r: dict) -> bytes:
-    """收据规范字段（顺序固定，参与签名）。"""
-    return "|".join(str(r.get(k)) for k in
-                    ("receipt_id", "task_id", "access", "usage_amount", "usage_unit", "price_amount")).encode()
+RECEIPT_SIG_FIELDS = ("receipt_id", "task_id", "access", "usage_amount", "usage_unit", "price_amount")
+
+
+def canonical_receipt(r: dict) -> bytes:
+    """收据规范字段（顺序固定，参与签名）。
+
+    注意：全部按**原样字符串**拼接。数据库 NUMERIC 取回会变成
+    Decimal('1200.000000000')，与签名时的 "1200" 不相等 —— 所以复验必须
+    用上报时的原值（node_receipts.raw），不能直接用 NUMERIC 列。
+    """
+    return "|".join(str(r.get(k)) for k in RECEIPT_SIG_FIELDS).encode()
 
 
 @router.post("/receipts")
@@ -139,7 +146,7 @@ def submit_receipts(body: dict, x_client_key: str | None = Header(default=None, 
                 sig_prov, sig_con = r.get("sig_provider"), r.get("sig_consumer")
                 if not sig_prov or not sig_con:
                     raise ValueError("双签缺一（sig_provider/sig_consumer 均为必填）")
-                want = "hmac-sha256:" + hmac.new(secret, _canonical_receipt(norm), hashlib.sha256).hexdigest()
+                want = "hmac-sha256:" + hmac.new(secret, canonical_receipt(norm), hashlib.sha256).hexdigest()
                 if not hmac.compare_digest(want, str(sig_prov)):
                     raise ValueError("供方签名不匹配")
                 cur.execute("""INSERT INTO node_receipts (receipt_id,node_id,task_id,access,usage_amount,usage_unit,
