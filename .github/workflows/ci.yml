@@ -74,6 +74,8 @@ jobs:
       DJB_PRICING_FILE: config/pricing.dev.json
       DJB_SIG_SUPPLIER_KEY: ci-supplier-key-not-a-real-secret
       DJB_SIG_CONSUMER_KEY: ci-consumer-key-not-a-real-secret
+      DJB_NODE_MASTER_KEY: ci-node-master-not-a-real-secret
+      DJB_NODE_BOOTSTRAP_KEY: ci-bootstrap-not-a-real-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -85,12 +87,11 @@ jobs:
       - name: 拉取固定版本契约（djb-node）
         run: |
           mkdir -p spec
-          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/412f314c2dc1280127dea50562713e715c54f51b/openapi.yaml" -o spec/openapi.yaml
+          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/400c3ca0de7afe590f1c6f2c5962ec30bbafd679/openapi.yaml" -o spec/openapi.yaml
           echo "spec: $(wc -l < spec/openapi.yaml) 行 @ 412f314" 
       - name: 迁移（001 + 002）
         run: |
-          psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f migrations/001_init.sql
-          psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f migrations/002_api_keys.sql
+          for f in migrations/*.sql; do echo "→ $f"; psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
       - name: 写入收据与分录
         run: python scripts/seed_demo.py
       - name: 全量复算（差异必须 0）

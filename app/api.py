@@ -12,8 +12,10 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import db, pricing, receipt as rcpt, upstream
+from .nodes import router as node_router
 
 app = FastAPI(title="djb-cloud", version="0.1.0")
+app.include_router(node_router)
 
 
 # ── 鉴权：用方 Bearer（库里只存 sha256）───────────────────────────────────────
@@ -85,11 +87,11 @@ async def create_chat_completion(
         cur.execute("""INSERT INTO accounts (id, kind) VALUES (%s,'user'),(%s,'node'),(%s,'platform')
                        ON CONFLICT (id) DO NOTHING""", (consumer, rec["node_id"], "platform:fee"))
         cur.execute("""INSERT INTO receipts (id,node_id,consumer_id,request_id,model,tokens_in,tokens_out,
-                       amount_micro,sig_supplier,sig_consumer,ts_start,ts_end,idempotency_key)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s),%s)""",
+                       amount_micro,sig_supplier,sig_consumer,ts_start,ts_end,idempotency_key,task_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),to_timestamp(%s),%s,%s)""",
                     (rid, rec["node_id"], consumer, req_id, model, rec["tokens_in"], rec["tokens_out"],
                      rec["amount_micro"], signed["sig_supplier"], signed["sig_consumer"], now - 1, now,
-                     x_djb_idempotency_key))
+                     x_djb_idempotency_key, req_id))
         from .ledger import post_entry
         post_entry(c, debit=consumer, credit=rec["node_id"], amount_micro=q["amount_micro"] - q["fee_micro"],
                    memo="usage settle", receipt_id=rid)
