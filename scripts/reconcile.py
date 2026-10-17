@@ -8,8 +8,9 @@ from app.reconcile import run
 
 def main():
     expect_zero = "--expect-zero" in sys.argv
+    task_ids = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--task-id=")] or None
     with db.conn() as c:
-        r = run(c)
+        r = run(c, task_ids=task_ids)
     print(json.dumps(r, ensure_ascii=False, indent=2))
     if expect_zero and r["diff"] != 0:
         print("❌ 对账差异非 0 —— 按 P0 处置", file=sys.stderr)

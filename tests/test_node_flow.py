@@ -79,8 +79,9 @@ def test_register_policy_and_dual_signed_receipts_reconcile_to_zero():
     assert len(up.json()["accepted"]) == 1 and up.json()["rejected"] == []
 
     with db.conn() as c:
-        r = reconcile_run(c)
+        r = reconcile_run(c, task_ids=[task_id])   # 只对本次批次对账（其余任务属其它用例/在途）
     assert r["matched"] >= 1
+    assert r["only_node"] == [] and r["amount_mismatch"] == [] and r["signature_bad"] == []
     assert r["diff"] == 0, r
 
 
