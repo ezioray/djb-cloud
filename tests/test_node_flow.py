@@ -18,7 +18,7 @@ from app.api import app  # noqa: E402
 from app.reconcile import run as reconcile_run  # noqa: E402
 
 client = TestClient(app)
-BOOT = {"X-Client-Key": "test-bootstrap-not-real"}
+BOOT = {"X-Client-Key": os.environ["DJB_NODE_BOOTSTRAP_KEY"]}   # 从环境读，避免与 CI 注入值不一致
 
 
 def _register() -> dict:
