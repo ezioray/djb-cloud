@@ -28,8 +28,8 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+            ${{ github.event_name != 'pull_request' && format('ghcr.io/{0}:{1}', github.repository, github.ref_name) || format('ghcr.io/{0}:pr-{1}', github.repository, github.event.pull_request.number) }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
