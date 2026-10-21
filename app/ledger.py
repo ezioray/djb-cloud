@@ -8,6 +8,14 @@ from dataclasses import dataclass
 
 GENESIS = "GENESIS"
 
+# 账本追加的全局串行化 key（pg_advisory_xact_lock 的 key 空间按「每个数据库」划分，
+# 同一库内同一个 bigint 就是同一把锁）：
+#   · 本模块的 post_entry 与 app/chain/polygon.py::_append_entry 必须抢**同一把锁**，
+#     否则两条写入路径互相看不见，hash 链仍可能分叉（BUG-0002）；
+#   · polygon 侧的私有常量 ``_LEDGER_APPEND_LOCK`` 必须与本值相等，由
+#     tests/test_ledger_concurrency.py 断言，防止两边各自漂移。
+LEDGER_APPEND_LOCK_ID = 4_442_002
+
 
 def entry_hash(prev_hash: str | None, debit: str, credit: str, amount_micro: int, memo: str | None) -> str:
     payload = json.dumps(
@@ -24,11 +32,30 @@ class PostResult:
     hash: str
 
 
+def _serialize_append(c) -> None:
+    """在「读 prev_hash → INSERT」之前拿事务级 advisory lock，直到事务结束才释放。
+
+    必须是显式事务：autocommit 连接会让 ``pg_advisory_xact_lock`` 在语句结束即释放，
+    等于没加锁；这种情况直接报错，不做静默降级（否则等于把 BUG-0002 藏起来）。
+    """
+    if getattr(c, "autocommit", False):
+        raise RuntimeError(
+            "post_entry 需要显式事务：autocommit 连接无法保持 pg_advisory_xact_lock，"
+            "账本 hash 链不会被串行化")
+    with c.cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (LEDGER_APPEND_LOCK_ID,))
+
+
 def post_entry(c, debit: str, credit: str, amount_micro: int, memo: str | None = None,
                receipt_id: str | None = None) -> PostResult:
-    """写一条分录：链上接前一条；同时更新余额。只允许 INSERT。"""
+    """写一条分录：链上接前一条；同时更新余额。只允许 INSERT。
+
+    并发安全：先拿 ``pg_advisory_xact_lock(LEDGER_APPEND_LOCK_ID)`` 再读 prev_hash，
+    让「读前一条 hash → 插入」在同一把锁下串行，避免两个事务读到同一个 prev 造成链分叉。
+    """
     if amount_micro <= 0:
         raise ValueError("amount_micro must be > 0")
+    _serialize_append(c)
     with c.cursor() as cur:
         cur.execute("SELECT hash FROM ledger_entries ORDER BY seq DESC LIMIT 1")
         row = cur.fetchone()
