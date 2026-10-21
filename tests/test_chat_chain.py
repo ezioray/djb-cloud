@@ -3,6 +3,7 @@
 import hashlib
 import os
 import secrets
+import uuid
 
 os.environ.setdefault("DJB_PRICING_FILE", os.path.join(os.path.dirname(__file__), "..", "config", "pricing.dev.json"))
 os.environ.setdefault("DJB_SIG_SUPPLIER_KEY", "test-supplier-key-not-real")
@@ -41,15 +42,17 @@ def test_full_chain_request_to_receipt_to_ledger():
         user = cur.fetchone()[0]
 
     before = _count("SELECT count(*) FROM ledger_entries")
+    # request_id 每次随机：receipts.request_id 有唯一约束，硬编码会让同一库二次运行撞键（BUG-0001）
+    request_id = str(uuid.uuid4())
     r = client.post("/v1/chat/completions",
-                    headers={"Authorization": auth, "X-Request-Id": "11111111-1111-1111-1111-111111111111"},
+                    headers={"Authorization": auth, "X-Request-Id": request_id},
                     json={"model": "djb/chat-lite", "messages": [{"role": "user", "content": "你好，算一笔账"}]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["object"] == "chat.completion"
     assert body["choices"][0]["message"]["role"] == "assistant"
     assert body["usage"]["total_tokens"] > 0
-    assert r.headers["X-Request-Id"]
+    assert r.headers["X-Request-Id"] == request_id   # 回显必须与请求一致
     rid = body["djb_receipt_id"]
 
     # 收据存在且双签可验证
