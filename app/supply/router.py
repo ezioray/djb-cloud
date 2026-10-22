@@ -1,0 +1,453 @@
+# SPDX-License-Identifier: Apache-2.0
+"""M02 T2 HTTP 路由（独立模块，**不接 app/api.py**——由 Lead 合并时统一 include）。
+
+覆盖 spec 1.2.0/1.2.1 中 M02 的 T2 六个操作（T3–T6 的其余端点后续补齐）::
+
+    POST   /api/v1/node/register                         registerNode          201
+    POST   /api/v1/node/pair                             pairNodeClientKey     201
+    GET    /api/v1/node/binding                          getNodeBinding        200
+    POST   /api/v1/node/binding                          bindNode              200
+    DELETE /api/v1/node/binding                          unbindNode            200
+    POST   /api/v1/admin/supply/nodes/{id}/review        reviewSupplyNode      200
+
+约定（00-conventions §5 / spec ``Error``）：
+
+- 错误信封 ``{"error": {type, code, message, request_id}}``，``code`` 是**整数**，``type`` 取
+  spec 枚举；任何响应都回显 ``X-Request-Id``。
+- 请求体校验自己做（不用 FastAPI 的 422）：不合法一律 400 / 40001。
+- 写接口支持 ``X-DJB-Idempotency-Key``（24 h）：回放首次响应；同键不同载荷 → 40919；
+  **含一次性明文的响应（register / pair）不入幂等表**，重放回 40919 + ``key_id`` 提示。
+- 一次性明文（``client_key``）只在该响应出现一次；库里只有 sha256 + 8 位前缀。
+
+认证与接线：
+
+- 节点侧 ``X-Client-Key``（本模块自己的 ``nodes.key_hash``，不 import 任何其它模块）。
+- 管理面（审核）走**依赖注入钩子** :func:`set_admin_authenticator`：默认 **fail-closed**
+  （未接线即 401，绝不静默放行），合并时由 Lead 注入 M01 管理面鉴权与 step-up 判定。
+- 数据库连接经 :func:`_connection`（app.db 既有约定：成功提交、异常回滚）；测试用
+  ``monkeypatch.setattr(router_module, "_connection", ...)`` 指向隔离 schema。
+"""
+from __future__ import annotations
+
+import inspect
+import logging
+from typing import Any, Awaitable, Callable
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+
+from . import clock, errors, idempotency, models, protocol, security
+
+log = logging.getLogger("djb.supply.http")
+
+router = APIRouter(prefix="/api/v1", tags=["node"])
+
+NODE_KEY_HEADER = "X-Client-Key"
+IDEMPOTENCY_HEADER = "X-DJB-Idempotency-Key"
+STEP_UP_HEADER = "X-Admin-Step-Up"
+
+AdminAuthenticator = Callable[[Request], "dict[str, Any] | Awaitable[dict[str, Any]]"]
+_admin_authenticator: AdminAuthenticator | None = None
+
+
+# --------------------------------------------------------------------------- 接线钩子
+def set_admin_authenticator(authenticator: AdminAuthenticator | None) -> None:
+    """注入管理面鉴权（合并时由 Lead 接 M01）。传 ``None`` 恢复 fail-closed。"""
+    global _admin_authenticator
+    _admin_authenticator = authenticator
+
+
+def admin_authenticator() -> AdminAuthenticator | None:
+    return _admin_authenticator
+
+
+async def _admin_principal(request: Request) -> dict[str, Any]:
+    """管理面主体；未接线即 401（fail-closed），并强制 step-up（M02 §4.1）。"""
+    if _admin_authenticator is None:
+        raise errors.AdminAuthUnavailable(
+            "管理面鉴权未接线：合并时由 Lead 注入 M01 管理面鉴权 + step-up")
+    principal = _admin_authenticator(request)
+    if inspect.isawaitable(principal):
+        principal = await principal
+    if not isinstance(principal, dict) or not principal.get("admin_id"):
+        raise errors.AdminAuthUnavailable("管理面鉴权返回非法主体")
+    if not principal.get("step_up"):
+        raise errors.StepUpRequired("高危动作需要 step-up（X-Admin-Step-Up）")
+    return principal
+
+
+def _connection() -> Any:
+    """请求级连接（app.db 的既有约定：成功提交、异常回滚）。"""
+    from app.db import conn as db_conn                        # 基础设施，非业务模块
+
+    return db_conn()                                          # pragma: no cover - 部署期接线
+
+
+# --------------------------------------------------------------------------- 信封
+def _request_id(request: Request) -> str:
+    provided = (request.headers.get("X-Request-Id") or "").strip()
+    return provided[:64] if provided else models.uuid7().hex
+
+
+def _headers(request_id: str, **extra: str) -> dict[str, str]:
+    return {"X-Request-Id": request_id, **extra}
+
+
+def _ok(payload: dict[str, Any], request_id: str, *, status_code: int = 200,
+        **extra_headers: str) -> JSONResponse:
+    return JSONResponse(payload, status_code=status_code,
+                        headers=_headers(request_id, **extra_headers))
+
+
+def _fail(exc: errors.SupplyError, request_id: str) -> JSONResponse:
+    body = {"error": {"type": errors.error_type_for(exc.status_code),
+                      "code": int(exc.code),
+                      "message": exc.message,
+                      "request_id": request_id,
+                      "reason": exc.reason,
+                      **{key: value for key, value in exc.details.items() if key != "reason"}}}
+    extra: dict[str, str] = {}
+    retry_after = exc.details.get("retry_after_s")
+    if exc.status_code == 429 and retry_after:
+        extra["Retry-After"] = str(int(retry_after))
+    return JSONResponse(body, status_code=exc.status_code,
+                        headers=_headers(request_id, **extra))
+
+
+def _server_error(request_id: str) -> JSONResponse:
+    body = {"error": {"type": "server_error", "code": 50001,
+                      "message": "服务繁忙", "request_id": request_id}}
+    return JSONResponse(body, status_code=500, headers=_headers(request_id))
+
+
+async def _body(request: Request) -> dict[str, Any]:
+    import json
+
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise errors.InvalidArgument("请求体不是合法 JSON", reason="malformed_json") from exc
+    if not isinstance(parsed, dict):
+        raise errors.InvalidArgument("请求体必须是 JSON 对象", reason="malformed_json")
+    return parsed
+
+
+def _node_key(request: Request) -> str | None:
+    value = (request.headers.get(NODE_KEY_HEADER) or "").strip()
+    return value or None
+
+
+def _idem_key(request: Request) -> str | None:
+    return idempotency.require_key(request.headers.get(IDEMPOTENCY_HEADER))
+
+
+def _plaintext_not_replayable(key_id: Any, request_id: str) -> JSONResponse:
+    """含一次性明文的响应重放：明文不可回读 → 40919 + key_id 提示（与 M01 同口径）。"""
+    exc = errors.IdempotencyConflict(
+        "重复请求：密钥明文不可重放（平台只存哈希）；可用原密钥，或去掉幂等键重新注册以轮换",
+        reason="plaintext_not_replayable", key_id=str(key_id) if key_id else None)
+    return _fail(exc, request_id)
+
+
+# --------------------------------------------------------------------------- 凭据扫描留痕（INV-04）
+def _record_credential_rejection(request: Request, fields: list[str],
+                                 request_id: str) -> None:
+    """疑似凭据被拒：**只记字段名**（不落值），尽量落到 node_events；失败不影响 400。"""
+    log.warning("supply.credential_field_rejected request_id=%s fields=%s",
+                request_id, ",".join(fields))
+    key = _node_key(request)
+    if not key:
+        return
+    try:
+        with _connection() as c:
+            with c.transaction():
+                auth = models.authenticate(c, key, allow_previous=True)
+                models.record_credential_rejection(c, auth.node, fields,
+                                                   now=clock.utcnow())
+    except Exception:                                          # pragma: no cover - 审计不阻断
+        log.warning("supply.credential_rejection_audit_failed request_id=%s", request_id)
+
+
+def _scan(body: dict[str, Any], request: Request, request_id: str) -> None:
+    try:
+        security.scan_credentials(body)
+    except errors.CredentialFieldRejected as exc:
+        fields = list(exc.details.get("fields") or [])
+        _record_credential_rejection(request, fields, request_id)
+        raise
+
+
+# --------------------------------------------------------------------------- 序列化
+def _node_ack(node: models.Node, *, server_time: Any = None) -> dict[str, Any]:
+    """注册响应（spec ``NodeRegisterResponse`` + 可选的明文密钥字段）。"""
+    moment = server_time or clock.utcnow()
+    return {
+        "node_id": node.id,
+        "state": node.state,
+        "policy_version": node.policy_version,
+        "protocol_version": node.protocol_version,
+        "server_time": models.iso(moment),
+        "lifecycle_state": node.lifecycle_state,
+        "protocol_version_min": protocol.min_supported_version(),
+        "bound": node.bound_account_id is not None and node.revoked_at is None,
+    }
+
+
+def _register_payload(result: models.RegisterResult, request_id: str) -> dict[str, Any]:
+    payload = _node_ack(result.node)
+    payload.update({"created": result.created, "key_id": str(result.key_id)
+                    if result.key_id else None,
+                    "key_prefix": result.node.key_prefix})
+    if result.client_key is not None:
+        # 明文只在此响应出现一次；库 / 日志 / 幂等表都不落
+        payload["client_key"] = result.client_key
+    return payload
+
+
+def _pair_payload(rotation: models.KeyRotation) -> dict[str, Any]:
+    return {
+        "node_id": rotation.node.id,
+        "key_id": str(rotation.key_id),
+        "client_key": rotation.client_key,
+        "key_prefix": rotation.node.key_prefix,
+        "previous_key_expires_at": models.iso(rotation.previous_key_expires_at),
+        "created_at": models.iso(rotation.node.key_issued_at),
+    }
+
+
+def _review_ack(node: models.Node) -> dict[str, Any]:
+    return {
+        "node_id": node.id,
+        "state": node.state,
+        "reviewed_at": models.iso(node.reviewed_at),
+        "policy_version": node.policy_version,
+    }
+
+
+# --------------------------------------------------------------------------- 注册
+@router.post("/node/register", operation_id="registerNode", status_code=201,
+             summary="节点注册（首次 pending；同指纹幂等）")
+async def register_node(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key = _node_key(request)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _plaintext_not_replayable(record.response.get("key_id"), request_id)
+            with c.transaction():
+                result = models.register(
+                    c, platform=body.get("platform"),
+                    hardware_fingerprint=body.get("hardware_fingerprint"),
+                    client_version=body.get("client_version"),
+                    protocol_version=body.get("protocol_version"),
+                    capabilities=body.get("capabilities"),
+                    access_modes=body.get("access_modes"),
+                    region=body.get("region"),
+                    labels=body.get("labels"),
+                    client_key=key, now=clock.utcnow(), trace_id=request_id)
+                payload = _register_payload(result, request_id)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=201, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id, status_code=201)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.register.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- pair
+@router.post("/node/pair", operation_id="pairNodeClientKey", status_code=201,
+             summary="生成 / 轮换客户端密钥（明文只回一次）")
+async def pair_node_client_key(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        node_id = body.get("node_id")
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise errors.InvalidArgument("node_id 必填", field="node_id")
+        rotate = body.get("rotate", False)
+        overlap = body.get("overlap_seconds", 0)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _plaintext_not_replayable(record.response.get("key_id"), request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                if auth.node.id != node_id.strip():
+                    raise errors.NodeNotFound("节点不存在", node_id=node_id.strip())
+                rotation = models.rotate_key(c, auth.node, rotate=rotate or False,
+                                             overlap_seconds=overlap or 0,
+                                             now=clock.utcnow(), trace_id=request_id)
+                payload = _pair_payload(rotation)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=201, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id, status_code=201)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.pair.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 绑定
+@router.get("/node/binding", operation_id="getNodeBinding", summary="查询节点绑定")
+def get_node_binding(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        node_id = (request.query_params.get("node_id") or "").strip()
+        if not node_id:
+            raise errors.InvalidArgument("node_id 必填", field="node_id")
+        with _connection() as c:
+            auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                       now=clock.utcnow())
+            if auth.node.id != node_id:
+                raise errors.NodeNotFound("节点不存在", node_id=node_id)
+            return _ok(models.binding_dict(auth.node.binding()), request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.binding.get.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/node/binding", operation_id="bindNode", summary="网页端绑定节点（一次性码）")
+async def bind_node(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        node_id = body.get("node_id")
+        code = body.get("code")
+        account_id = body.get("account_id")
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                if not isinstance(node_id, str) or auth.node.id != node_id.strip():
+                    raise errors.NodeNotFound("节点不存在", node_id=str(node_id))
+                parsed_account = None
+                if account_id is not None:
+                    import uuid as _uuid
+
+                    try:
+                        parsed_account = _uuid.UUID(str(account_id))
+                    except (ValueError, TypeError) as exc:
+                        raise errors.InvalidArgument("account_id 必须是 UUID",
+                                                     field="account_id") from exc
+                binding, _node = models.bind(c, node_id=auth.node.id,
+                                             code=code if isinstance(code, str) else "",
+                                             account_id=parsed_account,
+                                             now=clock.utcnow(), trace_id=request_id)
+                payload = models.binding_dict(binding)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.binding.post.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.delete("/node/binding", operation_id="unbindNode", summary="解绑节点（幂等）")
+def unbind_node(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        node_id = (request.query_params.get("node_id") or "").strip()
+        if not node_id:
+            raise errors.InvalidArgument("node_id 必填", field="node_id")
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash({"node_id": node_id})
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                if auth.node.id != node_id:
+                    raise errors.NodeNotFound("节点不存在", node_id=node_id)
+                binding, _node = models.unbind(c, node=auth.node, now=clock.utcnow(),
+                                               trace_id=request_id)
+                payload = models.binding_dict(binding)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.binding.delete.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 准入审核（管理面）
+@router.post("/admin/supply/nodes/{node_id}/review", operation_id="reviewSupplyNode",
+             summary="节点准入审核（approve / reject）")
+async def review_supply_node(node_id: str, request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        principal = await _admin_principal(request)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                node = models.review(
+                    c, node_id=node_id, decision=body.get("decision"),
+                    reason=body.get("reason"), actor=str(principal.get("admin_id")),
+                    tier=body.get("tier"), now=clock.utcnow(), trace_id=request_id)
+                payload = _review_ack(node)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.review.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+__all__ = ["router", "set_admin_authenticator", "admin_authenticator",
+           "NODE_KEY_HEADER", "IDEMPOTENCY_HEADER", "STEP_UP_HEADER"]
