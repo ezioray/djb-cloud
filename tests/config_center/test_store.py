@@ -399,6 +399,6 @@ def test_drift_append_only_and_resolve_once(conn):
         "UPDATE config_drifts SET resolution = 'again' WHERE drift_id = %s", (drift_id,)))
     assert_db_error(conn, "append-only", lambda c: c.execute(
         "DELETE FROM config_drifts WHERE drift_id = %s", (drift_id,)))
-    assert_db_error(conn, "config_drifts_pairs_ck", lambda c: c.execute(
-        """INSERT INTO config_drifts (namespace, key, running_version)
-           VALUES ('billing', 'billing.service_fee_bps', 1)"""))
+    assert_db_error(conn, "config_drifts_resolution_ck", lambda c: c.execute(
+        """INSERT INTO config_drifts (namespace, key, running_version, resolution)
+           VALUES ('billing', 'billing.service_fee_bps', 1, '只有结论没有时间')"""))

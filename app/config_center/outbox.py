@@ -150,7 +150,8 @@ def pending_events(conn: psycopg.Connection, *, limit: int = 100) -> list[dict[s
     if limit < 1 or limit > 1000:
         raise ValidationFailed(f"limit 越界 1..1000：{limit}")
     cur = conn.execute(
-        """SELECT * FROM config_outbox WHERE published_at IS NULL
+        """SELECT * FROM config_outbox
+            WHERE published_at IS NULL AND dead_lettered_at IS NULL
             ORDER BY created_at, event_id LIMIT %s""", (limit,))
     columns = [desc.name for desc in cur.description or ()]
     return [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -175,7 +176,8 @@ def published_event(*, namespace: str, key: str, version: int, risk_level: str,
                     policy_version: str, effective_at: datetime, scope: str = "global",
                     scope_id: str = "", request_id: str | None = None,
                     trace_id: str | None = None, occurred_at: datetime | None = None,
-                    version_no: int = 1) -> OutboxEvent:
+                    version_no: int = 1, snapshot_digest: str | None = None,
+                    emergency: bool = False) -> OutboxEvent:
     payload = {
         "namespace": namespace,
         "key": key,
@@ -186,6 +188,10 @@ def published_event(*, namespace: str, key: str, version: int, risk_level: str,
         "scope": scope,
         "scope_id": scope_id,
     }
+    if snapshot_digest is not None:
+        payload["snapshot_digest"] = snapshot_digest      # R-14：事件可独立核对快照
+    if emergency:
+        payload["emergency"] = True
     return OutboxEvent(
         type="config.published",
         aggregate_id=key,
@@ -202,7 +208,7 @@ def rolled_back_event(*, namespace: str, key: str, version: int, rollback_to: in
                       reason_code: str, scope: str = "global", scope_id: str = "",
                       request_id: str | None = None, trace_id: str | None = None,
                       occurred_at: datetime | None = None,
-                      version_no: int = 1) -> OutboxEvent:
+                      version_no: int = 1, snapshot_digest: str | None = None) -> OutboxEvent:
     payload = {
         "namespace": namespace,
         "key": key,
@@ -212,6 +218,8 @@ def rolled_back_event(*, namespace: str, key: str, version: int, rollback_to: in
         "scope": scope,
         "scope_id": scope_id,
     }
+    if snapshot_digest is not None:
+        payload["snapshot_digest"] = snapshot_digest
     return OutboxEvent(
         type="config.rolled_back",
         aggregate_id=key,

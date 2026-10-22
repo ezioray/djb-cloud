@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 import psycopg
@@ -216,8 +216,17 @@ def create_draft(
     expire_at: Any = None,
     now: datetime | None = None,
     registry: Registry | None = None,
+    rollback_to: int = 0,
+    emergency: bool = False,
+    kill_switch_ttl_s: int | None = None,
+    kill_switch_prev_version: int | None = None,
 ) -> dict[str, Any]:
     """建一个不可变草稿版本（不生效；生效走 T3 的发布单）。
+
+    T4 追加的三个可选参数（只加不改，默认值与 T2 行为一致）：
+    ``rollback_to``（回滚目标版本，>0 时 INV-09）、``emergency`` / ``kill_switch_ttl_s`` /
+    ``kill_switch_prev_version``（kill switch 的紧急版本，ttl 1..86400 秒）。
+    ``
 
     · 危险键 / 生成键 → 47004；未知键 / 类型 / 单位 / 范围 / 跨字段 → 47001；
     · ``secret_ref_only`` 的键只接受 ``secret_ref``（``value`` 必须为空），其余键只接受 ``value``；
@@ -226,6 +235,17 @@ def create_draft(
     reg = registry or load()
     item = validators.check_writable(key, registry=reg)
     scope, scope_id = normalize_scope(scope, scope_id)
+    moment = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if rollback_to and rollback_to < 1:
+        raise ValidationFailed(f"rollback_to 必须是正整数：{rollback_to!r}")
+    kill_expires = None
+    if emergency:
+        if kill_switch_ttl_s is None or not 1 <= kill_switch_ttl_s <= 86400:
+            raise ValidationFailed(
+                f"kill switch 的 ttl_seconds 必须是 1..86400：{kill_switch_ttl_s!r}（M10 §6 流程 3）")
+        kill_expires = moment + timedelta(seconds=kill_switch_ttl_s)
+    elif kill_switch_ttl_s is not None or kill_switch_prev_version is not None:
+        raise ValidationFailed("非紧急版本不允许携带 kill switch 字段")
     reason = _require_text(reason, field="reason", minimum=4, maximum=512)
     actor = _require_text(actor, field="actor", minimum=1, maximum=128)
     if idempotency_key is not None:
@@ -269,17 +289,23 @@ def create_draft(
     sync_item(conn, item)                    # 注册表是唯一来源：保证 FK 一定能落
     _lock_key(conn, key, scope, scope_id)
     version = next_version(conn, key=key, scope=scope, scope_id=scope_id)
+    if rollback_to and rollback_to >= version:
+        raise ValidationFailed(
+            f"rollback_to={rollback_to} 必须早于新版本 {version}（INV-09）")
 
     effective = validators.as_utc(effective_at, field=f"{key}.effective_at") if effective_at else None
     sql = """
         INSERT INTO config_versions
           (namespace, key, scope, scope_id, version, value_type, unit, schema_ref,
            value, secret_ref, content_digest, request_digest, status, effective_at,
-           rollback_to, reason, ticket, idempotency_key, created_by)
+           rollback_to, reason, ticket, idempotency_key, created_by,
+           emergency, kill_switch_ttl_s, kill_switch_expires_at, kill_switch_prev_version)
         VALUES
           (%(namespace)s, %(key)s, %(scope)s, %(scope_id)s, %(version)s, %(value_type)s, %(unit)s,
            %(schema_ref)s, %(value)s, %(secret_ref)s, %(content_digest)s, %(request_digest)s,
-           'draft', %(effective_at)s, 0, %(reason)s, %(ticket)s, %(idempotency_key)s, %(actor)s)
+           'draft', %(effective_at)s, %(rollback_to)s, %(reason)s, %(ticket)s,
+           %(idempotency_key)s, %(actor)s,
+           %(emergency)s, %(kill_ttl)s, %(kill_expires)s, %(kill_prev)s)
         RETURNING *
     """
     params = {
@@ -296,6 +322,11 @@ def create_draft(
         "content_digest": content_digest,
         "request_digest": request_digest,
         "effective_at": effective,
+        "rollback_to": rollback_to,
+        "emergency": emergency,
+        "kill_ttl": kill_switch_ttl_s,
+        "kill_expires": kill_expires,
+        "kill_prev": kill_switch_prev_version,
         "reason": reason,
         "ticket": ticket,
         "idempotency_key": idempotency_key,

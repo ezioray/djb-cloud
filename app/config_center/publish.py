@@ -32,9 +32,12 @@ from typing import Any, Iterable, Mapping
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import canonical, facts, features, outbox, store, validators
+from . import canonical, facts, features, outbox, snapshot, store, validators
+from decimal import Decimal
+
 from .errors import (
     ApproverNotAllowed,
+    DangerousKeyForbidden,
     CooldownActive,
     GrayPlanInvalid,
     IdempotencyConflict,
@@ -61,6 +64,10 @@ __all__ = [
     "assert_step_up",
     "assert_cooldown",
     "create_request",
+    "rollback",
+    "kill_switch",
+    "restore_kill_switch",
+    "expire_kill_switches",
     "approve_request",
     "activate_request",
     "schedule_request",
@@ -82,6 +89,14 @@ APPROVALS_REQUIRED: dict[str, int] = {"P0": 1, "P1": 1, "P2": 0}
 P0_APPROVER_ROLES: frozenset[str] = frozenset({"FIN", "AUDIT"})
 
 _CONSUMER_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+
+#: 回滚 / kill switch 的事件 reason_code（机器码，不是业务数字）
+ROLLBACK_REASON_CODE = "manual_rollback"
+KILL_SWITCH_REASON_CODE = "kill_switch"
+KILL_SWITCH_EXPIRED_CODE = "kill_switch_expired"
+KILL_SWITCH_RESTORED_CODE = "kill_switch_restored"
+SYSTEM_ACTOR = "system:kill_switch_expiry"
+KILL_SWITCH_MAX_TTL_S = 86400
 
 
 # ───────────────────────────────────────────────────────────── 主体
@@ -385,6 +400,32 @@ def create_request(
     registry: Registry | None = None,
 ) -> dict[str, Any]:
     """把已存在的 draft 版本提交为发布单（P0/P1 → pending_approval；P2 单人可发 → approved）。"""
+    return _create_request_impl(
+        conn, key=key, version=version, principal=principal, reason=reason, scope=scope,
+        scope_id=scope_id, effective_at=effective_at, gray_plan=gray_plan, ticket=ticket,
+        idempotency_key=idempotency_key, trace_id=trace_id, now=now, registry=registry)
+
+
+def _create_request_impl(
+    conn: psycopg.Connection,
+    *,
+    key: str,
+    version: int,
+    principal: Principal,
+    reason: str,
+    scope: str = DEFAULT_SCOPE,
+    scope_id: str = "",
+    effective_at: Any = None,
+    gray_plan: Mapping[str, Any] | None = None,
+    ticket: str | None = None,
+    idempotency_key: str | None = None,
+    trace_id: str | None = None,
+    now: datetime | None = None,
+    registry: Registry | None = None,
+    skip_cooldown: bool = False,
+    rollback_target_version: int | None = None,
+) -> dict[str, Any]:
+    """内部：发布单创建（回滚复用它，``skip_cooldown=True`` 因为止损免冷却）。"""
     reg = registry or load_registry()
     item = reg.require(key)
     validators.check_publishable(item.key, registry=reg)
@@ -419,7 +460,8 @@ def create_request(
     needs_approval = APPROVALS_REQUIRED[risk] > 0
     if needs_approval:
         assert_step_up(principal, now=moment, purpose="publish")
-        assert_cooldown(conn, item, now=moment, scope=scope, scope_id=scope_id)
+        if not skip_cooldown:
+            assert_cooldown(conn, item, now=moment, scope=scope, scope_id=scope_id)
 
     _assert_no_in_flight(conn, key, scope=scope, scope_id=scope_id)
 
@@ -430,13 +472,14 @@ def create_request(
         """INSERT INTO config_publish_requests
              (key, namespace, key_set, versions, risk_level, scope, scope_id, status,
               proposed_by, approved_by, decision, gray_plan, requested_at, expires_at,
-              effective_at, reason, ticket, idempotency_key, publish_step_up_ref)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+              effective_at, reason, ticket, idempotency_key, publish_step_up_ref,
+              rollback_target_version)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
            RETURNING *""",
         (key, item.namespace, [key], Jsonb({key: version}), risk, scope, scope_id, status,
          principal.actor, [], None, Jsonb(dict(gray_plan)) if gray_plan else None,
          moment, expires_at, effective, reason, ticket, idempotency_key,
-         principal.step_up_ref if needs_approval else None),
+         principal.step_up_ref if needs_approval else None, rollback_target_version),
     )
     assert row is not None
     row["replayed"] = False
@@ -554,6 +597,62 @@ def schedule_request(
 
 
 # ───────────────────────────────────────────────────────────── 第 5 步：生效
+def _activate_and_emit(
+    conn: psycopg.Connection,
+    *,
+    item: ConfigKey,
+    version_row: Mapping[str, Any],
+    published_by: str,
+    approved_by: str | None,
+    effective_at: datetime,
+    period: str,
+    request_id: str | None,
+    now: datetime,
+    trace_id: str | None,
+    reason_code: str | None = None,
+) -> dict[str, Any]:
+    """切 active + 同事务落快照 + 断言 digest 一致（R-14）+ 写 outbox 事件。"""
+    activated = store.activate(
+        conn,
+        key=item.key,
+        version=version_row["version"],
+        published_by=published_by,
+        approved_by=approved_by,
+        effective_at=effective_at,
+        scope=version_row["scope"],
+        scope_id=version_row["scope_id"],
+    )
+    snapshot_row = snapshot.write_snapshot(
+        conn, period=period, publish_request_id=request_id, now=now)
+    policy = current_policy_version(conn)
+    if policy is None:  # pragma: no cover - 刚激活至少一条
+        raise ValidationFailed("生效后仍没有 active 配置（数据异常）")
+    # R-14：落库快照的 digest 必须等于事件将携带的 digest，不一致即拒绝（外层回滚）
+    snapshot.assert_snapshot_consistent(snapshot_row, expected_digest=policy["snapshot_digest"])
+    digest = snapshot_row["snapshot_digest"]
+    policy_version = canonical.policy_version(digest)
+
+    if activated["rollback_to"]:
+        event = outbox.rolled_back_event(
+            namespace=item.namespace, key=item.key, version=activated["version"],
+            rollback_to=activated["rollback_to"],
+            reason_code=reason_code or ROLLBACK_REASON_CODE,
+            scope=activated["scope"], scope_id=activated["scope_id"],
+            request_id=request_id, trace_id=trace_id, occurred_at=now,
+            snapshot_digest=digest)
+    else:
+        event = outbox.published_event(
+            namespace=item.namespace, key=item.key, version=activated["version"],
+            risk_level=item.risk, policy_version=policy_version,
+            effective_at=activated["effective_at"] or now,
+            scope=activated["scope"], scope_id=activated["scope_id"],
+            request_id=request_id, trace_id=trace_id, occurred_at=now,
+            snapshot_digest=digest, emergency=bool(activated["emergency"]))
+    outbox.append_event(conn, event)
+    return {"version": activated, "snapshot": snapshot_row, "snapshot_digest": digest,
+            "policy_version": policy_version, "event": event}
+
+
 def activate_request(
     conn: psycopg.Connection,
     request_id: str,
@@ -561,7 +660,7 @@ def activate_request(
     now: datetime | None = None,
     trace_id: str | None = None,
 ) -> dict[str, Any]:
-    """全量生效：单行 CAS 切版本 → 同事务写 config.published（INV-08 摘要）。"""
+    """全量生效：单行 CAS 切版本 → 同事务写快照 + config.published / config.rolled_back。"""
     moment = _now(now)
     request = _load_request(conn, request_id, for_update=True)
     if request["status"] not in ("approved", "scheduled", "rolling_out"):
@@ -573,7 +672,6 @@ def activate_request(
         raise StateConflict(
             f"发布单 {request_id} 未到生效时间 {effective.isoformat()}"
             f"（状态 {request['status']}；已复核的请先 schedule_request）")
-    assert_publish_window(moment)
 
     item = (load_registry()).require(request["key"])
     versions = request["versions"]
@@ -586,52 +684,30 @@ def activate_request(
         raise VersionNotFound(f"{request['key']} 的目标版本不存在", key=request["key"])
     _validate_candidate(conn, item, version_row, load_registry())
 
+    # 回滚 / kill switch 属止损，不受发布窗口限制（§21.1.2：窗口外只允许 kill switch、回滚）
+    if not version_row["rollback_to"]:
+        assert_publish_window(moment)
+
     approved = list(request["approved_by"])
-    activated = store.activate(
-        conn,
-        key=request["key"],
-        version=version_row["version"],
+    result = _activate_and_emit(
+        conn, item=item, version_row=version_row,
         published_by=request["proposed_by"],
         approved_by=approved[0] if approved else None,
         effective_at=effective or moment,
-        scope=request["scope"],
-        scope_id=request["scope_id"],
+        period=f"publish:{request_id}",
+        request_id=request_id, now=moment, trace_id=trace_id,
+        reason_code=ROLLBACK_REASON_CODE if version_row["rollback_to"] else None,
     )
-
-    policy = current_policy_version(conn)
-    if policy is None:  # pragma: no cover - 刚激活至少一条
-        raise ValidationFailed("生效后仍没有 active 配置（数据异常）")
-    event = outbox.published_event(
-        namespace=item.namespace,
-        key=request["key"],
-        version=version_row["version"],
-        risk_level=request["risk_level"],
-        policy_version=policy["policy_version"],
-        effective_at=activated["effective_at"] or moment,
-        scope=request["scope"],
-        scope_id=request["scope_id"],
-        request_id=request_id,
-        trace_id=trace_id,
-        occurred_at=moment,
-    )
-    outbox.append_event(conn, event)
-
     row = _one(
         conn,
         """UPDATE config_publish_requests
               SET status = 'active', snapshot_after = %s, updated_at = now()
             WHERE publish_request_id = %s
         RETURNING *""",
-        (policy["snapshot_digest"], request_id),
+        (result["snapshot_digest"], request_id),
     )
     assert row is not None
-    return {
-        "request": row,
-        "version": activated,
-        "snapshot_digest": policy["snapshot_digest"],
-        "policy_version": policy["policy_version"],
-        "event": event,
-    }
+    return {"request": row, **result}
 
 
 # ───────────────────────────────────────────────────────────── 第 6 步：收口
@@ -704,3 +780,278 @@ def expire_requests(conn: psycopg.Connection, *, now: datetime | None = None) ->
         RETURNING publish_request_id""",
         (moment,))
     return [row[0] for row in cur.fetchall()]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# T4：回滚（INV-09）· kill switch（§21.4.2 流程 3）· 到期自动恢复
+# ═════════════════════════════════════════════════════════════════════════════
+def _cmp_value(value: Any) -> Any:
+    """kill switch 收紧比较用的可比数值（布尔按 0/1，金额字符串按 Decimal）。"""
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return Decimal(str(value))
+    if isinstance(value, str) and re.fullmatch(r"-?\d+(?:\.\d+)?", value):
+        return Decimal(value)
+    return value
+
+
+def _tighter(item: ConfigKey, new: Any, current: Any) -> bool:
+    """新值是否比当前值更保守（kill switch 只收紧；方向来自注册表）。"""
+    if current is None:
+        return True
+    new_cmp, old_cmp = _cmp_value(new), _cmp_value(current)
+    if item.direction == "reduce":
+        return new_cmp < old_cmp
+    if item.direction == "raise":
+        return new_cmp > old_cmp
+    return False
+
+
+def _active_payload(conn: psycopg.Connection, *, key: str, scope: str,
+                    scope_id: str) -> tuple[dict[str, Any] | None, Any]:
+    row = store.active_version(conn, key=key, scope=scope, scope_id=scope_id)
+    return row, _payload_of(row)
+
+
+def rollback(
+    conn: psycopg.Connection,
+    *,
+    key: str,
+    target_version: int,
+    principal: Principal,
+    reason: str,
+    scope: str = DEFAULT_SCOPE,
+    scope_id: str = "",
+    ticket: str | None = None,
+    idempotency_key: str | None = None,
+    now: datetime | None = None,
+    trace_id: str | None = None,
+    registry: Registry | None = None,
+) -> dict[str, Any]:
+    """回滚：以历史版本为内容生成**新版本**（rollback_to=target），再走复核 → 生效。
+
+    · INV-09：历史版本一个字节都不改；
+    · 目标必须是历史不可变版本（active / superseded / rolled_back），draft / rejected 不可回滚；
+    · 回滚是止损：**不受发布窗口与冷却期限制**（§21.1.2），但仍需 P0/P1 复核 + step-up；
+    · 生效时发 ``config.rolled_back``（payload 含 rollback_to / reason_code）。
+    """
+    reg = registry or load_registry()
+    item = reg.require(key)
+    validators.check_publishable(item.key, registry=reg)
+    moment = _now(now)
+    scope, scope_id = store.normalize_scope(scope, scope_id)
+    reason = _text(reason, field="reason", minimum=4, maximum=512)
+    _assert_proposer(principal, item)
+    if target_version < 1:
+        raise ValidationFailed(f"target_version 必须是正整数：{target_version!r}")
+
+    if idempotency_key is not None:
+        _text(idempotency_key, field="idempotency_key", minimum=8, maximum=128)
+        existing = _one(conn,
+                        "SELECT * FROM config_publish_requests WHERE scope = %s AND idempotency_key = %s",
+                        (scope, idempotency_key))
+        if existing is not None:
+            same = (existing["key"] == key
+                    and existing["scope_id"] == scope_id
+                    and existing["proposed_by"] == principal.actor
+                    and existing["rollback_target_version"] == target_version)
+            if not same:
+                raise IdempotencyConflict(
+                    f"幂等键 {idempotency_key!r} 已用于不同发布单（{existing['key']}）", key=key)
+            row = dict(existing)
+            row["replayed"] = True
+            return row
+
+    target = store.get_version(conn, key=key, version=target_version,
+                               scope=scope, scope_id=scope_id)
+    if target is None:
+        raise VersionNotFound(f"{key} v{target_version} 不存在（回滚目标）", key=key)
+    if target["status"] not in ("active", "superseded", "rolled_back"):
+        raise StateConflict(
+            f"{key} v{target_version} 状态为 {target['status']}，只有历史生效版本可回滚（INV-09）")
+    current = store.active_version(conn, key=key, scope=scope, scope_id=scope_id)
+    if current is not None and current["version"] == target_version:
+        raise StateConflict(f"{key} v{target_version} 已是当前生效版本，无需回滚")
+
+    new_version = store.create_draft(
+        conn,
+        key=key,
+        value=_payload_of(target),
+        scope=scope,
+        scope_id=scope_id,
+        reason=reason,
+        actor=principal.actor,
+        ticket=ticket,
+        now=moment,
+        rollback_to=target_version,
+        registry=reg,
+    )
+    request = _create_request_impl(
+        conn, key=key, version=new_version["version"], principal=principal, reason=reason,
+        scope=scope, scope_id=scope_id, ticket=ticket, idempotency_key=idempotency_key,
+        trace_id=trace_id, now=moment, registry=reg,
+        skip_cooldown=True, rollback_target_version=target_version)
+    request["rollback_to"] = target_version
+    request["new_version"] = new_version["version"]
+    return request
+
+
+def kill_switch(
+    conn: psycopg.Connection,
+    *,
+    key: str,
+    value: Any,
+    ttl_seconds: int,
+    principal: Principal,
+    reason: str,
+    scope: str = DEFAULT_SCOPE,
+    scope_id: str = "",
+    now: datetime | None = None,
+    trace_id: str | None = None,
+    registry: Registry | None = None,
+) -> dict[str, Any]:
+    """紧急收紧：立即生成并生效一个紧急版本（单人可发、只收紧、ttl ≤86400）。
+
+    到期由 :func:`expire_kill_switches` 自动回到上一生效版本；也支持 :func:`restore_kill_switch`
+    提前人工恢复。放宽一律 47004（危险键禁改口径）。
+    """
+    reg = registry or load_registry()
+    item = reg.require(key)
+    if not item.kill_switch or item.direction == "none":
+        raise DangerousKeyForbidden(
+            f"{key} 未声明可 kill switch（x-djb-kill-switch=true 且 direction≠none），拒绝（47004）",
+            key=key)
+    moment = _now(now)
+    scope, scope_id = store.normalize_scope(scope, scope_id)
+    reason = _text(reason, field="reason", minimum=4, maximum=512)
+    _assert_proposer(principal, item)
+    if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int):
+        raise ValidationFailed(f"ttl_seconds 必须是整数：{ttl_seconds!r}")
+    if not 1 <= ttl_seconds <= KILL_SWITCH_MAX_TTL_S:
+        raise ValidationFailed(
+            f"ttl_seconds 越界 1..{KILL_SWITCH_MAX_TTL_S}：{ttl_seconds}（M10 §6 流程 3）")
+
+    current_row, current = _active_payload(conn, key=key, scope=scope, scope_id=scope_id)
+    result = validators.validate_value(item.key, value, current=current)
+    merged = {**effective_values(conn, registry=reg), item.key: result.value}
+    validators.validate_cross_field(merged, touched=[item.key])
+    if not _tighter(item, result.value, current):
+        raise DangerousKeyForbidden(
+            f"{key} 的 kill switch 只允许收紧（direction={item.direction}）："
+            f"{current!r} → {result.value!r}（放宽一律 47004）", key=key)
+
+    version_row = store.create_draft(
+        conn, key=key, value=result.value, scope=scope, scope_id=scope_id,
+        reason=reason, actor=principal.actor, now=moment,
+        emergency=True, kill_switch_ttl_s=ttl_seconds,
+        kill_switch_prev_version=current_row["version"] if current_row else None,
+        registry=reg,
+    )
+    out = _activate_and_emit(
+        conn, item=item, version_row=version_row,
+        published_by=principal.actor, approved_by=None,
+        effective_at=moment,
+        period=f"kill:{key}:{version_row['version']}",
+        request_id=None, now=moment, trace_id=trace_id,
+    )
+    out["request"] = None
+    out["expires_at"] = version_row["kill_switch_expires_at"]
+    return out
+
+
+def _restore_previous(
+    conn: psycopg.Connection,
+    *,
+    key: str,
+    scope: str,
+    scope_id: str,
+    actor_label: str,
+    reason_code: str,
+    reason: str,
+    now: datetime,
+    trace_id: str | None,
+) -> dict[str, Any]:
+    """把生效中的紧急版本恢复到它的上一生效版本（生成新版本 + 发 config.rolled_back）。"""
+    reg = load_registry()
+    item = reg.require(key)
+    active = store.active_version(conn, key=key, scope=scope, scope_id=scope_id)
+    if active is None or not active["emergency"]:
+        raise StateConflict(f"{key} 没有生效中的 kill switch 版本")
+    previous = active["kill_switch_prev_version"]
+    if not previous:
+        raise ValidationFailed(f"{key} 的紧急版本没有记录上一生效版本，无法自动恢复")
+    target = store.get_version(conn, key=key, version=int(previous),
+                               scope=scope, scope_id=scope_id)
+    if target is None:
+        raise VersionNotFound(f"{key} v{previous}（恢复目标）不存在", key=key)
+    new_version = store.create_draft(
+        conn, key=key, value=_payload_of(target), scope=scope, scope_id=scope_id,
+        reason=reason, actor=actor_label, now=now, rollback_to=int(previous), registry=reg,
+    )
+    out = _activate_and_emit(
+        conn, item=item, version_row=new_version,
+        published_by=actor_label, approved_by=None,
+        effective_at=now,
+        period=f"restore:{key}:{new_version['version']}",
+        request_id=None, now=now, trace_id=trace_id,
+        reason_code=reason_code,
+    )
+    out["request"] = None
+    out["restored_from"] = int(previous)
+    return out
+
+
+def restore_kill_switch(
+    conn: psycopg.Connection,
+    *,
+    key: str,
+    principal: Principal,
+    reason: str,
+    scope: str = DEFAULT_SCOPE,
+    scope_id: str = "",
+    now: datetime | None = None,
+    trace_id: str | None = None,
+    registry: Registry | None = None,
+) -> dict[str, Any]:
+    """提前人工恢复（到期自动恢复由 :func:`expire_kill_switches` 做）。"""
+    moment = _now(now)
+    reg = registry or load_registry()
+    item = reg.require(key)
+    _assert_proposer(principal, item)
+    scope, scope_id = store.normalize_scope(scope, scope_id)
+    reason = _text(reason, field="reason", minimum=4, maximum=512)
+    return _restore_previous(
+        conn, key=key, scope=scope, scope_id=scope_id,
+        actor_label="system:kill_switch_restore",
+        reason_code=KILL_SWITCH_RESTORED_CODE,
+        reason=f"{principal.actor}: {reason}",
+        now=moment, trace_id=trace_id)
+
+
+def expire_kill_switches(
+    conn: psycopg.Connection,
+    *,
+    now: datetime | None = None,
+    trace_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """到期自动恢复：把所有过期的紧急版本恢复到上一生效版本（P95 ≤60s 由即时执行保证）。"""
+    moment = _now(now)
+    rows = _rows(conn,
+                 """SELECT key, scope, scope_id, version FROM config_versions
+                     WHERE emergency AND status = 'active'
+                       AND kill_switch_expires_at IS NOT NULL
+                       AND kill_switch_expires_at <= %s
+                     ORDER BY key""", (moment,))
+    restored: list[dict[str, Any]] = []
+    for row in rows:
+        out = _restore_previous(
+            conn, key=row["key"], scope=row["scope"], scope_id=row["scope_id"],
+            actor_label=SYSTEM_ACTOR, reason_code=KILL_SWITCH_EXPIRED_CODE,
+            reason=f"kill switch ttl 到期自动恢复（v{row['version']}）",
+            now=moment, trace_id=trace_id)
+        restored.append({"key": row["key"], "scope": row["scope"],
+                         "scope_id": row["scope_id"], "expired_version": row["version"],
+                         "restored_from": out["restored_from"],
+                         "new_version": out["version"]["version"]})
+    return restored

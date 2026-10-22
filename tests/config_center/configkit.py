@@ -33,6 +33,7 @@ M10_MIGRATIONS = (
     "1004_config_drifts.sql",
     "1005_config_outbox.sql",
     "1006_publish_request_flow.sql",
+    "1007_t4_emergency_and_delivery.sql",
 )
 
 M10_TABLES = ("config_items", "config_versions", "config_publish_requests",
