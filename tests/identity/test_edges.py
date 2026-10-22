@@ -146,10 +146,10 @@ def test_list_and_get_api_key_filters(f):
     f.key(b)
     models.revoke_api_key(f.conn, key_a.id, now=f.moment)
     assert models.get_api_key(f.conn, key_a.id, account_id=a.id).id == key_a.id
-    assert models.list_api_keys(f.conn, a.id, tenant_id=a.tenant_id) == []
-    assert len(models.list_api_keys(f.conn, a.id, include_revoked=True)) == 1
+    assert models.list_api_keys(f.conn, a.id, tenant_id=a.tenant_id, now=f.moment) == []
+    assert len(models.list_api_keys(f.conn, a.id, include_revoked=True, now=f.moment)) == 1
     assert len(models.list_api_keys(f.conn, a.id, tenant_id=a.tenant_id,
-                                    include_revoked=True)) == 1
+                                    include_revoked=True, now=f.moment)) == 1
 
 
 def test_legacy_key_without_account_cannot_authenticate(f):

@@ -70,6 +70,22 @@ class IdempotencyConflict(IdentityError):
     reason = "idempotency_conflict"
 
 
+class KeyOverlapForbidden(IdentityError):
+    """轮换重叠期内旧 Key 只允许验签，不接受新注册（INV-10）。"""
+
+    status_code = 409
+    code = "40902"
+    reason = "key_overlap_forbidden"
+
+
+class QuotaExhausted(IdentityError):
+    """配额类上限命中（如单账户 Key 数上限）；spec 的 429 语义 = 限流或配额耗尽。"""
+
+    status_code = 429
+    code = "42901"
+    reason = "quota_exhausted"
+
+
 class StepUpRequired(IdentityError):
     """高危动作需要二次认证（spec 424 / 42401）。"""
 
@@ -106,6 +122,7 @@ def error_type_for(status_code: int) -> str:
 __all__ = [
     "LoginCredentialError", "RefreshTokenRejected", "LoginThrottled", "AuthMethodUnavailable",
     "ScanTicketInvalid", "IdempotencyConflict", "MfaNotEnabled", "StepUpRequired",
+    "KeyOverlapForbidden", "QuotaExhausted",
     "error_type_for",
     # 复用 T1 的错误类型，便于路由层一处 catch
     "IdentityError", "InvalidArgument", "NotFound", "StateConflict", "AccountClosed",

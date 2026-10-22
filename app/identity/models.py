@@ -70,6 +70,7 @@ ROLE_RECLAIM_DAYS = 90                     # M01 §8.2：角色 90 天自动回�
 KEY_PREFIX_LEN = 8                         # M01 §8.2：Key 前缀 8 位（仅展示 / 排障）
 KEY_MAX_PER_ACCOUNT = 10                   # M01 §8.1：identity.max_keys_per_account 默认 10
 KEY_ENTROPY_BYTES = 32                     # M01 §6.2：256 bit
+ROTATE_MAX_OVERLAP_SECONDS = 86_400         # spec 1.2.1：轮换重叠期 ≤24 h
 DEFAULT_QPS = 3                            # M01 §8.1：quota.default_qps 默认 3
 ACCESS_TTL_HOURS = 2                       # M01 §1：访问令牌 ≤2 h
 REFRESH_TTL_DAYS = 30                      # M01 §1：刷新令牌 ≤30 天
@@ -373,10 +374,25 @@ class ApiKey:
     created_at: datetime
     revoked_at: datetime | None
     revoked_reason: str | None
+    scopes: list[str] | None = None
+    expires_at: datetime | None = None
 
     @property
     def live(self) -> bool:
+        """**未安排**失效（没有任何 revoked_at）。用于「是否计入单账户 Key 上限」。"""
         return self.revoked_at is None
+
+    def active_at(self, moment: datetime) -> bool:
+        """在 ``moment`` 是否可用于鉴权：未过期，且未撤销或仍在重叠期（revoked_at 在未来）。"""
+        if self.revoked_at is not None and self.revoked_at <= moment:
+            return False
+        if self.expires_at is not None and self.expires_at <= moment:
+            return False
+        return True
+
+    def overlapping_at(self, moment: datetime) -> bool:
+        """是否处于轮换重叠期：已安排失效、但失效时刻还没到。"""
+        return self.revoked_at is not None and self.revoked_at > moment
 
 
 @dataclasses.dataclass(frozen=True)
@@ -442,7 +458,8 @@ _ACCOUNT_COLS = ("id, user_id, type, state, tenant_id, org_id, session_epoch, fr
 _MEMBER_COLS = ("id, org_id, tenant_id, account_id, org_role, state, invited_by, invite_hash, "
                 "invite_expires_at, joined_at, removed_at, created_at, updated_at")
 _KEY_COLS = ("id, user_id, key_prefix, key_hash, account_id, tenant_id, qps, daily_usd_minor, "
-             "label, rotated_from, last_used_at, created_by, created_at, revoked_at, revoked_reason")
+             "label, rotated_from, last_used_at, created_by, created_at, revoked_at, "
+             "revoked_reason, scopes, expires_at")
 # 注意：刻意**不含** access_hash / refresh_hash——会话视图不回令牌材料（INV-04）
 _SESSION_COLS = ("id, account_id, tenant_id, epoch, kind, mfa, created_at, last_seen_at, "
                  "expires_at, refresh_expires_at, absolute_expires_at, idle_expires_at, "
@@ -955,25 +972,69 @@ def assert_writable(account: Account, *, action: str = "write") -> Account:
 
 
 # --------------------------------------------------------------------------- api_keys
-def _count_live_keys(c, account_id: uuid.UUID) -> int:
+def _count_live_keys(c, account_id: uuid.UUID, now: datetime | None = None) -> int:
+    """单账户 Key 上限的计数口径：未安排失效且未过期（重叠期的旧钥不占额度）。"""
+    moment = _now(now)
     with c.cursor() as cur:
-        cur.execute("SELECT count(*) FROM api_keys WHERE account_id = %s AND revoked_at IS NULL",
-                    (account_id,))
+        cur.execute(
+            """SELECT count(*) FROM api_keys
+                WHERE account_id = %s AND revoked_at IS NULL
+                  AND (expires_at IS NULL OR expires_at > %s)""",
+            (account_id, moment))
         return int(cur.fetchone()[0])
+
+
+MAX_SCOPES = 16
+SCOPE_MAX_LEN = 64
+
+
+def _normalize_scopes(scopes: Sequence[str] | None) -> list[str] | None:
+    """scopes：字符串数组，去重保序，单条 1..64 字符，至多 16 条（spec 未限上限，这里给工程上限）。"""
+    if scopes is None:
+        return None
+    if isinstance(scopes, (str, bytes)) or not isinstance(scopes, Sequence):
+        raise InvalidArgument("scopes 必须是字符串数组", field="scopes")
+    out: list[str] = []
+    for scope in scopes:
+        if not isinstance(scope, str) or not 1 <= len(scope.strip()) <= SCOPE_MAX_LEN:
+            raise InvalidArgument(f"scopes 单项必须是 1..{SCOPE_MAX_LEN} 字符的字符串",
+                                  field="scopes")
+        item = scope.strip()
+        if item not in out:
+            out.append(item)
+    if len(out) > MAX_SCOPES:
+        raise InvalidArgument(f"scopes 最多 {MAX_SCOPES} 条", field="scopes")
+    return out
+
+
+def _check_key_expiry(expires_at: datetime | None, moment: datetime) -> datetime | None:
+    """Key 级过期时间：必须在将来（否则建出来就是废钥）。"""
+    if expires_at is None:
+        return None
+    if expires_at.tzinfo is None:
+        raise InvalidArgument("expires_at 必须带时区（UTC）", field="expires_at")
+    expiry = expires_at.astimezone(moment.tzinfo)
+    if expiry <= moment:
+        raise InvalidArgument("expires_at 必须在将来", field="expires_at")
+    return expiry
 
 
 def create_api_key(c, *, account_id: uuid.UUID, tenant_id: uuid.UUID | None = None,
                    label: str | None = None, qps: int | None = None,
                    daily_usd_minor: int | None = None, created_by: uuid.UUID | None = None,
+                   scopes: Sequence[str] | None = None, expires_at: datetime | None = None,
                    now: datetime | None = None, trace_id: str | None = None) -> tuple[ApiKey, str]:
     """建 Key：返回 ``(行, 明文)``。**明文只在此处出现一次**，库与日志里只有哈希与前缀。"""
+    moment = _now(now)
     account = assert_writable(get_account(c, account_id, tenant_id=tenant_id),
                               action="建 Key")
     if qps is not None and qps <= 0:
         raise InvalidArgument("qps 必须 > 0", field="qps")
     if daily_usd_minor is not None and daily_usd_minor <= 0:
         raise InvalidArgument("daily_usd_minor 必须 > 0", field="daily_usd_minor")
-    if _count_live_keys(c, account.id) >= KEY_MAX_PER_ACCOUNT:
+    scope_list = _normalize_scopes(scopes)
+    expires = _check_key_expiry(expires_at, moment)
+    if _count_live_keys(c, account.id, moment) >= KEY_MAX_PER_ACCOUNT:
         raise KeyLimitReached(f"单个账户最多 {KEY_MAX_PER_ACCOUNT} 个有效 Key",
                               account_id=str(account.id))
     plaintext, prefix, digest = generate_api_key()
@@ -981,13 +1042,13 @@ def create_api_key(c, *, account_id: uuid.UUID, tenant_id: uuid.UUID | None = No
         cur.execute(
             f"""INSERT INTO api_keys
                     (user_id, key_prefix, key_hash, account_id, tenant_id, qps,
-                     daily_usd_minor, label, created_by, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     daily_usd_minor, label, created_by, created_at, scopes, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING {_KEY_COLS}""",
             (str(account.user_id), prefix, digest, account.id, account.tenant_id,
              qps, daily_usd_minor,
              label if label is None else _text(label, "label", max_len=64), created_by,
-             _now(now)),
+             moment, Jsonb(list(scope_list)) if scope_list is not None else None, expires),
         )
         key = _make(ApiKey, _one(cur))
     emit_event(c, "apikey.created", aggregate_type="api_key", aggregate_id=key.id,
@@ -1021,15 +1082,22 @@ def get_api_key(c, key_id: int, *, account_id: uuid.UUID | None = None,
 
 
 def list_api_keys(c, account_id: uuid.UUID, *, tenant_id: uuid.UUID | None = None,
-                  include_revoked: bool = False) -> list[ApiKey]:
-    """列表只回前缀与限额（M01 §4.1），永不回哈希以外的明文材料。"""
+                  include_revoked: bool = False,
+                  now: datetime | None = None) -> list[ApiKey]:
+    """列表只回前缀与限额（M01 §4.1），永不回哈希以外的明文材料。
+
+    ``include_revoked=False`` 返回「此刻仍可用于鉴权」的 Key（未过期，且未撤销或仍在轮换重叠期）。
+    """
+    moment = _now(now)
     sql = f"SELECT {_KEY_COLS} FROM api_keys WHERE account_id = %s"
     params: list[Any] = [account_id]
     if tenant_id is not None:
         sql += " AND tenant_id = %s"
         params.append(tenant_id)
     if not include_revoked:
-        sql += " AND revoked_at IS NULL"
+        sql += (" AND (revoked_at IS NULL OR revoked_at > %s)"
+                " AND (expires_at IS NULL OR expires_at > %s)")
+        params.extend([moment, moment])
     sql += " ORDER BY id DESC"
     with c.cursor() as cur:
         cur.execute(sql, params)
@@ -1039,9 +1107,9 @@ def list_api_keys(c, account_id: uuid.UUID, *, tenant_id: uuid.UUID | None = Non
 def revoke_api_key(c, key_id: int, *, account_id: uuid.UUID | None = None,
                    tenant_id: uuid.UUID | None = None, reason: str = "revoked",
                    now: datetime | None = None, trace_id: str | None = None) -> ApiKey:
-    """撤销 Key（**幂等**，A3）：已撤销则原样返回，不报 500、不重复发事件。"""
+    """撤销 Key（**幂等**，A3）：已有失效时刻则原样返回，不报 500、不重复发事件。"""
     key = get_api_key(c, key_id, account_id=account_id, tenant_id=tenant_id, for_update=True)
-    if not key.live:
+    if key.revoked_at is not None:
         return key
     moment = _now(now)
     with c.cursor() as cur:
@@ -1059,28 +1127,61 @@ def revoke_api_key(c, key_id: int, *, account_id: uuid.UUID | None = None,
 
 
 def rotate_api_key(c, key_id: int, *, account_id: uuid.UUID | None = None,
-                   tenant_id: uuid.UUID | None = None, now: datetime | None = None,
+                   tenant_id: uuid.UUID | None = None, overlap_seconds: int = 0,
+                   name: str | None = None, scopes: Sequence[str] | None = None,
+                   expires_at: datetime | None = None, now: datetime | None = None,
                    trace_id: str | None = None) -> tuple[ApiKey, str]:
-    """轮换：新钥生效 + 旧钥立即失效（同事务，重叠窗口 0，M01 §6.2）。"""
+    """轮换：新钥生效 + 旧钥按 ``overlap_seconds`` 失效（0 = 立即；≤86400，spec 1.2.1）。
+
+    重叠期内旧钥只允许验签（``ApiKey.overlapping_at``），不接受新注册（INV-10）。
+    返回 ``(新钥, 明文)``（旧钥的失效时刻可回查 ``api_keys.revoked_at``）。
+    同事务：外部看不到「新旧同时无主」的中间态。
+    """
+    moment = _now(now)
+    if not isinstance(overlap_seconds, int) or isinstance(overlap_seconds, bool) \
+            or not 0 <= overlap_seconds <= ROTATE_MAX_OVERLAP_SECONDS:
+        raise InvalidArgument(f"overlap_seconds 必须在 0..{ROTATE_MAX_OVERLAP_SECONDS}",
+                              field="overlap_seconds")
     old = get_api_key(c, key_id, account_id=account_id, tenant_id=tenant_id, for_update=True)
-    if not old.live:
-        raise ApiKeyInvalid("旧 Key 已撤销，不能轮换", api_key_id=key_id)
     if old.account_id is None or old.tenant_id is None:
         raise StateConflict("存量原型 Key 无账户归属，不能轮换", reason="legacy_key",
                             api_key_id=key_id)
-    # 先失效旧钥再建新钥（同一事务内，外部看不到「中间态」），旧钥不会占住 Key 数上限
-    revoke_api_key(c, old.id, reason="rotated", now=now, trace_id=trace_id)
-    new, plaintext = create_api_key(c, account_id=old.account_id, tenant_id=old.tenant_id,
-                                    label=old.label, qps=old.qps,
-                                    daily_usd_minor=old.daily_usd_minor,
-                                    created_by=old.created_by, now=now, trace_id=trace_id)
+    if old.revoked_at is not None:
+        raise StateConflict("旧 Key 已撤销，不能轮换", reason="key_revoked", api_key_id=key_id)
+    if not old.active_at(moment):
+        raise ApiKeyInvalid("旧 Key 已过期，不能轮换", api_key_id=key_id)
+    with c.cursor() as cur:                      # 旧钥：失效时刻 = now + overlap（0 = 立即）
+        cur.execute(
+            """UPDATE api_keys SET revoked_at = %s, revoked_reason = 'rotated'
+                WHERE id = %s RETURNING {_KEY_COLS}""".format(_KEY_COLS=_KEY_COLS),
+            (moment + timedelta(seconds=overlap_seconds), old.id))
+        rotated = _make(ApiKey, _one(cur))
+    emit_event(c, "apikey.revoked", aggregate_type="api_key", aggregate_id=rotated.id,
+               payload={"api_key_id": rotated.id, "account_id": str(rotated.account_id),
+                        "prefix": rotated.key_prefix, "reason": "rotated",
+                        "effective_at": rotated.revoked_at.isoformat()},
+               trace_id=trace_id, idempotency_key=f"apikey.revoked:{rotated.id}", now=moment)
+    new, plaintext = create_api_key(c, account_id=rotated.account_id,
+                                    tenant_id=rotated.tenant_id,
+                                    label=name if name is not None else rotated.label,
+                                    qps=rotated.qps,
+                                    daily_usd_minor=rotated.daily_usd_minor,
+                                    created_by=rotated.created_by,
+                                    scopes=scopes if scopes is not None else rotated.scopes,
+                                    expires_at=expires_at, now=moment, trace_id=trace_id)
     with c.cursor() as cur:
-        cur.execute("UPDATE api_keys SET rotated_from = %s WHERE id = %s", (old.id, new.id))
+        cur.execute("UPDATE api_keys SET rotated_from = %s WHERE id = %s", (rotated.id, new.id))
     return get_api_key(c, new.id), plaintext
 
 
-def lookup_api_key(c, plaintext: str, *, tenant_id: uuid.UUID | None = None) -> ApiKey:
-    """鉴权热路径：只按哈希查；未命中 / 已撤销 / 跨租户统一 40101（M01 §7）。"""
+def lookup_api_key(c, plaintext: str, *, tenant_id: uuid.UUID | None = None,
+                   now: datetime | None = None) -> ApiKey:
+    """鉴权热路径：只按哈希查；未命中 / 已过失效时刻 / 已过期 / 跨租户统一 40101（M01 §7）。
+
+    注意：轮换重叠期的旧钥（``revoked_at`` 在未来）**仍会返回**——是否允许使用由调用方裁决
+    （网关用 :func:`app.identity.api_keys.verify_api_key` 的 ``allow_overlap``）。
+    """
+    moment = _now(now)
     with c.cursor() as cur:
         cur.execute(f"SELECT {_KEY_COLS} FROM api_keys WHERE key_hash = %s",
                     (hash_secret(plaintext),))
@@ -1088,14 +1189,16 @@ def lookup_api_key(c, plaintext: str, *, tenant_id: uuid.UUID | None = None) -> 
     if row is None:
         raise ApiKeyInvalid("Key 无效或已撤销")
     key = _make(ApiKey, row)
-    if not key.live or (tenant_id is not None and key.tenant_id != tenant_id):
+    if not key.active_at(moment) or (tenant_id is not None and key.tenant_id != tenant_id):
         raise ApiKeyInvalid("Key 无效或已撤销")
     return key
 
 
-def authenticate_api_key(c, plaintext: str, *, tenant_id: uuid.UUID | None = None) -> Account:
-    """Key → 账户（供 T3 网关鉴权接口复用）；账户不存在或已注销一律 40101。"""
-    key = lookup_api_key(c, plaintext, tenant_id=tenant_id)
+def authenticate_api_key(c, plaintext: str, *, tenant_id: uuid.UUID | None = None,
+                         now: datetime | None = None) -> Account:
+    """Key → 账户（T2 兼容入口）；账户不存在或已注销一律 40101。"""
+    moment = _now(now)
+    key = lookup_api_key(c, plaintext, tenant_id=tenant_id, now=moment)
     if key.account_id is None:
         raise ApiKeyInvalid("Key 未绑定账户")
     account = get_account(c, key.account_id, for_update=False)

@@ -35,7 +35,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import clock, credentials, errors, models, tokens
+from . import api_keys, clock, credentials, errors, models, tokens
 
 log = logging.getLogger("djb.identity.http")
 
@@ -124,6 +124,32 @@ def _bearer(request: Request) -> str:
     return token.strip()
 
 
+def _parse_datetime(value: Any, field: str) -> datetime | None:
+    """RFC 3339 → aware datetime（spec format: date-time）；非法即 400。"""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise models.InvalidArgument(f"{field} 必须是 RFC 3339 字符串", field=field)
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise models.InvalidArgument(f"{field} 不是合法时间", field=field) from exc
+    if parsed.tzinfo is None:
+        raise models.InvalidArgument(f"{field} 必须带时区（UTC）", field=field)
+    return parsed
+
+
+def _plaintext_not_replayable(record: "_IdemRecord", request_id: str) -> JSONResponse:
+    """Key 创建 / 轮换的幂等重放：明文不可回读，故不重发，只回已有 key_id。
+
+    与 T2 的令牌重放同一裁决口径：**幂等表不存任何明文**（存了就等于凭据落库）。
+    """
+    raise errors.IdempotencyConflict(
+        "重复请求：Key 明文不可重放，请用列表接口核对本次请求已创建的 Key",
+        reason="plaintext_not_replayable", key_id=record.response.get("key_id"))
+
+
 # --------------------------------------------------------------------------- 幂等
 @dataclass(frozen=True)
 class _IdemRecord:
@@ -195,6 +221,56 @@ def account_payload(account: models.Account, user: models.User,
 
 def profile_payload(ctx: tokens.AuthContext) -> dict[str, Any]:
     return account_payload(ctx.account, ctx.user, ctx.roles)
+
+
+def key_summary(key: models.ApiKey) -> dict[str, Any]:
+    """spec ApiKeySummary：只回前缀与元数据，**永不**回明文或哈希。"""
+    payload: dict[str, Any] = {
+        "key_id": str(key.id),
+        "prefix": key.key_prefix,
+        "revoked_at": key.revoked_at.isoformat() if key.revoked_at else None,
+        "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+        "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+        "created_at": key.created_at.isoformat(),
+    }
+    if key.label is not None:
+        payload["name"] = key.label
+    if key.scopes is not None:
+        payload["scopes"] = list(key.scopes)
+    if key.qps is not None:
+        payload["qps"] = key.qps
+    return payload
+
+
+def key_created(key: models.ApiKey, plaintext: str) -> dict[str, Any]:
+    """spec ApiKeyCreated：``key`` 只在本次响应出现一次。"""
+    payload = {"key_id": str(key.id), "key": plaintext, "prefix": key.key_prefix,
+               "created_at": key.created_at.isoformat()}
+    if key.label is not None:
+        payload["name"] = key.label
+    if key.scopes is not None:
+        payload["scopes"] = list(key.scopes)
+    if key.expires_at is not None:
+        payload["expires_at"] = key.expires_at.isoformat()
+    return payload
+
+
+def _path_id(value: str) -> int:
+    """路径参数 ``{id}``（spec 声明为 string）→ 内部整型主键；非法即 400。"""
+    try:
+        key_id = int(str(value))
+    except (TypeError, ValueError) as exc:
+        raise models.InvalidArgument("Key id 非法", field="id") from exc
+    if key_id <= 0:
+        raise models.InvalidArgument("Key id 非法", field="id")
+    return key_id
+
+
+def _flag(request: Request, name: str, default: bool = False) -> bool:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 # 内部票据状态 → spec ScanStatus.status 枚举（1.2.1）
@@ -397,6 +473,142 @@ def _bump_failures(exc: errors.IdentityError, *, now: datetime, trace_id: str) -
             tokens.register_failure(sink, user_id, now)
     except Exception:                                          # pragma: no cover - 兜底
         log.exception("identity.login.failure_bump_failed request_id=%s", trace_id)
+
+
+# --------------------------------------------------------------------------- API Key 生命周期
+@router.get("/user/api-keys", operation_id="listApiKeys", summary="列举 API Key（只回前缀）")
+def list_api_keys(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        limit = request.query_params.get("limit")
+        cursor = request.query_params.get("cursor")
+        now = clock.utcnow()
+        with _connection() as c:
+            ctx = tokens.authenticate(c, _bearer(request), now=now, trace_id=request_id)
+            page = api_keys.list_page(
+                c, account_id=ctx.account.id, tenant_id=ctx.tenant_id,
+                include_revoked=_flag(request, "include_revoked"),
+                cursor=cursor or None,
+                limit=int(limit) if limit is not None and limit.isdigit() else None,
+                now=now)
+            payload = {"data": [key_summary(key) for key in page.items],
+                       "page": {"has_more": page.has_more,
+                                "cursor": page.cursor or "",
+                                "next_cursor": page.next_cursor}}
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.apikeys.list.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/user/api-keys", operation_id="createApiKey", status_code=201,
+             summary="创建 API Key（明文只回一次）")
+async def create_api_key(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        name = _require_str(body, "name", max_len=api_keys.KEY_NAME_MAX)
+        scopes = body.get("scopes")
+        expires_raw = body.get("expires_at")
+        expires_at = _parse_datetime(expires_raw, "expires_at")
+        now = clock.utcnow()
+        scope, key = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash({"name": name, "scopes": scopes, "expires_at": expires_raw})
+        with _connection() as c:
+            if key:
+                record = _idem_lookup(c, scope, key, request_hash, now)
+                if record is not None:
+                    return _plaintext_not_replayable(record, request_id)
+            with c.transaction():
+                ctx = tokens.authenticate(c, _bearer(request), now=now, trace_id=request_id)
+                created, plaintext = api_keys.create(
+                    c, account_id=ctx.account.id, tenant_id=ctx.tenant_id, name=name,
+                    scopes=scopes, expires_at=expires_at, now=now, trace_id=request_id)
+                payload = key_created(created, plaintext)
+                if key:
+                    _idem_store(c, scope, key, request_hash, 201,
+                                {"kind": "api_key", "key_id": str(created.id)}, now)
+            log.info("identity.apikey.created_via_api key_id=%s account_id=%s prefix=%s",
+                     created.id, ctx.account.id, created.key_prefix)
+            return _ok(payload, request_id, status_code=201)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.apikeys.create.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.delete("/user/api-keys/{id}", operation_id="revokeApiKey",
+               summary="撤销 API Key（幂等）")
+def revoke_api_key(request: Request, id: str) -> JSONResponse:      # noqa: A002 - spec 路径参数名
+    request_id = _request_id(request)
+    try:
+        target = _path_id(id)
+        now = clock.utcnow()
+        scope, idem = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash({"id": target})
+        with _connection() as c:
+            if idem:
+                record = _idem_lookup(c, scope, idem, request_hash, now)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                ctx = tokens.authenticate(c, _bearer(request), now=now, trace_id=request_id)
+                revoked, _changed = api_keys.revoke(c, key_id=target,
+                                                    account_id=ctx.account.id,
+                                                    tenant_id=ctx.tenant_id, now=now,
+                                                    trace_id=request_id)
+                payload = key_summary(revoked)
+                if idem:
+                    _idem_store(c, scope, idem, request_hash, 200, payload, now)
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.apikeys.revoke.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/user/api-keys/{id}/rotate", operation_id="rotateApiKey", status_code=201,
+             summary="轮换 API Key（旧钥立即失效 / 可声明重叠期）")
+async def rotate_api_key(request: Request, id: str) -> JSONResponse:   # noqa: A002 - spec 路径参数名
+    request_id = _request_id(request)
+    try:
+        target = _path_id(id)
+        body = await _body(request)
+        name = body.get("name")
+        if name is not None:
+            name = _require_str(body, "name", max_len=api_keys.KEY_NAME_MAX)
+        overlap = body.get("overlap_seconds", 0)
+        if not isinstance(overlap, int) or isinstance(overlap, bool):
+            raise models.InvalidArgument("overlap_seconds 必须是整数", field="overlap_seconds")
+        now = clock.utcnow()
+        scope, idem = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash({"id": target, "name": name, "overlap_seconds": overlap})
+        with _connection() as c:
+            if idem:
+                record = _idem_lookup(c, scope, idem, request_hash, now)
+                if record is not None:
+                    return _plaintext_not_replayable(record, request_id)
+            with c.transaction():
+                ctx = tokens.authenticate(c, _bearer(request), now=now, trace_id=request_id)
+                new_key, plaintext = api_keys.rotate(
+                    c, key_id=target, account_id=ctx.account.id, tenant_id=ctx.tenant_id,
+                    name=name, overlap_seconds=overlap, now=now, trace_id=request_id)
+                payload = key_created(new_key, plaintext)
+                if idem:
+                    _idem_store(c, scope, idem, request_hash, 201,
+                                {"kind": "api_key", "key_id": str(new_key.id)}, now)
+            log.info("identity.apikey.rotated key_id=%s replaced=%s account_id=%s",
+                     new_key.id, target, ctx.account.id)
+            return _ok(payload, request_id, status_code=201)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.apikeys.rotate.failed request_id=%s", request_id)
+        return _server_error(request_id)
 
 
 # --------------------------------------------------------------------------- 令牌重放
