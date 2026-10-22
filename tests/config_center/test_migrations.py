@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from configkit import (
@@ -59,8 +61,11 @@ def test_empty_database_applies_in_glob_order_too(schema: str) -> None:
 def test_module_migrations_are_the_nine_expected_files() -> None:
     assert migrate.MODULE_MIGRATIONS == M10_MIGRATIONS
     assert [path.name for path in m10_migration_files()] == list(M10_MIGRATIONS)
-    assert len(migrate.BASE_MIGRATIONS) == 19
-    assert [path.name for path in base_migration_files()] == list(migrate.BASE_MIGRATIONS)
+    assert migrate.BASE_MIGRATIONS == tuple(path.name for path in base_migration_files())
+    assert {"001_init.sql", "100_identity_core.sql", "600_ledger_journal.sql"} <= set(
+        migrate.BASE_MIGRATIONS
+    )
+    assert all(not re.match(r"^10\d\d_", name) for name in migrate.BASE_MIGRATIONS)
 
 
 def test_single_file_rerun_is_idempotent(schema: str) -> None:

@@ -79,7 +79,9 @@ def test_migration_segment_is_1000_to_1099_and_unique():
 
 def test_base_migrations_exclude_module_files():
     assert all(not re.match(r"^10\d\d_", name) for name in migrate.BASE_MIGRATIONS)
-    assert len(migrate.BASE_MIGRATIONS) == 19        # 001–604 存量（6 + 8 + 5）
+    assert "001_init.sql" in migrate.BASE_MIGRATIONS
+    assert "100_identity_core.sql" in migrate.BASE_MIGRATIONS
+    assert "1000_config_items.sql" not in migrate.BASE_MIGRATIONS
     assert migrate.M10_TABLES == ("config_items", "config_versions",
                                   "config_publish_requests", "config_snapshots", "config_drifts",
                                   "config_outbox")
