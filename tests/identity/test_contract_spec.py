@@ -2,11 +2,11 @@
 """M01 契约面测试：spec 1.2.0 的 13 个 M01 操作逐条对账（tasks-11 验收 3）。
 
 对账口径：
-- **T2 已实现的 5 个操作**（login / refresh / logout / profile GET/PATCH）：
+- **T2/T3 已实现的 9 个操作**（login / refresh / logout / profile GET/PATCH + api-keys ×4）：
   路径 + 方法 + ``operationId`` 必须与 spec 一致；成功响应必须包含 spec 的必填字段；
   ``security`` 与 spec 一致（login / refresh 是 ``security: []``）；
   错误响应必须是 spec ``Error`` 信封（``error.type/code/message/request_id``）。
-- **T3 / T4 的 8 个操作**：spec 里必须仍存在（防漂移），且当前**未实现**——
+- **T4 的 4 个操作**：spec 里必须仍存在（防漂移），且当前**未实现**——
   这样任何一方先接线都会立刻红，避免「悄悄多出路由」。
 - 扫码轮询复用 ``/auth/login``，中间态用 **202 + ScanStatus**（CR-5 / task-13）：
   spec 1.2.0 尚未声明 202 时该用例 skip 并留痕；spec 1.2.1 合入后**同一份代码**
@@ -31,13 +31,14 @@ IMPLEMENTED = {
     ("post", "/api/v1/auth/logout"): "revokeAuthSession",
     ("get", "/api/v1/user/profile"): "getUserProfile",
     ("patch", "/api/v1/user/profile"): "updateUserProfile",
+    # T3：API Key 生命周期
+    ("get", "/api/v1/user/api-keys"): "listApiKeys",
+    ("post", "/api/v1/user/api-keys"): "createApiKey",
+    ("delete", "/api/v1/user/api-keys/{id}"): "revokeApiKey",
+    ("post", "/api/v1/user/api-keys/{id}/rotate"): "rotateApiKey",
 }
-# T3 / T4 的 8 个操作：spec 必须有，T2 不得实现
+# T4 的 4 个操作：spec 必须有，T3 不得实现
 DEFERRED = {
-    ("get", "/api/v1/user/api-keys"): ("listApiKeys", "T3"),
-    ("post", "/api/v1/user/api-keys"): ("createApiKey", "T3"),
-    ("delete", "/api/v1/user/api-keys/{id}"): ("revokeApiKey", "T3"),
-    ("post", "/api/v1/user/api-keys/{id}/rotate"): ("rotateApiKey", "T3"),
     ("post", "/api/v1/admin/accounts/{id}/freeze"): ("freezeAccount", "T4"),
     ("post", "/api/v1/admin/accounts/{id}/unfreeze"): ("unfreezeAccount", "T4"),
     ("post", "/api/v1/admin/accounts/{id}/roles"): ("updateAccountRoles", "T4"),
@@ -69,7 +70,7 @@ def _routes() -> dict[tuple[str, str], object]:
     return out
 
 
-def test_implemented_surface_is_exactly_the_t2_five():
+def test_implemented_surface_is_exactly_the_nine():
     assert set(_routes()) == set(IMPLEMENTED)
 
 

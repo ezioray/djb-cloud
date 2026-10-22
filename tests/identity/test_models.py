@@ -313,7 +313,7 @@ def test_revoke_api_key_is_idempotent(f):
     assert scalar(f.conn, "SELECT count(*) FROM identity_outbox"
                           " WHERE type = 'apikey.revoked'") == 1
     with pytest.raises(models.ApiKeyInvalid):
-        models.lookup_api_key(f.conn, plaintext)
+        models.lookup_api_key(f.conn, plaintext, now=f.moment)
 
 
 def test_rotate_api_key_swaps_in_one_step(f):
@@ -324,7 +324,7 @@ def test_rotate_api_key_swaps_in_one_step(f):
     assert new.id != old.id and new.rotated_from == old.id
     assert models.get_api_key(f.conn, old.id).revoked_reason == "rotated"
     with pytest.raises(models.ApiKeyInvalid):
-        models.authenticate_api_key(f.conn, old_plain)
+        models.authenticate_api_key(f.conn, old_plain, now=f.moment)
     assert models.authenticate_api_key(f.conn, new_plain).id == account.id
     assert new_plain != old_plain
     types = [e["type"] for e in all_events(f.conn)]
@@ -335,8 +335,9 @@ def test_rotate_revoked_or_legacy_key_is_rejected(f):
     account = f.normal()
     key, _ = f.key(account)
     models.revoke_api_key(f.conn, key.id, now=f.moment)
-    with pytest.raises(models.ApiKeyInvalid):
+    with pytest.raises(models.StateConflict) as exc:
         models.rotate_api_key(f.conn, key.id, now=f.moment)
+    assert exc.value.code == "40902"
 
     f.conn.execute("INSERT INTO api_keys (user_id, key_prefix, key_hash) VALUES (%s, %s, %s)",
                    ("user:legacy", "legacyab", "f" * 64))

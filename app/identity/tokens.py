@@ -67,11 +67,25 @@ class LoginResult:
 
 @dataclass(frozen=True)
 class AuthContext:
-    session: Session
+    """调用方身份上下文。
+
+    两条来源：**会话**（T2，``session`` 非空）与 **API Key**（T3 网关鉴权，``session`` 为空、
+    ``api_key_id`` 非空）。下游按 ``via`` 判断，不要假设 session 一定存在。
+    """
+
+    session: Session | None
     account: models.Account
     user: models.User
     roles: tuple[str, ...]
     step_up_active: bool = False
+    api_key_id: int | None = None
+    api_key_prefix: str | None = None
+    key_overlap: bool = False
+    quotas: dict | None = None
+
+    @property
+    def via(self) -> str:
+        return "api_key" if self.api_key_id is not None else "session"
 
     @property
     def account_id(self) -> uuid.UUID:
@@ -437,6 +451,8 @@ def _touch(c, session: Session, moment: datetime) -> Session:
 def require_step_up(ctx: AuthContext, *, now: datetime | None = None) -> AuthContext:
     """高危动作闸门（供 T4 复用）：不在 step-up 窗口内一律 424 / 42401。"""
     moment = _now(now)
+    if ctx.session is None:                       # Key 鉴权没有会话，不能承载 step-up
+        raise errors.StepUpRequired("API Key 方式不支持 step-up，请用会话 + MFA")
     if not ctx.step_up_active:
         raise errors.StepUpRequired("需要二次认证（step-up ≤5 分钟）")
     if ctx.session.step_up_until is not None and ctx.session.step_up_until <= moment:
