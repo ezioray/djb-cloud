@@ -86,7 +86,7 @@ jobs:
           pip install -q 'fastapi>=0.110' 'uvicorn>=0.29' 'psycopg[binary]>=3.1' 'pytest>=8.0' httpx pyyaml
       - name: 拉取固定版本契约（djb-node）
         env:
-          SPEC_REF: 770ad6cba7dd6096c70a9e472f9b270ae577ac8e
+          SPEC_REF: b4a4e7d73dc5e0dcec0850cef786715f6c888a56
         run: |
           mkdir -p spec
           curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/$SPEC_REF/openapi.yaml" -o spec/openapi.yaml
