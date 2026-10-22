@@ -24,6 +24,7 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import secrets
 import time
 import uuid
@@ -33,22 +34,36 @@ from typing import Any, Mapping, Sequence
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 
-# --------------------------------------------------------------------------- 常量（唯一来源）
-# 03-facts §8（账户 / 权限 / 保留）与 M01 §8.2（本模块常量）。模块内其它地方不再出现字面量。
+from . import credentials
+
+# --------------------------------------------------------------------------- 常量
+# 两类常量，出处不同，不能混：
+#   (1) **facts 派生**（03-facts §8）：五态、冻结上限、冷静期、八角色、会话 TTL、step-up。
+#       CR-4 起统一从 contracts/facts.yaml 读取（app/identity/facts.py），代码里不再写字面量。
+#   (2) **本模块常量**（M01 §8.1 / §8.2）：03-facts §13.4 明确不覆盖单模块内部算法常量，
+#       故仍留在本文件，逐条标注出处。
+from .facts import (                       # noqa: E402  (常量块紧随其后，便于对照阅读)
+    ACCOUNT_STATES,
+    ADMIN_ROLES,
+    CLOSING_COOLOFF_DAYS,
+    FREEZE_MAX_DAYS,
+    SESSION_ABSOLUTE_HOURS,
+    SESSION_IDLE_MINUTES,
+    SESSION_SLIDE_MINUTES,
+    STEP_UP_MINUTES,
+)
+
 ACCOUNT_TYPES = ("personal", "team", "enterprise")
-ACCOUNT_STATES = ("pending_verify", "normal", "frozen", "closing", "closed")
 ORG_TYPES = ("team", "enterprise")
 ORG_STATES = ("active", "closing", "closed")
 ORG_ROLES = ("owner", "admin", "operator", "billing")
 MEMBER_STATES = ("invited", "active", "removed")
-ADMIN_ROLES = ("SUPER", "OPS", "RISK", "FIN", "CS", "AUDIT", "VIEWER", "SVC")
 ROLE_SCOPES = ("platform", "tenant")
 QUOTA_KINDS = ("qps", "daily_usd_minor", "concurrency")
 MFA_STATES = ("none", "pending", "enabled")
-SESSION_KINDS = ("user", "admin")
+# T2 新增两种会话：mfa_pending（MFA 未完成的短期令牌）/ step_up（二次认证 5 分钟）
+SESSION_KINDS = ("user", "admin", "mfa_pending", "step_up")
 
-FREEZE_MAX_DAYS = 180                      # 03-facts §8：冻结上限单次 ≤180 天
-CLOSING_COOLOFF_DAYS = 30                  # M01 §8.2：注销冷静期 30 天
 PENDING_VERIFY_TTL_DAYS = 7                # M01 §3：7 天未验证 → 清理
 INVITE_TTL_HOURS = 72                      # M01 §8.2：邀请令牌一次性 ≤72 h
 ROLE_RECLAIM_DAYS = 90                     # M01 §8.2：角色 90 天自动回收
@@ -56,13 +71,17 @@ KEY_PREFIX_LEN = 8                         # M01 §8.2：Key 前缀 8 位（仅�
 KEY_MAX_PER_ACCOUNT = 10                   # M01 §8.1：identity.max_keys_per_account 默认 10
 KEY_ENTROPY_BYTES = 32                     # M01 §6.2：256 bit
 DEFAULT_QPS = 3                            # M01 §8.1：quota.default_qps 默认 3
-SESSION_SLIDE_MINUTES = 30                 # 03-facts §8：后台会话 30 分钟滑动
-SESSION_ABSOLUTE_HOURS = 12                # 03-facts §8：12 小时绝对
 ACCESS_TTL_HOURS = 2                       # M01 §1：访问令牌 ≤2 h
 REFRESH_TTL_DAYS = 30                      # M01 §1：刷新令牌 ≤30 天
 SEATS = {"personal": 1, "team": 20, "enterprise": 200}   # M01 §1：席位上限
 OWNER_TRANSFER_COOLDOWN_HOURS = 24         # INV-05：owner 转让 24 h 冷却
 PII_PEPPER_ENV = "DJB_IDENTITY_PII_PEPPER"  # 密钥引用（09 安全）：不写死、不入库
+MFA_PIN_MIN_DIGITS = 6                     # M01 §8.2：二次认证码位数（S1 用固定 6 位 PIN）
+MFA_MAX_FAILURES = 5                       # M01 §8.2：登录失败锁定 5 次 / 15 分钟
+LOGIN_LOCK_MINUTES = 15                    # M01 §8.2：锁定时长
+SCAN_TICKET_TTL_SECONDS = 120              # M01 §8.2：扫码中间态 120 s
+MFA_PENDING_TTL_MINUTES = 5                 # M01 §8.2：step-up ≤5 分钟（MFA 未完成短期令牌同口径）
+TOKEN_ENTROPY_BYTES = 32                   # 不透明令牌 256 bit（M01 §6.2 同口径）
 
 # 可写操作（建 Key / 充值 / 接新单）只允许 normal（M01 §3）
 WRITABLE_STATES = frozenset({"normal"})
@@ -259,6 +278,22 @@ class User:
 
 
 @dataclasses.dataclass(frozen=True)
+class UserAuth:
+    """登录因子与锁定状态（与 ``User`` 分开，避免把口令派生物随手传进序列化路径）。"""
+
+    user_id: uuid.UUID
+    password_hash: str | None
+    password_updated_at: datetime | None
+    mfa_state: str
+    mfa_secret_hash: str | None
+    mfa_salt: str | None
+    mfa_enabled_at: datetime | None
+    failed_login_count: int
+    login_locked_until: datetime | None
+    last_login_at: datetime | None
+
+
+@dataclasses.dataclass(frozen=True)
 class Org:
     id: uuid.UUID
     tenant_id: uuid.UUID
@@ -356,6 +391,10 @@ class Session:
     last_seen_at: datetime
     expires_at: datetime
     refresh_expires_at: datetime | None
+    absolute_expires_at: datetime | None
+    idle_expires_at: datetime | None
+    step_up_until: datetime | None
+    rotated_at: datetime | None
     revoked_at: datetime | None
     revoked_reason: str | None
 
@@ -392,6 +431,9 @@ class TenantQuota:
 
 # --------------------------------------------------------------------------- 列清单
 _USER_COLS = "id, email_hash, phone_hash, mfa_state, display_name, locale, created_at, updated_at"
+_USER_AUTH_COLS = ("u.id AS user_id, u.password_hash, u.password_updated_at, u.mfa_state, "
+                   "u.mfa_secret_hash, u.mfa_salt, u.mfa_enabled_at, u.failed_login_count, "
+                   "u.login_locked_until, u.last_login_at")
 _ORG_COLS = ("id, tenant_id, type, name, seats, seats_limit, owner_account_id, state, "
              "owner_transfer_cooldown_until, created_at, updated_at")
 _ACCOUNT_COLS = ("id, user_id, type, state, tenant_id, org_id, session_epoch, frozen_until, "
@@ -401,8 +443,10 @@ _MEMBER_COLS = ("id, org_id, tenant_id, account_id, org_role, state, invited_by,
                 "invite_expires_at, joined_at, removed_at, created_at, updated_at")
 _KEY_COLS = ("id, user_id, key_prefix, key_hash, account_id, tenant_id, qps, daily_usd_minor, "
              "label, rotated_from, last_used_at, created_by, created_at, revoked_at, revoked_reason")
+# 注意：刻意**不含** access_hash / refresh_hash——会话视图不回令牌材料（INV-04）
 _SESSION_COLS = ("id, account_id, tenant_id, epoch, kind, mfa, created_at, last_seen_at, "
-                 "expires_at, refresh_expires_at, revoked_at, revoked_reason")
+                 "expires_at, refresh_expires_at, absolute_expires_at, idle_expires_at, "
+                 "step_up_until, rotated_at, revoked_at, revoked_reason")
 _ROLE_COLS = ("id, account_id, tenant_id, admin_role, scope, granted_by, approved_by, granted_at, "
               "expires_at, revoked_at, revoked_reason")
 _QUOTA_COLS = "id, tenant_id, key_id, kind, value, policy_version, created_at, updated_at"
@@ -412,6 +456,9 @@ def _check(value: str, allowed: Sequence[str], field: str) -> str:
     if value not in allowed:
         raise InvalidArgument(f"{field} 必须是 {tuple(allowed)} 之一，收到 {value!r}", field=field)
     return value
+
+
+_LOCALE_RE = re.compile(r"^[a-z]{2}(-[A-Z]{2})?$")
 
 
 def _text(value: str | None, field: str, *, max_len: int = 200) -> str:
@@ -469,9 +516,13 @@ def pending_events(c, *, limit: int = 100) -> list[dict]:
 def create_user(c, *, email: str | None = None, phone: str | None = None,
                 mfa_state: str = "none", display_name: str | None = None,
                 locale: str = "zh-CN", user_id: uuid.UUID | None = None,
-                now: datetime | None = None) -> User:
-    """建登录身份。邮箱 / 手机只以哈希入库（明文不入库、不入日志）。"""
+                password: str | None = None, now: datetime | None = None) -> User:
+    """建登录身份。邮箱 / 手机只以哈希入库；口令只存 scrypt 派生串（T2 起）。"""
     _check(mfa_state, MFA_STATES, "mfa_state")
+    if mfa_state != "none":
+        raise InvalidArgument("注册只能以 mfa_state=none 开始，绑 MFA 走 mfa.enroll（T2）",
+                              field="mfa_state")
+    password_hash = credentials.hash_password(password) if password else None
     if email is None and phone is None:
         # 服务账户（SVC）没有自然人联系方式；有联系方式的账户仍需在 T2 走验证流程
         log.debug("identity.user.create service-account user_id=%s", user_id)
@@ -480,13 +531,14 @@ def create_user(c, *, email: str | None = None, phone: str | None = None,
         try:
             cur.execute(
                 f"""INSERT INTO users
-                        (id, email_hash, phone_hash, mfa_state, display_name, locale, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (id, email_hash, phone_hash, mfa_state, display_name, locale, created_at,
+                         password_hash, password_updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING {_USER_COLS}""",
                 (user_id or uuid7(), hash_pii(email) if email else None,
                  hash_pii(phone) if phone else None, mfa_state,
                  _text(display_name, "display_name", max_len=64) if display_name else None,
-                 locale, moment),
+                 locale, moment, password_hash, moment if password_hash else None),
             )
         except UniqueViolation as exc:      # 同一邮箱 / 手机只能有一个登录身份
             raise StateConflict("该邮箱或手机号已注册", reason="user_exists") from exc
@@ -503,12 +555,81 @@ def get_user(c, user_id: uuid.UUID, *, for_update: bool = False) -> User:
     return _make(User, row)
 
 
+def find_user_by_identifier(c, identifier: str) -> User | None:
+    """按「邮箱或手机」反查登录身份（T2 登录入口）。查询键是哈希，不落明文。"""
+    value = credentials.normalize_identifier(identifier)
+    sql = f"SELECT {_USER_COLS} FROM users WHERE email_hash = %s OR phone_hash = %s"
+    with c.cursor() as cur:
+        cur.execute(sql, (hash_pii(value), hash_pii(value)))
+        row = _one(cur)
+    return _make(User, row) if row else None
+
+
 def find_user_by_email(c, email: str) -> User | None:
     """按邮箱反查（登录入口 T2 用）；查询键是哈希，不落明文。"""
     with c.cursor() as cur:
         cur.execute(f"SELECT {_USER_COLS} FROM users WHERE email_hash = %s", (hash_pii(email),))
         row = _one(cur)
     return _make(User, row) if row else None
+
+
+def get_user_auth(c, user_id: uuid.UUID, *, for_update: bool = False) -> UserAuth:
+    """取登录因子与锁定状态（唯一读口；调用方不要自己拼 SQL 读 password_hash）。"""
+    with c.cursor() as cur:
+        cur.execute(f"SELECT {_USER_AUTH_COLS} FROM users u WHERE u.id = %s"
+                    + (" FOR UPDATE" if for_update else ""), (user_id,))
+        row = _one(cur)
+    if row is None:
+        raise NotFound("登录身份不存在", user_id=str(user_id))
+    return _make(UserAuth, row)
+
+
+def set_password(c, user_id: uuid.UUID, password: str, *, now: datetime | None = None) -> None:
+    """改口令：只写派生串 + 时间戳；同时清零失败计数（改密即解封）。"""
+    moment = _now(now)
+    with c.cursor() as cur:
+        cur.execute(
+            """UPDATE users
+                  SET password_hash = %s, password_updated_at = %s,
+                      failed_login_count = 0, login_locked_until = NULL
+                WHERE id = %s""",
+            (credentials.hash_password(password), moment, user_id))
+        if cur.rowcount != 1:
+            raise NotFound("登录身份不存在", user_id=str(user_id))
+
+
+PROFILE_FIELDS = ("display_name", "locale")
+
+
+def update_user_profile(c, user_id: uuid.UUID, fields: Mapping[str, Any], *,
+                        now: datetime | None = None) -> User:
+    """局部更新展示类字段（spec：只允许 display_name / locale；身份字段一律拒绝）。"""
+    unknown = [key for key in fields if key not in PROFILE_FIELDS]
+    if unknown:
+        raise InvalidArgument(f"不允许经 profile 修改：{unknown}", reason="immutable_field",
+                              fields=unknown)
+    if not fields:
+        raise InvalidArgument("至少提供一个可改字段", reason="empty_update")
+    sets, params = [], []
+    for key in PROFILE_FIELDS:
+        if key not in fields:
+            continue
+        value = fields[key]
+        if key == "display_name":
+            params.append(None if value is None else _text(value, "display_name", max_len=64))
+        else:
+            if value is None or not _LOCALE_RE.match(str(value)):
+                raise InvalidArgument("locale 必须是 BCP 47 形态（如 zh-CN）", field="locale")
+            params.append(str(value))
+        sets.append(f"{key} = %s")
+    params.append(user_id)
+    with c.cursor() as cur:
+        cur.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = %s RETURNING {_USER_COLS}",
+                    params)
+        row = _one(cur)
+    if row is None:
+        raise NotFound("登录身份不存在", user_id=str(user_id))
+    return _make(User, row)
 
 
 def purge_user_pii(c, user_id: uuid.UUID, *, now: datetime | None = None) -> int:
@@ -779,6 +900,21 @@ def get_account(c, account_id: uuid.UUID, *, tenant_id: uuid.UUID | None = None,
         row = _one(cur)
     if row is None:
         raise NotFound("账户不存在", account_id=str(account_id))
+    return _make(Account, row)
+
+
+def primary_account(c, user_id: uuid.UUID, *, for_update: bool = False) -> Account:
+    """登录身份的主账户：优先 personal（1:1），否则取最早创建的账户。"""
+    with c.cursor() as cur:
+        cur.execute(
+            f"""SELECT {_ACCOUNT_COLS} FROM user_accounts
+                 WHERE user_id = %s
+                 ORDER BY (type = 'personal') DESC, created_at, id
+                 LIMIT 1""" + (" FOR UPDATE" if for_update else ""),
+            (user_id,))
+        row = _one(cur)
+    if row is None:
+        raise NotFound("该登录身份没有账户", user_id=str(user_id))
     return _make(Account, row)
 
 

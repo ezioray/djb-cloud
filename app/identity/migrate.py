@@ -13,6 +13,7 @@ CI 的执行方式是 ``for f in migrations/*.sql``（见 .github/workflows/ci.y
     python -m app.identity.migrate --schema m01_t1_x --status
 
 ``--up`` 会先应用存量基线 001/002（api_keys 原型由 002 建立，1xx 在其上只加列）。
+1xx 段：100–104（T1 模型）+ 105（T2 会话令牌 / MFA 因子 / 扫码票据 / 幂等键）。
 """
 from __future__ import annotations
 
@@ -33,6 +34,36 @@ MODULE_MIGRATIONS = tuple(sorted(p.name for p in MIGRATIONS_DIR.glob("1*.sql")))
 
 # 回滚：逆序删除本模块新增对象；**存量对象只删新增列**，不删表、不改类型（00-conventions §7.2）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("105_identity_auth.sql", """
+        DROP TABLE IF EXISTS identity_idempotency;
+        DROP TABLE IF EXISTS identity_scan_tickets;
+        ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_mfa_factor_chk;
+        ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_password_shape_chk;
+        ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_login_lock_chk;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS password_hash;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS password_updated_at;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS mfa_secret_hash;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS mfa_salt;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS mfa_enabled_at;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS failed_login_count;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS login_locked_until;
+        ALTER TABLE IF EXISTS users DROP COLUMN IF EXISTS last_login_at;
+        DROP INDEX IF EXISTS sessions_access_uq;
+        DROP INDEX IF EXISTS sessions_refresh_uq;
+        ALTER TABLE IF EXISTS sessions DROP CONSTRAINT IF EXISTS sessions_token_hash_chk;
+        ALTER TABLE IF EXISTS sessions DROP CONSTRAINT IF EXISTS sessions_absolute_chk;
+        -- kind 收回两值：用 NOT VALID 保留存量行（回退应用后不会再有新 kind）
+        ALTER TABLE IF EXISTS sessions DROP CONSTRAINT IF EXISTS sessions_kind_chk;
+        ALTER TABLE IF EXISTS sessions ADD CONSTRAINT sessions_kind_chk
+          CHECK (kind IN ('user', 'admin')) NOT VALID;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS access_hash;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS refresh_hash;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS absolute_expires_at;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS rotated_at;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS idle_expires_at;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS step_up_until;
+        ALTER TABLE IF EXISTS sessions DROP COLUMN IF EXISTS client_ip_hash;
+    """),
     ("104_identity_outbox.sql", """
         DROP TABLE IF EXISTS identity_outbox;
     """),
