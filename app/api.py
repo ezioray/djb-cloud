@@ -12,10 +12,14 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import db, pricing, receipt as rcpt, upstream
+from .identity.router import router as identity_router
+from .ledger.router import router as ledger_router
 from .nodes import router as node_router
 
 app = FastAPI(title="djb-cloud", version="0.1.0")
 app.include_router(node_router)
+app.include_router(identity_router)
+app.include_router(ledger_router)
 
 
 # ── 鉴权：用方 Bearer（库里只存 sha256）───────────────────────────────────────
