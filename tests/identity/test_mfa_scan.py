@@ -210,11 +210,11 @@ def test_scan_flow_end_to_end(api, f, caplog):
 
     pending = _scan_login(api, ticket)
     assert pending.status_code == 202
-    assert pending.json()["scan"]["status"] == "created"
+    assert pending.json()["status"] == "pending"          # 对外枚举：created → pending
     assert pending.json()["scan"]["retry_after_s"] >= 1
 
     scan.scan(f.conn, ticket, account_id=account.id, now=f.moment)
-    assert _scan_login(api, ticket).json()["scan"]["status"] == "scanned"
+    assert _scan_login(api, ticket).json()["status"] == "scanned"
 
     scan.confirm(f.conn, ticket, account_id=account.id, now=f.moment)
     done = _scan_login(api, ticket)

@@ -8,8 +8,9 @@
   错误响应必须是 spec ``Error`` 信封（``error.type/code/message/request_id``）。
 - **T3 / T4 的 8 个操作**：spec 里必须仍存在（防漂移），且当前**未实现**——
   这样任何一方先接线都会立刻红，避免「悄悄多出路由」。
-- 扫码轮询复用 ``/auth/login``，中间态用 **202**：spec 1.2.0 未声明 202，
-  断言此差异存在（CR 已登记在证据文件，等 Lead 决定是否进 spec）。
+- 扫码轮询复用 ``/auth/login``，中间态用 **202 + ScanStatus**（CR-5 / task-13）：
+  spec 1.2.0 尚未声明 202 时该用例 skip 并留痕；spec 1.2.1 合入后**同一份代码**
+  自动切到严格断言（202 存在 + ScanStatus 必填字段 / 枚举 / 类型逐项匹配），不需要再改测试。
 """
 from __future__ import annotations
 
@@ -181,8 +182,54 @@ def test_error_envelope_matches_spec(spec, api, f):
     } or True   # spec 用描述性文本登记 40110，这里只断言形态
 
 
-def test_scan_pending_202_is_not_in_spec_yet(spec):
-    """CR：扫码中间态用 202，spec 1.2.0 的 /auth/login 只声明了 200/400/401/403/429。"""
+LOGIN_1_2_0_RESPONSES = {"200", "400", "401", "403", "429"}
+
+
+def _scan_status_schema(spec: dict) -> dict:
+    ref = spec["paths"]["/api/v1/auth/login"]["post"]["responses"]["202"]["content"][
+        "application/json"]["schema"]["$ref"]
+    assert ref == "#/components/schemas/ScanStatus", ref
+    return spec["components"]["schemas"]["ScanStatus"]
+
+
+def test_scan_pending_202_matches_spec(spec, api, f):
+    """扫码中间态：spec 1.2.0 → 暂缺 202（skip 留痕）；spec 1.2.1 起严格对账。"""
     responses = set(spec["paths"]["/api/v1/auth/login"]["post"]["responses"])
-    assert responses == {"200", "400", "401", "403", "429"}
-    assert "202" not in responses, "spec 已补 202：请更新本用例与 router 文档"
+    assert LOGIN_1_2_0_RESPONSES <= responses, "1.2.0 的既有响应不得被删（纯 additive）"
+
+    if "202" not in responses:
+        pytest.skip("spec 仍是 1.2.0（无 202 / ScanStatus，CR-5 待 task-13）；"
+                    "1.2.1 同步后本用例自动执行严格断言")
+
+    # —— spec 1.2.1 起的严格对账 ——
+    schema = _scan_status_schema(spec)
+    assert schema["type"] == "object"
+    required = set(schema["required"])
+    assert {"status", "expires_at", "retry_after_s"} <= required
+    status_enum = set(schema["properties"]["status"]["enum"])
+    assert {"pending", "scanned", "confirmed", "expired"} <= status_enum
+    assert schema["properties"]["retry_after_s"]["type"] == "integer"
+    assert schema["properties"]["retry_after_s"]["minimum"] >= 1
+
+    f.login_ready()
+    from app.identity import scan
+
+    _row, ticket = scan.create(f.conn, now=f.moment)
+    response = api.post("/api/v1/auth/login",
+                        json={"method": "oauth", "provider": "qr", "identifier": ticket})
+    assert response.status_code == 202
+    body = response.json()
+
+    # 必填字段齐全、类型正确、枚举合法（顶层即 ScanStatus）
+    assert required <= set(body), required - set(body)
+    assert body["status"] in status_enum
+    assert isinstance(body["retry_after_s"], int) and body["retry_after_s"] >= 1
+    assert isinstance(body["expires_at"], str) and body["expires_at"]
+    # 过渡期的 scan 包裹与顶层保持一致（纯增量，不为契约引入第二种真相）
+    assert body["scan"] == {key: body[key] for key in required}
+
+
+def test_scan_status_enum_mapping():
+    """内部票据状态 → spec 枚举（created 对外是 pending，其余同名）。"""
+    assert router_module.SCAN_STATUS_MAP == {"created": "pending", "scanned": "scanned",
+                                             "confirmed": "confirmed", "expired": "expired"}

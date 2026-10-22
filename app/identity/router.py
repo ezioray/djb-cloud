@@ -197,6 +197,24 @@ def profile_payload(ctx: tokens.AuthContext) -> dict[str, Any]:
     return account_payload(ctx.account, ctx.user, ctx.roles)
 
 
+# 内部票据状态 → spec ScanStatus.status 枚举（1.2.1）
+SCAN_STATUS_MAP = {"created": "pending", "scanned": "scanned",
+                   "confirmed": "confirmed", "expired": "expired"}
+
+
+def _scan_payload(scan_result: dict[str, Any]) -> dict[str, Any]:
+    """扫码中间态响应体（spec 1.2.1 ScanStatus）。
+
+    顶层给 ``status / expires_at / retry_after_s`` 三个规范字段；
+    同时保留 ``scan`` 包裹（CR-5 落地前的形状），便于已对接的调用方零改动过渡——
+    纯增量，不改变 202 的语义与时序。
+    """
+    flat = {"status": SCAN_STATUS_MAP.get(scan_result["status"], scan_result["status"]),
+            "expires_at": scan_result["expires_at"],
+            "retry_after_s": int(scan_result["retry_after_s"])}
+    return {**flat, "scan": {**flat}}
+
+
 def _tokens_payload(result: tokens.LoginResult) -> dict[str, Any]:
     session = result.session
     assert session is not None
@@ -245,7 +263,7 @@ async def create_auth_session(request: Request) -> JSONResponse:
                                       client_ip=request.client.host if request.client else None,
                                       now=now, trace_id=request_id)
                 if result.scan is not None:           # 扫码中间态：202，不落幂等
-                    return _ok({"scan": result.scan}, request_id, status_code=202)
+                    return _ok(_scan_payload(result.scan), request_id, status_code=202)
                 payload = {"tokens": _tokens_payload(result),
                            "account": account_payload(result.account, result.user, result.roles),
                            "mfa_required": result.mfa_required}
