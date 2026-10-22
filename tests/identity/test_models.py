@@ -466,7 +466,10 @@ def test_roles_can_be_bound_with_90_day_ttl(f, role):
 
 
 def test_role_whitelist_is_exactly_eight(f):
-    assert models.ADMIN_ROLES == ("SUPER", "OPS", "RISK", "FIN", "CS", "AUDIT", "VIEWER", "SVC")
+    # 顺序按 contracts/facts.yaml「后台角色」原文（CR-4 起以机器源为准）
+    assert models.ADMIN_ROLES == ("SUPER", "SVC", "OPS", "AUDIT", "RISK", "FIN", "CS", "VIEWER")
+    assert set(models.ADMIN_ROLES) == {"SUPER", "SVC", "OPS", "AUDIT", "RISK", "FIN", "CS",
+                                       "VIEWER"}
 
 
 def test_unknown_role_and_scope_are_rejected(f):
@@ -691,8 +694,13 @@ def test_identity_imports_no_other_app_module():
             elif isinstance(node, ast.ImportFrom) and node.level == 0:
                 names = [node.module or ""]
             for name in names:
-                if name.split(".")[0] == "app" and not name.startswith("app.identity"):
-                    offenders.append(f"{path.name}: import {name}")
+                root = name.split(".")[0]
+                if root != "app":
+                    continue
+                # 只放行基础设施（app.db / app.config）；业务模块与 app.api 一律禁止
+                if name.startswith("app.identity") or name in ("app.db", "app.config"):
+                    continue
+                offenders.append(f"{path.name}: import {name}")
     assert offenders == [], offenders
 
 

@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import pytest
 
-from app.identity import migrate, models, state
+from app.identity import clock, migrate, models, state
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = REPO_ROOT / "migrations"
@@ -141,6 +141,17 @@ class Factory:
         account = self.account(**kwargs)
         return state.verify(self.conn, account.id, now=self.moment)
 
+    def login_ready(self, *, password: str = "S3cret!", email: str | None = None,
+                    policy_version: str | None = "v4.0") -> tuple[models.User, models.Account]:
+        """建一个可登录账户：user（带口令）+ personal 账户（normal）。"""
+        self._seq += 1
+        user = models.create_user(self.conn, email=email or f"login{self._seq}@example.com",
+                                  password=password, now=self.moment)
+        account = models.create_account(self.conn, user_id=user.id,
+                                        policy_version=policy_version, now=self.moment)
+        state.verify(self.conn, account.id, now=self.moment)
+        return user, account
+
     def key(self, account: models.Account, **kwargs) -> tuple[models.ApiKey, str]:
         return models.create_api_key(self.conn, account_id=account.id, now=self.moment, **kwargs)
 
@@ -215,3 +226,65 @@ def apply_files(conn: psycopg.Connection, names) -> list[str]:
     for name in names:
         conn.execute((MIGRATIONS_DIR / name).read_text(encoding="utf-8"))
     return list(names)
+
+
+# --------------------------------------------------------------------------- T2：时钟与 HTTP
+class Timeline:
+    """可推进的测试时钟（替换 ``clock.utcnow``，保持测试确定性）。"""
+
+    def __init__(self, moment: datetime) -> None:
+        self.moment = moment
+
+    def __call__(self) -> datetime:
+        return self.moment
+
+    def advance(self, **kwargs) -> datetime:
+        self.moment = self.moment + timedelta(**kwargs)
+        return self.moment
+
+
+@pytest.fixture()
+def timeline(monkeypatch, now) -> Timeline:
+    line = Timeline(now)
+    monkeypatch.setattr(clock, "utcnow", line)
+    return line
+
+
+@pytest.fixture()
+def api(conn, monkeypatch):
+    """FastAPI TestClient：把 router 的 ``_connection`` 指向本用例事务连接。
+
+    这样路由里的写操作都落在**同一测试事务**里，teardown 回滚即清空；
+    也不需要 app/api.py 参与（T2 不接线，由 Lead 合并时 include）。
+    """
+    from contextlib import contextmanager
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.identity import router as router_module
+
+    @contextmanager
+    def _conn():
+        yield conn
+
+    @contextmanager
+    def _sink():
+        yield conn
+
+    monkeypatch.setattr(router_module, "_connection", _conn)
+    monkeypatch.setattr(router_module, "_failure_sink", _sink)
+    app = FastAPI()
+    app.include_router(router_module.router)
+    with TestClient(app) as client:
+        yield client
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def error_of(response) -> dict:
+    body = response.json()
+    assert set(body) == {"error"}, body
+    return body["error"]
