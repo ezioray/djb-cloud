@@ -44,6 +44,7 @@ import psycopg
 from fastapi import APIRouter, Body, Header, Query, Request, Response
 from fastapi.responses import JSONResponse
 
+from . import audit as audit_mod
 from . import drift, migrate, publish, registry, snapshot, store
 from .errors import (
     ApproverNotAllowed,
@@ -295,11 +296,13 @@ def create_router(
     connection_factory: Callable[[], ContextManager[psycopg.Connection]] | None = None,
     registry_provider: Callable[[], Registry] | None = None,
     now_provider: Callable[[], datetime] | None = None,
+    audit_sink: "audit_mod.AuditSink | None" = None,
 ) -> APIRouter:
     clock = now_provider or (lambda: datetime.now(timezone.utc))
     resolve = principal_resolver or (lambda req: default_principal_resolver(req, now=clock()))
     connect = connection_factory or default_connection_factory
     reg_of = registry_provider or load_registry
+    audit = audit_sink
 
     def _maybe_activate(conn, request_row, *, version: int | None) -> tuple[dict[str, Any], int | None]:
         """S1 接线：复核/创建后若已 approved 且生效时间已到，立即生效（窗口内）。
@@ -313,7 +316,7 @@ def create_router(
         if effective is not None and effective > moment:
             return request_row, version
         result = publish.activate_request(
-            conn, request_row["publish_request_id"], now=moment)
+            conn, request_row["publish_request_id"], now=moment, audit=audit)
         return result["request"], result["version"]["version"]
     router = APIRouter(prefix="/api/v1/admin/config", tags=["admin"])
 
@@ -511,6 +514,64 @@ def create_router(
             return payload
         return guard(request, run)
 
+    # ── S2：灰度推进（spec 1.2.1 已登记；S1 开关关闭 → 409 + 47007）
+    @router.post("/publish-requests/{request_id}/promote", status_code=200,
+                 operation_id="promoteConfigPublish")
+    def promote_config_publish(
+        request: Request, response: Response, request_id: str,
+        body: Mapping[str, Any] = Body(...),
+        idempotency_key: str | None = Header(None, alias="X-DJB-Idempotency-Key"),
+    ):
+        def run():
+            principal = resolve(request)
+            body_checked = _require_body(body)
+            _reject_unknown(body_checked, ("target_stage",))
+            target_stage = body_checked.get("target_stage")
+            if target_stage not in ("next_bucket", "full"):
+                raise ValidationFailed("target_stage 必须是 next_bucket / full")
+            try:
+                with connect() as conn:
+                    result = publish.promote_request(
+                        conn, request_id, principal=principal, target_stage=target_stage,
+                        now=clock(), audit=audit)
+                    row = result["request"]
+            except GrayPlanInvalid as exc:
+                # spec promote：观测窗/灰度非法 → 409 + 47007（其它端点仍是 400）
+                rid = _request_id(request)
+                return JSONResponse(
+                    status_code=409,
+                    content={"error": {"type": "conflict_error", "code": 47007,
+                                       "message": str(exc), "request_id": rid}},
+                    headers={"X-Request-Id": rid})
+            versions = row["versions"] or {}
+            ack = _ack_payload(row, version=versions.get(row["key"])
+                               if isinstance(versions, dict) else None)
+            ack["bucket"] = result["bucket"]
+            ack["activated"] = result["activated"]
+            response.headers["X-Request-Id"] = _request_id(request)
+            return ack
+        return guard(request, run)
+
+    # ── M16 审计只读聚合（事实源在 M16；注入的 sink 提供 query 时返回最近事件）
+    @router.get("/{key}/audit", operation_id="listConfigAudit")
+    def list_config_audit(request: Request, response: Response, key: str,
+                          limit: int = Query(DEFAULT_LIMIT)):
+        def run():
+            resolve(request)
+            _limit(limit)
+            reg_of().require(key)
+            rows: list[dict[str, Any]] = []
+            source = "m16"
+            if audit is not None and hasattr(audit, "query"):
+                rows = list(audit.query(key, limit=limit))  # type: ignore[attr-defined]
+                source = "m16-injected"
+            response.headers["X-Request-Id"] = _request_id(request)
+            return {"data": rows,
+                    "page": {"cursor": "", "has_more": False, "next_cursor": None},
+                    "source": source}
+
+        return guard(request, run)
+
     # ── 写：草稿 / 发布 / 复核 / 回滚 / kill switch
     @router.post("/{key}", status_code=201, operation_id="createConfigDraft")
     def create_config_draft(
@@ -539,6 +600,11 @@ def create_router(
                     ticket=body_checked.get("ticket"),
                     idempotency_key=idempotency_key, registry=reg_of(), now=clock())
                 item = reg_of().require(key)
+                audit_mod.emit(audit, audit_mod.build_event(
+                    "config.draft.created", actor=principal.actor, key=key,
+                    version=row["version"], reason=body_checked["reason"],
+                    occurred_at=clock(),
+                    metadata={"value_type": item.value_type, "status": row["status"]}))
                 item_row = _item_row(conn, key)
                 payload = _item_payload(item, item_row, row)
             response.headers["X-Request-Id"] = _request_id(request)
@@ -563,7 +629,8 @@ def create_router(
                     conn, key=key, version=int(body_checked["version"]), principal=principal,
                     reason=body_checked["reason"], effective_at=body_checked.get("effective_at"),
                     gray_plan=body_checked.get("gray_plan"), ticket=body_checked.get("ticket"),
-                    idempotency_key=idempotency_key, registry=reg_of(), now=clock())
+                    idempotency_key=idempotency_key, registry=reg_of(), now=clock(),
+                    audit=audit)
                 row, activated_version = _maybe_activate(
                     conn, row, version=int(body_checked["version"]))
                 ack = _ack_payload(row, version=activated_version)
@@ -590,7 +657,7 @@ def create_router(
                 row = publish.approve_request(
                     conn, request_id, principal=principal,
                     decision=body_checked["decision"], reason=body_checked["reason"],
-                    now=clock())
+                    now=clock(), audit=audit)
                 versions = row["versions"] or {}
                 target_version = versions.get(row["key"]) if isinstance(versions, dict) else None
                 row, activated_version = _maybe_activate(
@@ -617,7 +684,7 @@ def create_router(
                     conn, key=key, target_version=int(body_checked["target_version"]),
                     principal=principal, reason=body_checked["reason"],
                     ticket=body_checked.get("ticket"), idempotency_key=idempotency_key,
-                    registry=reg_of(), now=clock())
+                    registry=reg_of(), now=clock(), audit=audit)
                 new_version = row.get("new_version")
                 row, activated_version = _maybe_activate(conn, row, version=new_version)
                 ack = _ack_payload(row, version=activated_version)
@@ -643,7 +710,7 @@ def create_router(
                 result = publish.kill_switch(
                     conn, key=key, value=body_checked.get("value"),
                     ttl_seconds=int(body_checked["ttl_seconds"]), principal=principal,
-                    reason=body_checked["reason"], registry=reg_of(), now=clock())
+                    reason=body_checked["reason"], registry=reg_of(), now=clock(), audit=audit)
                 version = result["version"]
                 ack = {
                     # kill switch 不是发布单：用版本 id 作为可回查的 request_id

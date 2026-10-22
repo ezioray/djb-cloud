@@ -32,6 +32,7 @@ from typing import Any, Iterable, Mapping
 import psycopg
 from psycopg.types.json import Jsonb
 
+from . import audit as audit_mod
 from . import canonical, facts, features, outbox, snapshot, store, validators
 from decimal import Decimal
 
@@ -69,6 +70,7 @@ __all__ = [
     "restore_kill_switch",
     "expire_kill_switches",
     "approve_request",
+    "promote_request",
     "activate_request",
     "schedule_request",
     "close_request",
@@ -398,12 +400,14 @@ def create_request(
     trace_id: str | None = None,
     now: datetime | None = None,
     registry: Registry | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """把已存在的 draft 版本提交为发布单（P0/P1 → pending_approval；P2 单人可发 → approved）。"""
     return _create_request_impl(
         conn, key=key, version=version, principal=principal, reason=reason, scope=scope,
         scope_id=scope_id, effective_at=effective_at, gray_plan=gray_plan, ticket=ticket,
-        idempotency_key=idempotency_key, trace_id=trace_id, now=now, registry=registry)
+        idempotency_key=idempotency_key, trace_id=trace_id, now=now, registry=registry,
+        audit=audit)
 
 
 def _create_request_impl(
@@ -424,6 +428,7 @@ def _create_request_impl(
     registry: Registry | None = None,
     skip_cooldown: bool = False,
     rollback_target_version: int | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """内部：发布单创建（回滚复用它，``skip_cooldown=True`` 因为止损免冷却）。"""
     reg = registry or load_registry()
@@ -484,6 +489,14 @@ def _create_request_impl(
     assert row is not None
     row["replayed"] = False
     row["impact"] = impact
+    action = ("config.rollback.requested" if rollback_target_version
+              else "config.publish.requested")
+    audit_mod.emit(audit, audit_mod.build_event(
+        action, actor=principal.actor, key=key, scope=scope, scope_id=scope_id,
+        version=version, request_id=str(row["publish_request_id"]), reason=reason,
+        trace_id=trace_id, occurred_at=moment,
+        metadata={"risk_level": risk, "status": status,
+                  "rollback_target_version": rollback_target_version}))
     return row
 
 
@@ -516,6 +529,7 @@ def approve_request(
     decision: str,
     reason: str,
     now: datetime | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """复核通过 / 驳回：复核人 ≠ 发起人（INV-03）；P0 需 FIN/AUDIT；step-up 不得复用。"""
     moment = _now(now)
@@ -557,6 +571,13 @@ def approve_request(
         (new_status, decision, reason, approved_by, principal.step_up_ref, request_id),
     )
     assert row is not None
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.publish.approved" if decision == "approve" else "config.publish.rejected",
+        actor=principal.actor, key=item.key, scope=request["scope"],
+        scope_id=request["scope_id"], version=request["versions"].get(item.key)
+        if isinstance(request["versions"], dict) else None,
+        request_id=request_id, reason=reason, occurred_at=moment,
+        metadata={"decision": decision, "status": new_status}))
     return row
 
 
@@ -659,6 +680,7 @@ def activate_request(
     *,
     now: datetime | None = None,
     trace_id: str | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """全量生效：单行 CAS 切版本 → 同事务写快照 + config.published / config.rolled_back。"""
     moment = _now(now)
@@ -707,6 +729,13 @@ def activate_request(
         (result["snapshot_digest"], request_id),
     )
     assert row is not None
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.rolled_back" if result["version"]["rollback_to"] else "config.published",
+        actor=request["proposed_by"], key=request["key"], scope=request["scope"],
+        scope_id=request["scope_id"], version=result["version"]["version"],
+        request_id=request_id, trace_id=trace_id, occurred_at=moment,
+        metadata={"policy_version": result["policy_version"],
+                  "snapshot_digest": result["snapshot_digest"]}))
     return {"request": row, **result}
 
 
@@ -718,6 +747,7 @@ def close_request(
     principal: Principal,
     observation: str,
     now: datetime | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """收口：观测结论入单（active → closed）。"""
     moment = _now(now)
@@ -738,6 +768,11 @@ def close_request(
         (moment, observation, request_id),
     )
     assert row is not None
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.closed", actor=principal.actor, key=item.key, scope=request["scope"],
+        scope_id=request["scope_id"], version=(request["versions"] or {}).get(item.key)
+        if isinstance(request["versions"], dict) else None,
+        request_id=request_id, reason=observation, occurred_at=moment))
     return row
 
 
@@ -748,6 +783,7 @@ def cancel_request(
     principal: Principal,
     reason: str,
     now: datetime | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """撤销未生效的发布单（发起人或 SUPER）。"""
     request = _load_request(conn, request_id, for_update=True)
@@ -765,6 +801,10 @@ def cancel_request(
         (reason, request_id),
     )
     assert row is not None
+    item = load_registry().require(request["key"])
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.cancelled", actor=principal.actor, key=item.key, scope=request["scope"],
+        scope_id=request["scope_id"], request_id=request_id, reason=reason))
     return row
 
 
@@ -780,6 +820,88 @@ def expire_requests(conn: psycopg.Connection, *, now: datetime | None = None) ->
         RETURNING publish_request_id""",
         (moment,))
     return [row[0] for row in cur.fetchall()]
+
+
+def promote_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    *,
+    principal: Principal,
+    target_stage: str,
+    now: datetime | None = None,
+    trace_id: str | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
+) -> dict[str, Any]:
+    """灰度推进（S2）：next_bucket 逐桶推进、full 直接全量；观测窗未满 47007。
+
+    S1 灰度为特性开关（默认关闭）：开关关闭时一律 47007（spec 1.2.1 已登记该端点）。
+    """
+    if not features.enabled("config_center.gray_rollout"):
+        raise GrayPlanInvalid("灰度推进 S2 起启用（config_center.gray_rollout=false）")
+    if target_stage not in ("next_bucket", "full"):
+        raise ValidationFailed(f"target_stage 必须是 next_bucket / full：{target_stage!r}")
+    moment = _now(now)
+    request = _load_request(conn, request_id, for_update=True)
+    if request["status"] not in ("approved", "scheduled", "rolling_out"):
+        raise StateConflict(
+            f"发布单 {request_id} 状态为 {request['status']}，不能推进灰度")
+    item = load_registry().require(request["key"])
+    plan = dict(request["gray_plan"] or {})
+    buckets = list(plan.get("buckets") or [])
+    if not buckets:
+        raise GrayPlanInvalid(f"发布单 {request_id} 没有灰度计划（gray_plan.buckets）")
+    observation = int(plan.get("observation_seconds") or 0)
+    entered = int(plan.get("current_bucket") or 0)
+    last_promoted = plan.get("last_promoted_at")
+    if request["status"] == "rolling_out" and observation and last_promoted:
+        last_at = datetime.fromisoformat(str(last_promoted))
+        if moment < last_at + timedelta(seconds=observation):
+            raise GrayPlanInvalid(
+                f"观测窗未满（{observation}s），不得推进到下一桶（409 + 47007）")
+
+    # 最后一个桶 = 全量：进入 100% 桶即激活（不再多一次 promote）
+    if target_stage == "next_bucket" and entered + 1 < len(buckets) - 1:
+        if request["status"] == "approved":      # §3 状态机：approved → scheduled → rolling_out
+            conn.execute("""UPDATE config_publish_requests SET status = 'scheduled',
+                                   updated_at = now()
+                             WHERE publish_request_id = %s""", (request_id,))
+        new_plan = {**plan, "current_bucket": entered + 1,
+                    "last_promoted_at": moment.isoformat()}
+        row = _one(conn,
+                   """UPDATE config_publish_requests
+                         SET status = 'rolling_out', gray_plan = %s, updated_at = now()
+                       WHERE publish_request_id = %s RETURNING *""",
+                   (Jsonb(new_plan), request_id))
+        assert row is not None
+        audit_mod.emit(audit, audit_mod.build_event(
+            "config.promoted", actor=principal.actor, key=item.key, scope=request["scope"],
+            scope_id=request["scope_id"], request_id=request_id, occurred_at=moment,
+            metadata={"bucket": buckets[entered + 1], "stage": "rolling_out"}))
+        return {"request": row, "bucket": buckets[entered + 1], "activated": False}
+
+    versions = request["versions"]
+    version = int(versions[request["key"]]) if isinstance(versions, dict) else None
+    approved = list(request["approved_by"])
+    result = _activate_and_emit(
+        conn, item=item,
+        version_row=store.get_version(conn, key=request["key"], version=version,
+                                      scope=request["scope"], scope_id=request["scope_id"]),
+        published_by=request["proposed_by"], approved_by=approved[0] if approved else None,
+        effective_at=moment, period=f"publish:{request_id}", request_id=request_id,
+        now=moment, trace_id=trace_id)
+    row = _one(conn,
+               """UPDATE config_publish_requests
+                     SET status = 'active', snapshot_after = %s, updated_at = now()
+                   WHERE publish_request_id = %s RETURNING *""",
+               (result["snapshot_digest"], request_id))
+    assert row is not None
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.promoted", actor=principal.actor, key=item.key, scope=request["scope"],
+        scope_id=request["scope_id"], version=version, request_id=request_id,
+        occurred_at=moment,
+        metadata={"bucket": buckets[-1], "stage": "active",
+                  "policy_version": result["policy_version"]}))
+    return {"request": row, "bucket": buckets[-1], "activated": True, **result}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -828,6 +950,7 @@ def rollback(
     now: datetime | None = None,
     trace_id: str | None = None,
     registry: Registry | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """回滚：以历史版本为内容生成**新版本**（rollback_to=target），再走复核 → 生效。
 
@@ -890,7 +1013,7 @@ def rollback(
     request = _create_request_impl(
         conn, key=key, version=new_version["version"], principal=principal, reason=reason,
         scope=scope, scope_id=scope_id, ticket=ticket, idempotency_key=idempotency_key,
-        trace_id=trace_id, now=moment, registry=reg,
+        trace_id=trace_id, now=moment, registry=reg, audit=audit,
         skip_cooldown=True, rollback_target_version=target_version)
     request["rollback_to"] = target_version
     request["new_version"] = new_version["version"]
@@ -910,6 +1033,7 @@ def kill_switch(
     now: datetime | None = None,
     trace_id: str | None = None,
     registry: Registry | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """紧急收紧：立即生成并生效一个紧急版本（单人可发、只收紧、ttl ≤86400）。
 
@@ -955,6 +1079,13 @@ def kill_switch(
         period=f"kill:{key}:{version_row['version']}",
         request_id=None, now=moment, trace_id=trace_id,
     )
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.kill_switch", actor=principal.actor, key=key, scope=scope,
+        scope_id=scope_id, version=version_row["version"], reason=reason,
+        trace_id=trace_id, occurred_at=moment,
+        before=current, after=result.value,
+        metadata={"ttl_seconds": ttl_seconds,
+                  "previous_version": current_row["version"] if current_row else None}))
     out["request"] = None
     out["expires_at"] = version_row["kill_switch_expires_at"]
     return out
@@ -971,6 +1102,7 @@ def _restore_previous(
     reason: str,
     now: datetime,
     trace_id: str | None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """把生效中的紧急版本恢复到它的上一生效版本（生成新版本 + 发 config.rolled_back）。"""
     reg = load_registry()
@@ -997,6 +1129,11 @@ def _restore_previous(
         request_id=None, now=now, trace_id=trace_id,
         reason_code=reason_code,
     )
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.rolled_back", actor=actor_label, key=key, scope=scope, scope_id=scope_id,
+        version=new_version["version"], reason=reason_code, trace_id=trace_id,
+        occurred_at=now, metadata={"restored_from": int(previous),
+                                   "kill_switch": True}))
     out["request"] = None
     out["restored_from"] = int(previous)
     return out
@@ -1013,6 +1150,7 @@ def restore_kill_switch(
     now: datetime | None = None,
     trace_id: str | None = None,
     registry: Registry | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> dict[str, Any]:
     """提前人工恢复（到期自动恢复由 :func:`expire_kill_switches` 做）。"""
     moment = _now(now)
@@ -1026,7 +1164,7 @@ def restore_kill_switch(
         actor_label="system:kill_switch_restore",
         reason_code=KILL_SWITCH_RESTORED_CODE,
         reason=f"{principal.actor}: {reason}",
-        now=moment, trace_id=trace_id)
+        now=moment, trace_id=trace_id, audit=audit)
 
 
 def expire_kill_switches(
@@ -1034,6 +1172,7 @@ def expire_kill_switches(
     *,
     now: datetime | None = None,
     trace_id: str | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> list[dict[str, Any]]:
     """到期自动恢复：把所有过期的紧急版本恢复到上一生效版本（P95 ≤60s 由即时执行保证）。"""
     moment = _now(now)
@@ -1049,7 +1188,7 @@ def expire_kill_switches(
             conn, key=row["key"], scope=row["scope"], scope_id=row["scope_id"],
             actor_label=SYSTEM_ACTOR, reason_code=KILL_SWITCH_EXPIRED_CODE,
             reason=f"kill switch ttl 到期自动恢复（v{row['version']}）",
-            now=moment, trace_id=trace_id)
+            now=moment, trace_id=trace_id, audit=audit)
         restored.append({"key": row["key"], "scope": row["scope"],
                          "scope_id": row["scope_id"], "expired_version": row["version"],
                          "restored_from": out["restored_from"],

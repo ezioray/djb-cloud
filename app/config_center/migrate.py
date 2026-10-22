@@ -59,6 +59,21 @@ M10_TABLES: tuple[str, ...] = (
 
 #: 回滚：逆序删除本模块新增对象（表 → 函数）。存量对象一个都不碰。
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1008_outbox_backoff.sql", """
+        DROP INDEX IF EXISTS config_outbox_next_attempt_idx;
+        DROP INDEX IF EXISTS config_outbox_pending_idx;
+        DO $$
+        BEGIN
+          IF to_regclass('config_outbox') IS NOT NULL THEN
+            CREATE INDEX IF NOT EXISTS config_outbox_pending_idx
+              ON config_outbox (created_at) WHERE published_at IS NULL;
+          END IF;
+        END $$;
+        ALTER TABLE IF EXISTS config_outbox
+          DROP CONSTRAINT IF EXISTS config_outbox_next_attempt_ck;
+        ALTER TABLE IF EXISTS config_outbox DROP COLUMN IF EXISTS last_attempt_at;
+        ALTER TABLE IF EXISTS config_outbox DROP COLUMN IF EXISTS next_attempt_at;
+    """),
     ("1007_t4_emergency_and_delivery.sql", """
         DROP INDEX IF EXISTS config_versions_kill_active_idx;
         ALTER TABLE IF EXISTS config_versions

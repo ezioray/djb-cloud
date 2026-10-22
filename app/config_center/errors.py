@@ -37,6 +37,7 @@ __all__ = [
     "StepUpRequired",
     "SelfApprovalForbidden",
     "StateConflict",
+    "AuditUnavailable",
     "IdempotencyConflict",
     "ApproverNotAllowed",
     "FactsError",
@@ -197,6 +198,17 @@ class ApproverNotAllowed(SelfApprovalForbidden):
     归入 SoD 硬校验（40902）。在 spec 登记独立码（建议 47010）之前，本类沿用 403 + 47002 通道，
     由消息区分「自批自核」与「角色不足」——见证据 §风险 R-11。
     """
+
+
+class AuditUnavailable(ConfigCenterError):
+    """审计写入失败（M16 非 2xx / 超时）：M10 §7「审计写失败即发布失败」。
+
+    spec 未给审计失败登记独立码；用 409 + 40919（状态冲突通用码）表示「业务因依赖失败未完成」，
+    T5 路由层可重试。真正的审计事实源是 M16，本模块只持有接口（见 audit.py）。
+    """
+
+    code = 40919
+    http_status = 409
 
 
 class FactsError(RuntimeError):
