@@ -24,8 +24,8 @@
 """
 from __future__ import annotations
 
-from . import (balances, constants, errors, facts, gateway, hashchain, legacy, outbox,
-               reversal, validate, verify)
+from . import (balances, constants, errors, facts, gateway, hashchain, legacy, merkle, outbox,
+               reversal, trial, validate, verify)
 from .constants import (
     ALL_COA,
     COA_FUND_CLASS,
@@ -55,6 +55,7 @@ from .constants import (
 )
 from .errors import (
     AmountOutOfRange,
+    ConcurrentReversalConflict,
     FundClassMismatch,
     InvalidEntryType,
     InvalidEventType,
@@ -94,7 +95,9 @@ from .balances import (
     latest_balances,
     sub_account_for,
 )
+from .merkle import MerkleError, MerklePublishedImmutable, anchor_period, merkle_root
 from .reversal import ReversalResult, find_reversal, reverse_journal
+from .trial import accounts_overview, decimal_str, trial_balance
 from .verify import verify_ledger
 from .legacy import GENESIS, PostResult, entry_hash, post_entry, recompute
 
@@ -102,8 +105,8 @@ __version__ = "0.3.0-dev-m06t3"
 
 __all__ = [
     # 包内模块
-    "balances", "constants", "errors", "facts", "gateway", "hashchain", "legacy", "outbox",
-    "reversal", "validate", "verify",
+    "balances", "constants", "errors", "facts", "gateway", "hashchain", "legacy", "merkle",
+    "outbox", "reversal", "trial", "validate", "verify",
     # 新账本 API
     "JournalDraft", "JournalLine", "NormalizedJournal", "normalize",
     "PostJournalResult", "post_journal", "find_existing", "load_journal", "require_transaction",
@@ -115,6 +118,9 @@ __all__ = [
     # 余额与复算
     "apply_journal", "derive_balances", "latest_balances", "balance_drift",
     "check_negative_liabilities", "deltas_for_journal", "sub_account_for", "verify_ledger",
+    # 试算 / Merkle
+    "trial_balance", "accounts_overview", "decimal_str", "merkle_root", "MerkleError",
+    "MerklePublishedImmutable", "anchor_period",
     # 常量
     "ALL_COA", "COA_FUND_CLASS", "COA_GROUPS", "COA_NORMAL_DC", "COA_QTY_REQUIRED",
     "ENTRY_TYPES", "EVENT_TYPES", "SOURCE_TYPES", "UNIT_TYPES",
@@ -126,7 +132,7 @@ __all__ = [
     "LedgerError", "JournalValidationError", "UnbalancedJournal", "LineCountOutOfRange",
     "AmountOutOfRange", "MissingAssetQuantity", "UnknownCoaCode", "FundClassMismatch",
     "InvalidUnitType", "InvalidEventType", "InvalidSourceType", "InvalidEntryType",
-    "JournalNotFound", "ReversalNotAllowed", "ReversalCooldown",
+    "JournalNotFound", "ReversalNotAllowed", "ReversalCooldown", "ConcurrentReversalConflict",
     "PartialReversalNotAllowed", "InvariantViolation", "TransactionRequired",
     # 旧符号（app/api.py、app/chain/polygon.py、app/wallet_pool.py、scripts、旧测试）
     "GENESIS", "PostResult", "entry_hash", "post_entry", "recompute",

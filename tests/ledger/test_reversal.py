@@ -132,7 +132,7 @@ def test_repeat_reversal_is_rejected_and_original_unchanged(shared: str) -> None
 
     with pytest.raises(ReversalNotAllowed) as ei:
         reverse_ok(shared, original.journal_id, reason_code="second")
-    assert ei.value.code == "40920"
+    assert ei.value.code == "40921"          # spec 1.2.1：原凭证已被冲正 → 40921
 
     assert journal_row(shared, original.journal_id) == snapshot       # 原凭证不再变化
     with connect(shared) as c, c.cursor() as cur:
@@ -152,7 +152,7 @@ def test_reversing_a_reversal_is_rejected(shared: str) -> None:
     result = reverse_ok(shared, original.journal_id, reason_code="first")
     with pytest.raises(ReversalNotAllowed) as ei:
         reverse_ok(shared, result.reversal_journal_id, reason_code="again")
-    assert ei.value.code == "40920"
+    assert ei.value.code == "40921"          # 冲正凭证不得再被冲正（同属 40921）
 
 
 def test_reason_code_is_required(shared: str) -> None:
@@ -271,7 +271,9 @@ def test_concurrent_double_reversal_yields_one_reversal(shared: str) -> None:
 
     assert len(results) == 1, (results, errors)
     assert len(errors) == 1 and isinstance(errors[0], ReversalNotAllowed), errors
-    assert errors[0].code == "40920"
+    # 账本追加锁把两个冲正串行化，所以后到者看到的是「原凭证已 voided」→ 40921（spec 1.2.1）；
+    # 40920 留给真正的锁竞争超时（见 test_lock_contention_maps_to_concurrent_conflict）。
+    assert errors[0].code == "40921"
     with connect(shared) as c, c.cursor() as cur:
         cur.execute("SELECT count(*) FROM journal_entry WHERE reversal_of_journal = %s",
                     (original.journal_id,))
@@ -280,6 +282,33 @@ def test_concurrent_double_reversal_yields_one_reversal(shared: str) -> None:
                     "payload->>'reverse_of' = %s", (str(original.journal_id),))
         assert cur.fetchone()[0] == 1
         assert verify_ledger(c)["diff"] == 0
+
+
+def test_lock_contention_maps_to_concurrent_conflict(migrated: str) -> None:
+    """持锁会话未提交时，另一个冲正请求等锁超时 → 40920（spec 1.2.1 的「并发冲突」）。"""
+    from app.ledger import ConcurrentReversalConflict, reverse_journal
+    from app.ledger.constants import LEDGER_APPEND_LOCK_ID
+
+    original = post_ok(migrated, e6_draft(amount_minor=5))
+    holder = connect(migrated, autocommit=False)
+    try:
+        with holder.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (LEDGER_APPEND_LOCK_ID,))
+        with pytest.raises(ConcurrentReversalConflict) as ei:
+            with tx(migrated) as c:
+                with c.cursor() as cur:
+                    cur.execute("SET LOCAL lock_timeout = '300ms'")
+                reverse_journal(c, original.journal_id, reason_code="blocked")
+        assert ei.value.code == "40920"
+    finally:
+        holder.rollback()
+        holder.close()
+    # 未冲正成功：原凭证仍 posted，没有留下冲正凭证
+    assert journal_row(migrated, original.journal_id)["status"] == "posted"
+    with connect(migrated) as c, c.cursor() as cur:
+        cur.execute("SELECT count(*) FROM journal_entry WHERE reversal_of_journal = %s",
+                    (original.journal_id,))
+        assert cur.fetchone()[0] == 0
 
 
 # ─────────────────────────────────────────────────────── 小工具

@@ -93,7 +93,18 @@ class JournalNotFound(LedgerError):
 
 
 class ReversalNotAllowed(LedgerError):
-    """冲正被拒（重复冲正 / 冷却期，T3 使用）。"""
+    """冲正被拒：原凭证已冲正 / 已 voided / 冲正凭证再冲正。
+
+    码值按 spec 1.2.1 的 ``createLedgerReversal`` 描述：「原凭证已被冲正返回 409 + 40921」
+    （M06 §7 的「重复冲正 / 冷却期」与之同段）。并发冲突另见
+    :class:`ConcurrentReversalConflict`（40920）。
+    """
+
+    code = "40921"
+
+
+class ConcurrentReversalConflict(ReversalNotAllowed):
+    """并发冲正冲突：两个请求同时冲同一凭证，唯一索引兜底后映射为 40920（spec 1.2.1）。"""
 
     code = "40920"
 
