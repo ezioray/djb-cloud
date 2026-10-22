@@ -43,6 +43,7 @@ from .errors import (
     JournalValidationError,
     LineCountOutOfRange,
     MissingAssetQuantity,
+    PartialReversalNotAllowed,
     UnbalancedJournal,
     UnknownCoaCode,
 )
@@ -64,6 +65,7 @@ class JournalLine:
     unit_scale: int = MINOR_UNIT_SCALE
     wallet_id: str | None = None
     fund_class: str | None = None
+    reverse_of: str | None = None          # 冲正行：指向被冲正的原分录 entry_id（T3）
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,11 @@ def _normalize_line(index: int, line: JournalLine) -> JournalLine:
     _require_len(line.account_id, f"{where} 的 account_id")
     if line.wallet_id is not None:
         _require_len(line.wallet_id, f"{where} 的 wallet_id")
+    if line.reverse_of is not None:
+        try:
+            uuid.UUID(str(line.reverse_of))
+        except (ValueError, AttributeError) as exc:
+            raise JournalValidationError(f"{where}：reverse_of 不是合法 UUID：{line.reverse_of!r}") from exc
     return JournalLine(
         account_id=line.account_id,
         coa_code=line.coa_code,
@@ -167,6 +174,7 @@ def _normalize_line(index: int, line: JournalLine) -> JournalLine:
         unit_scale=int(line.unit_scale),
         wallet_id=line.wallet_id,
         fund_class=fund_class,
+        reverse_of=line.reverse_of,
     )
 
 
@@ -192,6 +200,18 @@ def normalize(draft: JournalDraft) -> NormalizedJournal:
         raise LineCountOutOfRange(
             f"凭证行数必须在 {JOURNAL_MIN_LINES}..{JOURNAL_MAX_LINES}，收到 {len(lines)}（INV-01 / M06 §8.2）")
     normalized = tuple(_normalize_line(i, line) for i, line in enumerate(lines, start=1))
+
+    tagged = [line for line in normalized if line.reverse_of is not None]
+    if tagged and len(tagged) != len(normalized):
+        raise PartialReversalNotAllowed(
+            f"部分冲正：{len(tagged)}/{len(normalized)} 行带 reverse_of（INV-07「不部分冲正」）",
+            detail={"tagged": len(tagged), "lines": len(normalized)})
+    if draft.reversal_of_journal is not None and not tagged:
+        raise PartialReversalNotAllowed(
+            "凭证声明 reversal_of_journal，但没有任何行带 reverse_of（INV-07 要求整单逐行取反）")
+    if draft.reversal_of_journal is None and tagged:
+        raise PartialReversalNotAllowed(
+            "行带 reverse_of，但凭证没有 reversal_of_journal（拒绝不成单的反向行）")
 
     debit = sum(line.amount_minor for line in normalized if line.dc == "D")
     credit = sum(line.amount_minor for line in normalized if line.dc == "C")

@@ -95,6 +95,22 @@ MAX_IDEMPOTENCY_KEY_LEN = 200                         # 604：idempotency_key 1.
 MAX_UNIT_SCALE = 18                                   # 600：unit_scale 0..18
 PENDING_PAGE_DEFAULT = 100                            # outbox 待投递查询的默认页大小
 
+# ── T3：冲正与余额派生 ──────────────────────────────────────────────
+REVERSAL_EVENT_TYPE = "E16"        # §20.3.1 E16「错链 / 假充值冲正」= 冲正凭证的事件模板
+REVERSAL_SOURCE_TYPE = "void"      # spec SourceType 的 ``void``
+REVERSAL_EVENT_SEQ = 1             # 同一原凭证的冲正事件序号固定 1（重复请求 → 同一幂等键）
+REVERSAL_COOLDOWN_H = 24           # M06 §8.2：同一 ref_id 二次冲正冷却 24h（40921）
+MAX_REASON_CODE_LEN = 64           # 冲正原因码长度上限（ledger.reversed.reason_code）
+
+# 子账户（§20.2.7）：余额派生键里的 sub_account。锁定预付款走 2102 → LOCKED，其余按 AVAILABLE。
+# 2201 的 AVAILABLE/LOCKED 子账户细分需要行级维度（entry_type=freeze），随 T4/day-close 再定。
+DEFAULT_SUB_ACCOUNT = "AVAILABLE"
+SUB_ACCOUNT_BY_COA: dict[str, str] = {"2102": "LOCKED"}
+SUB_ACCOUNTS = (DEFAULT_SUB_ACCOUNT, "LOCKED")
+
+# I-4：这些科目不得出现「正常方向为负」的余额（§20.2.8 C2 / IP-4）
+NEGATIVE_FORBIDDEN_COA = ("2101", "2102", "2103", "2201", "2202", "2203")
+
 # ────────────────────────────────────────────── 与事实源对齐（漂移即导入失败）
 def _assert_aligned() -> None:
     if len(COA_FUND_CLASS) != facts.coa_count():
@@ -111,6 +127,15 @@ def _assert_aligned() -> None:
         raise facts.FactsError("正常方向表缺科目")
     if not set(MERKLE_KINDS_OWNED) <= set(facts.merkle_kinds()):
         raise facts.FactsError("M06 拥有的 Merkle 类别不在 facts 的四类根之内")
+    unknown_sub = set(SUB_ACCOUNT_BY_COA) - set(ALL_COA)
+    if unknown_sub:
+        raise facts.FactsError(f"子账户映射指向未知科目：{unknown_sub}")
+    if not set(NEGATIVE_FORBIDDEN_COA) <= set(ALL_COA):
+        raise facts.FactsError("I-4 科目组里有未知科目")
+    if REVERSAL_EVENT_TYPE not in EVENT_TYPES:
+        raise facts.FactsError("冲正事件模板不在 facts 的资金事件内")
+    if REVERSAL_SOURCE_TYPE not in SOURCE_TYPES:
+        raise facts.FactsError("冲正 source_type 不在 spec SourceType 内")
     if JOURNAL_MAX_LINES < JOURNAL_MIN_LINES:
         raise facts.FactsError("JOURNAL_MAX_LINES 必须 ≥ 2（INV-01 行数下限）")
 

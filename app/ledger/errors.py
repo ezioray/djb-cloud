@@ -98,5 +98,23 @@ class ReversalNotAllowed(LedgerError):
     code = "40920"
 
 
+class ReversalCooldown(ReversalNotAllowed):
+    """同一 ref_id 的二次冲正在冷却期内（40921，M06 §8.2 REVERSAL_COOLDOWN_H）。"""
+
+    code = "40921"
+
+
+class PartialReversalNotAllowed(LedgerError):
+    """部分冲正：冲正必须整单逐行取反（INV-07 / §7「不部分冲正」）。"""
+
+    code = "42220"
+
+
+class InvariantViolation(LedgerError):
+    """冲正后的不变量复算失败（I-4 负债为负 / I-5 余额派生漂移），整笔回滚（INV-14）。"""
+
+    code = "42220"
+
+
 class TransactionRequired(RuntimeError):
     """必须是显式事务（autocommit 连接无法持有 pg_advisory_xact_lock）。"""
