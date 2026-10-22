@@ -85,10 +85,13 @@ jobs:
           python -m pip install -q --upgrade pip
           pip install -q 'fastapi>=0.110' 'uvicorn>=0.29' 'psycopg[binary]>=3.1' 'pytest>=8.0' httpx pyyaml
       - name: 拉取固定版本契约（djb-node）
+        env:
+          SPEC_REF: 251dd584bb86602c5b4217c77477bed973ac0149
         run: |
           mkdir -p spec
-          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/400c3ca0de7afe590f1c6f2c5962ec30bbafd679/openapi.yaml" -o spec/openapi.yaml
-          echo "spec: $(wc -l < spec/openapi.yaml) 行 @ 412f314" 
+          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/$SPEC_REF/openapi.yaml" -o spec/openapi.yaml
+          curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/$SPEC_REF/CHANGELOG-%E5%8D%8F%E8%AE%AE.md" -o "spec/CHANGELOG-协议.md"
+          echo "spec: openapi $(wc -l < spec/openapi.yaml) 行 / CHANGELOG $(wc -l < 'spec/CHANGELOG-协议.md') 行 @ ${SPEC_REF:0:7}"
       - name: 迁移（001 + 002）
         run: |
           for f in migrations/*.sql; do echo "→ $f"; psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
