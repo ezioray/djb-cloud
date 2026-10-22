@@ -34,6 +34,7 @@ from .constants import (
     REVERSAL_SOURCE_TYPE,
 )
 from .errors import (
+    ConcurrentReversalConflict,
     InvariantViolation,
     JournalNotFound,
     JournalValidationError,
@@ -138,7 +139,7 @@ def _void_original(conn, journal_id: str, line_count: int) -> int:
             " WHERE journal_id = %s AND status = 'posted'", (journal_id,))
         voided_journal = cur.rowcount
     if voided_entries != line_count or voided_journal != 1:
-        raise ReversalNotAllowed(
+        raise ConcurrentReversalConflict(
             f"冲正状态迁移失败：分录 {voided_entries}/{line_count}、凭证 {voided_journal}/1（并发冲正？）")
     return voided_entries
 
@@ -154,7 +155,11 @@ def reverse_journal(conn, journal_id: str, *, reason_code: str,
             f"reason_code 必须是 1..{MAX_REASON_CODE_LEN} 字符（ledger.reversed 必填）")
 
     gateway.require_transaction(conn)
-    gateway._acquire_append_lock(conn)
+    try:
+        gateway._acquire_append_lock(conn)
+    except psycopg.errors.LockNotAvailable as exc:      # 另一笔写入正持有账本追加锁
+        raise ConcurrentReversalConflict(
+            "账本追加锁等待超时：存在并发写入/冲正（40920）", detail={"stage": "append_lock"}) from exc
 
     original = gateway.load_journal(conn, journal_id)
     if original is None:
@@ -188,7 +193,7 @@ def reverse_journal(conn, journal_id: str, *, reason_code: str,
         posted = gateway.post_journal(conn, draft)
     except psycopg.errors.UniqueViolation as exc:
         # 并发冲正：唯一索引（journal_entry_reversal_uq / ledger_entry_reverse_uq / hash）兜底
-        raise ReversalNotAllowed(f"并发冲正：{journal_id} 的冲正已存在（INV-07）") from exc
+        raise ConcurrentReversalConflict(f"并发冲正：{journal_id} 的冲正已存在（INV-07）") from exc
 
     voided_entries = _void_original(conn, journal_id, len(lines))
 

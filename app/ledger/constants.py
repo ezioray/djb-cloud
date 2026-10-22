@@ -47,6 +47,24 @@ _FUND_CLASS_BY_COA: dict[str, str] = {
 }
 COA_FUND_CLASS: dict[str, str] = _FUND_CLASS_BY_COA
 
+# 科目名称（§20.2.2–§20.2.6 原文）：管理面展示用，避免前端各自维护一份译名。
+COA_NAMES: dict[str, str] = {
+    "1101": "客户资金-热钱包 USDT", "1102": "客户资金-温钱包 USDT", "1103": "客户资金-冷钱包 USDT",
+    "1109": "平台自有-温钱包 USDT", "1111": "链上在途", "1120": "PSP 在途应收",
+    "1121": "银行在途", "1130": "兑换在途", "1140": "预置 gas", "1190": "待清算过渡",
+    "1901": "应收-用户欠款", "1910": "平台应补足客户资金",
+    "2101": "服务预付款", "2102": "锁定服务预付款", "2103": "COP 余额",
+    "2201": "应付共享方分润", "2202": "应付渠道返佣", "2203": "应付退款",
+    "2204": "应付代扣款", "2210": "确认中 / 未识别充值", "2301": "拒付准备金",
+    "2901": "尾差", "2990": "确认中充值", "3101": "累计留存收益",
+    "4101": "接入与优化服务费收入", "4102": "通道接入费收入", "4103": "结算服务费收入",
+    "4104": "COP 抵扣确认收入", "4105": "未识别资金确认收入", "4201": "汇兑收益",
+    "5101": "上游 Token 成本", "5102": "链上 gas 费", "5103": "PSP 手续费",
+    "5104": "亏损池", "5105": "资产损失", "5106": "兑换手续费 / 点差",
+    "5201": "汇兑损失", "5301": "拒付损失", "5401": "坏账损失", "5501": "分润成本",
+    "6101": "COP 发放成本", "6901": "调整损益",
+}
+
 # 正常方向（§20.2.1–§20.2.6；"B" = 借/贷皆可为正常，例如 6901 调整损益）。
 # T3 展示"正常方向余额"时按此换算；存储层 balance_minor 只用「借方为正」一种口径。
 COA_NORMAL_DC: dict[str, str] = {
@@ -94,6 +112,13 @@ MAX_TRACE_ID_LEN = 128                                # 604：trace_id 1..128
 MAX_IDEMPOTENCY_KEY_LEN = 200                         # 604：idempotency_key 1..200
 MAX_UNIT_SCALE = 18                                   # 600：unit_scale 0..18
 PENDING_PAGE_DEFAULT = 100                            # outbox 待投递查询的默认页大小
+DEFAULT_PAGE_SIZE = 50                                # 管理面分页默认条数（spec Limit.default）
+MAX_PAGE_SIZE = 200                                   # 管理面分页上限（spec Limit.maximum）
+DECIMAL_BASE = 10                                     # 十进制（最小单位 ↔ 展示值换算的底数）
+HEX_PREVIEW_LEN = 12                                  # 错误信息里的哈希前缀长度
+PERIOD_LEN_MONTH = 7                                  # 期间形状：YYYY-MM
+PERIOD_LEN_DAY = 10                                   # 期间形状：YYYY-MM-DD
+PERIOD_LEN_HOUR = 13                                  # 期间形状：YYYY-MM-DDTHH
 
 # ── T3：冲正与余额派生 ──────────────────────────────────────────────
 REVERSAL_EVENT_TYPE = "E16"        # §20.3.1 E16「错链 / 假充值冲正」= 冲正凭证的事件模板
@@ -101,6 +126,9 @@ REVERSAL_SOURCE_TYPE = "void"      # spec SourceType 的 ``void``
 REVERSAL_EVENT_SEQ = 1             # 同一原凭证的冲正事件序号固定 1（重复请求 → 同一幂等键）
 REVERSAL_COOLDOWN_H = 24           # M06 §8.2：同一 ref_id 二次冲正冷却 24h（40921）
 MAX_REASON_CODE_LEN = 64           # 冲正原因码长度上限（ledger.reversed.reason_code）
+MAX_REASON_TEXT_LEN = 500          # 管理面冲正理由上限（spec 1.2.1 ReversalRequest.reason）
+RECOMPUTE_LOCK_ID = 4_442_003      # 「同一时刻只允许 1 个复算作业」的 advisory lock key
+STEP_UP_MAX_AGE_S = 300            # step-up ≤5 分钟（00-conventions / spec AdminStepUp）
 
 # 子账户（§20.2.7）：余额派生键里的 sub_account。锁定预付款走 2102 → LOCKED，其余按 AVAILABLE。
 # 2201 的 AVAILABLE/LOCKED 子账户细分需要行级维度（entry_type=freeze），随 T4/day-close 再定。
@@ -123,6 +151,8 @@ def _assert_aligned() -> None:
         raise facts.FactsError(f"科目分组 {grouped} 与 facts 的 {facts.coa_group_counts()} 不一致")
     if set(ALL_COA) != set(COA_FUND_CLASS):
         raise facts.FactsError("科目码与 fund_class 表键集不一致")
+    if set(COA_NAMES) != set(ALL_COA):
+        raise facts.FactsError("科目名称表与科目码集合不一致")
     if set(COA_NORMAL_DC) != set(ALL_COA):
         raise facts.FactsError("正常方向表缺科目")
     if not set(MERKLE_KINDS_OWNED) <= set(facts.merkle_kinds()):
