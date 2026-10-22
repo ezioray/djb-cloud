@@ -86,6 +86,14 @@ class QuotaExhausted(IdentityError):
     reason = "quota_exhausted"
 
 
+class AdminForbidden(IdentityError):
+    """已认证但没有后台角色（spec 403：对外只给粗粒度原因码）。"""
+
+    status_code = 403
+    code = "40303"
+    reason = "admin_role_required"
+
+
 class StepUpRequired(IdentityError):
     """高危动作需要二次认证（spec 424 / 42401）。"""
 
@@ -122,7 +130,7 @@ def error_type_for(status_code: int) -> str:
 __all__ = [
     "LoginCredentialError", "RefreshTokenRejected", "LoginThrottled", "AuthMethodUnavailable",
     "ScanTicketInvalid", "IdempotencyConflict", "MfaNotEnabled", "StepUpRequired",
-    "KeyOverlapForbidden", "QuotaExhausted",
+    "KeyOverlapForbidden", "QuotaExhausted", "AdminForbidden",
     "error_type_for",
     # 复用 T1 的错误类型，便于路由层一处 catch
     "IdentityError", "InvalidArgument", "NotFound", "StateConflict", "AccountClosed",
