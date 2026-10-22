@@ -3,7 +3,7 @@
 # 人工源：product/v4/modules/03-facts.md
 version: 1
 generated_from: contracts/03-facts.md
-source_sha256: 89bd3f623e8211d5566c19e66aca511edb82f0cd297ba0241627aa90a5318c28
+source_sha256: 1b0941bc8615bfd5a6fbd27fcd36e091ecc5349bdd63e558b8371d0f2e46e8ee
 rule: 机器源；由 tools/gen_facts.py 从 03-facts.md 生成，禁止手改。
 sections:
 - id: 1
@@ -255,6 +255,12 @@ sections:
   - key: billing.channel_fee_bps
     value: '0'
     note: S3 前不启用
+  - key: billing.fee_cap_pct
+    value: '20'
+    note: 平台费率承诺上限（%）；service_fee_bps ≤ cap×100
+  - key: notify.report.daily_send_at
+    value: 01:15
+    note: 值班日报发送时刻（UTC+8，§23.7）
   - key: points.transfer_enabled
     value: 'false'
     note: 后台开关；默认不可转让（K4）；仅 admin 可开

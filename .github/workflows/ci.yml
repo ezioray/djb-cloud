@@ -92,9 +92,9 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/$SPEC_REF/openapi.yaml" -o spec/openapi.yaml
           curl -fsSL "https://raw.githubusercontent.com/ezioray/djb-node/$SPEC_REF/CHANGELOG-%E5%8D%8F%E8%AE%AE.md" -o "spec/CHANGELOG-协议.md"
           echo "spec: openapi $(wc -l < spec/openapi.yaml) 行 / CHANGELOG $(wc -l < 'spec/CHANGELOG-协议.md') 行 @ ${SPEC_REF:0:7}"
-      - name: 迁移（001 + 002）
+      - name: 迁移（按数字序 001→1499）
         run: |
-          for f in migrations/*.sql; do echo "→ $f"; psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
+          for f in $(printf '%s\n' migrations/*.sql | sort -V); do echo "→ $f"; psql "$DJB_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
       - name: 写入收据与分录
         run: python scripts/seed_demo.py
       - name: 全量复算（差异必须 0）

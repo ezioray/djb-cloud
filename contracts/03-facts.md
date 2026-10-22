@@ -137,6 +137,8 @@
 | billing.gas_fee_bearer | PLATFORM | PLATFORM / PAYER（仅 EXTERNAL 生效） |
 | billing.gas_fee_scope | global | global / chain / batch |
 | billing.channel_fee_bps | 0 | S3 前不启用 |
+| billing.fee_cap_pct | 20 | 平台费率承诺上限（%）；service_fee_bps ≤ cap×100 |
+| notify.report.daily_send_at | 01:15 | 值班日报发送时刻（UTC+8，§23.7） |
 | points.transfer_enabled | false | 后台开关；默认不可转让（K4）；仅 admin 可开 |
 | points.transfer_per_tx_cap | 1000 | 单笔转让上限（COP） |
 | points.transfer_daily_out_cap | 10000 | 单日转出上限（COP） |
