@@ -11,18 +11,20 @@ from __future__ import annotations
 import uuid
 from typing import Sequence
 
-from app.ledger import JournalDraft, JournalLine, post_journal
+from app.ledger import JournalDraft, JournalLine, post_journal, reverse_journal
 
 from ledgerkit import connect, run_ok  # noqa: F401  (复用 T1 的连接/事务夹具)
 
 
 def line(coa_code: str, dc: str, amount_minor: int, *, account_id: str | None = None,
          qty_minor: int | None = None, entry_type: str = "consume", unit_scale: int = 6,
-         wallet_id: str | None = None, fund_class: str | None = None) -> JournalLine:
+         wallet_id: str | None = None, fund_class: str | None = None,
+         reverse_of: str | None = None) -> JournalLine:
     return JournalLine(
         account_id=account_id or (f"coa:{coa_code}" if coa_code != "2101" else "acct:user-1"),
         coa_code=coa_code, dc=dc, amount_minor=amount_minor, entry_type=entry_type,
-        qty_minor=qty_minor, unit_scale=unit_scale, wallet_id=wallet_id, fund_class=fund_class)
+        qty_minor=qty_minor, unit_scale=unit_scale, wallet_id=wallet_id, fund_class=fund_class,
+        reverse_of=reverse_of)
 
 
 def e6_draft(amount_minor: int = 30_000_000, *, source_id: str | None = None,
@@ -60,6 +62,11 @@ def e2_draft(amount_minor: int = 100_000_000, *, source_id: str | None = None,
 def post_ok(schema: str, draft: JournalDraft):
     """在独立事务里落账并提交（借贷平衡等 DEFERRABLE 约束在提交时校验）。"""
     return run_ok(schema, lambda c: post_journal(c, draft))
+
+
+def reverse_ok(schema: str, journal_id: str, **over):
+    """在独立事务里冲正并提交（冲正后不变量复算失败会整笔回滚）。"""
+    return run_ok(schema, lambda c: reverse_journal(c, journal_id, **over))
 
 
 def count_by_source(schema: str, source_type: str, source_id: str) -> dict:

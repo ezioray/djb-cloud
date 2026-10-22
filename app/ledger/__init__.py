@@ -24,7 +24,8 @@
 """
 from __future__ import annotations
 
-from . import constants, errors, facts, gateway, hashchain, legacy, outbox, validate
+from . import (balances, constants, errors, facts, gateway, hashchain, legacy, outbox,
+               reversal, validate, verify)
 from .constants import (
     ALL_COA,
     COA_FUND_CLASS,
@@ -40,9 +41,15 @@ from .constants import (
     LEDGER_APPEND_LOCK_ID,
     MAX_ID_LEN,
     MAX_POLICY_VERSION_LEN,
+    MAX_REASON_CODE_LEN,
     MAX_UNIT_SCALE,
     MERKLE_KINDS_OWNED,
     MINOR_UNIT_SCALE,
+    NEGATIVE_FORBIDDEN_COA,
+    REVERSAL_COOLDOWN_H,
+    REVERSAL_EVENT_TYPE,
+    REVERSAL_SOURCE_TYPE,
+    SUB_ACCOUNT_BY_COA,
     SOURCE_TYPES,
     UNIT_TYPES,
 )
@@ -57,7 +64,10 @@ from .errors import (
     JournalValidationError,
     LedgerError,
     LineCountOutOfRange,
+    InvariantViolation,
     MissingAssetQuantity,
+    PartialReversalNotAllowed,
+    ReversalCooldown,
     ReversalNotAllowed,
     TransactionRequired,
     UnbalancedJournal,
@@ -75,30 +85,49 @@ from .outbox import (
     pending_events,
 )
 from .validate import JournalDraft, JournalLine, NormalizedJournal, normalize
+from .balances import (
+    apply_journal,
+    balance_drift,
+    check_negative_liabilities,
+    deltas_for_journal,
+    derive_balances,
+    latest_balances,
+    sub_account_for,
+)
+from .reversal import ReversalResult, find_reversal, reverse_journal
+from .verify import verify_ledger
 from .legacy import GENESIS, PostResult, entry_hash, post_entry, recompute
 
-__version__ = "0.2.0-dev-m06t2"
+__version__ = "0.3.0-dev-m06t3"
 
 __all__ = [
     # 包内模块
-    "constants", "errors", "facts", "gateway", "hashchain", "legacy", "outbox", "validate",
+    "balances", "constants", "errors", "facts", "gateway", "hashchain", "legacy", "outbox",
+    "reversal", "validate", "verify",
     # 新账本 API
     "JournalDraft", "JournalLine", "NormalizedJournal", "normalize",
     "PostJournalResult", "post_journal", "find_existing", "load_journal", "require_transaction",
     "canonical_payload", "canonical_bytes", "journal_hash", "verify_chain",
     "OutboxEvent", "OutboxEventInvalid", "append_event", "pending_events",
     "journal_posted_event", "ledger_reversed_event", "merkle_anchored_event",
+    # 冲正
+    "ReversalResult", "reverse_journal", "find_reversal",
+    # 余额与复算
+    "apply_journal", "derive_balances", "latest_balances", "balance_drift",
+    "check_negative_liabilities", "deltas_for_journal", "sub_account_for", "verify_ledger",
     # 常量
     "ALL_COA", "COA_FUND_CLASS", "COA_GROUPS", "COA_NORMAL_DC", "COA_QTY_REQUIRED",
     "ENTRY_TYPES", "EVENT_TYPES", "SOURCE_TYPES", "UNIT_TYPES",
     "HASH_ALGO", "HASH_LEN", "JOURNAL_MAX_LINES", "JOURNAL_MIN_LINES", "LEDGER_APPEND_LOCK_ID",
-    "MAX_ID_LEN", "MAX_POLICY_VERSION_LEN", "MAX_UNIT_SCALE",
-    "MERKLE_KINDS_OWNED", "MINOR_UNIT_SCALE",
+    "MAX_ID_LEN", "MAX_POLICY_VERSION_LEN", "MAX_REASON_CODE_LEN", "MAX_UNIT_SCALE",
+    "MERKLE_KINDS_OWNED", "MINOR_UNIT_SCALE", "NEGATIVE_FORBIDDEN_COA",
+    "REVERSAL_COOLDOWN_H", "REVERSAL_EVENT_TYPE", "REVERSAL_SOURCE_TYPE", "SUB_ACCOUNT_BY_COA",
     # 错误
     "LedgerError", "JournalValidationError", "UnbalancedJournal", "LineCountOutOfRange",
     "AmountOutOfRange", "MissingAssetQuantity", "UnknownCoaCode", "FundClassMismatch",
     "InvalidUnitType", "InvalidEventType", "InvalidSourceType", "InvalidEntryType",
-    "JournalNotFound", "ReversalNotAllowed", "TransactionRequired",
+    "JournalNotFound", "ReversalNotAllowed", "ReversalCooldown",
+    "PartialReversalNotAllowed", "InvariantViolation", "TransactionRequired",
     # 旧符号（app/api.py、app/chain/polygon.py、app/wallet_pool.py、scripts、旧测试）
     "GENESIS", "PostResult", "entry_hash", "post_entry", "recompute",
 ]

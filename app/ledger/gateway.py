@@ -25,6 +25,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from . import balances as balances_mod
 from . import hashchain, outbox
 from .constants import LEDGER_APPEND_LOCK_ID
 from .errors import TransactionRequired
@@ -110,11 +111,11 @@ def _insert_lines(cur, norm: NormalizedJournal, journal_id: uuid.UUID) -> None:
         cur.execute(
             """INSERT INTO ledger_entry
                  (entry_id, journal_id, line_no, account_id, entry_type, unit_type, dc,
-                  amount_minor, qty_minor, fund_class, ref_id)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                  amount_minor, qty_minor, fund_class, reverse_of, ref_id)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (str(entry_id), str(journal_id), line_no, line.account_id, line.entry_type,
              norm.draft.unit_type, line.dc, line.amount_minor, line.qty_minor,
-             line.fund_class, norm.ref_id))
+             line.fund_class, line.reverse_of, norm.ref_id))
         cur.execute(
             """INSERT INTO journal_line
                  (journal_id, line_no, ledger_entry_id, account_id, coa_code, dc, amount_minor,
@@ -124,8 +125,13 @@ def _insert_lines(cur, norm: NormalizedJournal, journal_id: uuid.UUID) -> None:
              line.amount_minor, line.unit_scale, line.qty_minor, line.fund_class, line.wallet_id))
 
 
-def post_journal(conn, draft: JournalDraft, *, emit_event: bool = True) -> PostJournalResult:
-    """校验并落账一张凭证（调用方给事务；失败由调用方回滚）。"""
+def post_journal(conn, draft: JournalDraft, *, emit_event: bool = True,
+                 apply_balances: bool = True) -> PostJournalResult:
+    """校验并落账一张凭证（调用方给事务；失败由调用方回滚）。
+
+    ``apply_balances``：默认 True —— 凭证 + 行 + 分录 + **余额** + outbox 同一事务（§6 事务边界）。
+    T3 起余额由 :mod:`app.ledger.balances` 按「上一版本 + 1」写入；关闭只用于特殊回放。
+    """
     require_transaction(conn)
     _acquire_append_lock(conn)
 
@@ -146,6 +152,9 @@ def post_journal(conn, draft: JournalDraft, *, emit_event: bool = True) -> PostJ
     with conn.cursor() as cur:
         seq = _insert_journal(cur, norm, journal_id, digest, prev_hash)
         _insert_lines(cur, norm, journal_id)
+
+    if apply_balances:
+        balances_mod.apply_journal(conn, str(journal_id))
 
     event_ids: tuple[str, ...] = ()
     if emit_event:
