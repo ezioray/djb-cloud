@@ -70,8 +70,8 @@ def test_migration_segment_is_1000_to_1099_and_unique():
         assert number not in numbers, f"{path.name} 与 {numbers[number]} 编号重复"
         numbers[number] = path.name
     module_numbers = sorted(n for n in numbers if 1000 <= n <= 1099)
-    assert module_numbers == [1000, 1001, 1002, 1003, 1004]
-    assert len(migrate.MODULE_MIGRATIONS) == 5
+    assert module_numbers == list(range(1000, 1007))                      # 1000–1006
+    assert len(migrate.MODULE_MIGRATIONS) == 7
     assert set(migrate.MODULE_MIGRATIONS) == {numbers[n] for n in module_numbers}
     # 迁移段独占：M11 的 1100+ 尚未出现，本任务不越界
     assert all(n < 1100 for n in module_numbers)
@@ -81,7 +81,8 @@ def test_base_migrations_exclude_module_files():
     assert all(not re.match(r"^10\d\d_", name) for name in migrate.BASE_MIGRATIONS)
     assert len(migrate.BASE_MIGRATIONS) == 19        # 001–604 存量（6 + 8 + 5）
     assert migrate.M10_TABLES == ("config_items", "config_versions",
-                                  "config_publish_requests", "config_snapshots", "config_drifts")
+                                  "config_publish_requests", "config_snapshots", "config_drifts",
+                                  "config_outbox")
 
 
 def test_migrations_do_not_touch_other_modules_tables():
@@ -90,7 +91,8 @@ def test_migrations_do_not_touch_other_modules_tables():
         sql = (MIGRATIONS / name).read_text(encoding="utf-8")
         # 去掉注释行后再找 DDL 动词
         body = "\n".join(line for line in sql.splitlines() if not line.strip().startswith("--"))
-        assert not re.search(r"\bALTER\s+TABLE\s+(?!IF\s+EXISTS\s+config_)", body, re.I), name
+        # 允许 ALTER 自己的 config_* 表（1006 给发布单加列/约束），其它模块的表一个都不许碰
+        assert not re.search(r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?!config_)[a-z_]", body, re.I), name
         assert not re.search(r"\bDROP\s+(TABLE|VIEW|COLUMN)\b", body, re.I), name
         for table in re.findall(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+([a-z0-9_]+)", body, re.I):
             assert table.startswith("config_"), f"{name} 建了非本模块表 {table}"
@@ -109,6 +111,8 @@ def test_registry_has_no_duplicated_facts_numbers():
         "treasury.provider_share_bps": facts.share_defaults_bps()[1],
         "points.transfer_per_tx_cap": facts.points_defaults()["transfer_per_tx_cap"],
         "config.p0_cooldown_h": facts.cooldowns()["P0"] // 3600,
+        "billing.fee_cap_pct": facts.fee_cap_pct(),
+        "notify.report.daily_send_at": facts.report_daily_send_at(),
     }
     reg = registry.load()
     for key, expected in fact_defaults.items():

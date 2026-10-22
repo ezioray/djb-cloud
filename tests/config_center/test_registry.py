@@ -34,7 +34,7 @@ def test_stats_snapshot():
     assert stats["domains"] == 10
     assert stats["keys"] == 36
     assert stats["by_risk"] == {"P0": 22, "P1": 10, "P2": 4}
-    assert stats["publishable"] == 25
+    assert stats["publishable"] == 26
     assert stats["dangerous"] == 3
     assert stats["sensitive"] == 3
     assert sum(stats["per_domain"].values()) + sum(stats["per_aux"].values()) == stats["keys"]
@@ -66,6 +66,8 @@ def test_defaults_equal_facts_values():
     assert REG.require("treasury.platform_share_bps").default == facts.share_defaults_bps()[0]
     assert REG.require("treasury.provider_share_bps").default == facts.share_defaults_bps()[1]
     assert REG.require("treasury.hot_wallet_cap").default == f"{facts.wallet_cap_usd():.2f}"
+    assert REG.require("billing.fee_cap_pct").default == facts.fee_cap_pct()          # R-3
+    assert REG.require("notify.report.daily_send_at").default == facts.report_daily_send_at()  # R-2
 
     points = facts.points_defaults()
     assert REG.require("points.transfer_enabled").default == points["transfer_enabled"]
@@ -87,7 +89,7 @@ def test_missing_defaults_are_documented_and_unpublishable():
     missing = [item for item in REG.keys if item.default is MISSING]
     assert {item.key for item in missing} == {
         "risk.rule_version", "quota.per_user_daily_requests", "routing.policy_version",
-        "notify.report.daily_send_at", "content.wordlist_version", "content.compliance_terms",
+        "content.wordlist_version", "content.compliance_terms",
         "treasury.deposit_address_ref", "treasury.gas_fee_mode",
         "partner.channel_rate_bps", "exp.route_weight_variant", "exp.ui_copy_variant",
     }

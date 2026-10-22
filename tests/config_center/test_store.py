@@ -342,13 +342,14 @@ def test_effective_at_requires_timezone(conn):
 
 # ─────────────────────────────────────────────── 1002–1004 三表结构
 def _insert_request(conn, *, proposed_by="u1", approved_by=(), status="pending_approval",
-                    key="billing.service_fee_bps"):
+                    key="billing.service_fee_bps", decision=None):
     conn.execute(
         """INSERT INTO config_publish_requests
              (key, namespace, key_set, versions, risk_level, proposed_by, approved_by,
-              status, reason, expires_at)
-           VALUES (%s, %s, %s, %s, 'P0', %s, %s, %s, '测试发布单', now() + interval '4 hours')""",
-        (key, key.split(".")[0], [key], Jsonb({key: 1}), proposed_by, list(approved_by), status))
+              status, decision, reason, expires_at)
+           VALUES (%s, %s, %s, %s, 'P0', %s, %s, %s, %s, '测试发布单', now() + interval '4 hours')""",
+        (key, key.split(".")[0], [key], Jsonb({key: 1}), proposed_by, list(approved_by), status,
+         decision))
 
 
 def test_publish_requests_inv03_and_enums(conn):
@@ -360,7 +361,7 @@ def test_publish_requests_inv03_and_enums(conn):
     assert_db_error(conn, "config_publish_requests_status_ck", lambda c: _insert_request(
         c, status="not_a_state"))
     assert_db_error(conn, "config_publish_requests_closed_ck", lambda c: _insert_request(
-        c, status="closed"))
+        c, status="closed", approved_by=("u2",), decision="approve"))
 
 
 def test_snapshot_policy_version_is_derived_and_append_only(conn):

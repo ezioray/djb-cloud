@@ -36,7 +36,9 @@ __all__ = [
     "OutsidePublishWindow",
     "StepUpRequired",
     "SelfApprovalForbidden",
+    "StateConflict",
     "IdempotencyConflict",
+    "ApproverNotAllowed",
     "FactsError",
 ]
 
@@ -177,11 +179,24 @@ class StepUpRequired(ConfigCenterError):
     spec_code = 42401
 
 
-class IdempotencyConflict(ConfigCenterError):
-    """同幂等键不同载荷（409 + 40919，spec 1.2.0 登记的通用冲突码）。"""
+class StateConflict(ConfigCenterError):
+    """状态机冲突（重复审批 / 未到生效时间 / 非法迁移；409 + 40919 通用冲突码）。"""
 
     code = 40919
     http_status = 409
+
+
+class IdempotencyConflict(StateConflict):
+    """同幂等键不同载荷（409 + 40919，spec 1.2.0 登记的通用冲突码）。"""
+
+
+class ApproverNotAllowed(SelfApprovalForbidden):
+    """复核人角色不足（HTTP 403）。
+
+    spec 的 approve 只登记了 47002 作为 403 细分码；产品 §21.4.3 把「审批人必须来自 FIN/AUDIT」
+    归入 SoD 硬校验（40902）。在 spec 登记独立码（建议 47010）之前，本类沿用 403 + 47002 通道，
+    由消息区分「自批自核」与「角色不足」——见证据 §风险 R-11。
+    """
 
 
 class FactsError(RuntimeError):
