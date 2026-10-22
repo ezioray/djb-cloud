@@ -54,10 +54,36 @@ M10_TABLES: tuple[str, ...] = (
     "config_publish_requests",
     "config_snapshots",
     "config_drifts",
+    "config_outbox",
 )
 
 #: 回滚：逆序删除本模块新增对象（表 → 函数）。存量对象一个都不碰。
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1006_publish_request_flow.sql", """
+        DROP TRIGGER IF EXISTS config_publish_requests_guard ON config_publish_requests;
+        DROP INDEX IF EXISTS config_publish_requests_inflight_uq;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP CONSTRAINT IF EXISTS config_publish_requests_stepup_ck;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP CONSTRAINT IF EXISTS config_publish_requests_decision_reason_ck;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP CONSTRAINT IF EXISTS config_publish_requests_observation_ck;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP CONSTRAINT IF EXISTS config_publish_requests_approval_ck;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP COLUMN IF EXISTS publish_step_up_ref;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP COLUMN IF EXISTS approval_step_up_ref;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP COLUMN IF EXISTS decision_reason;
+        ALTER TABLE IF EXISTS config_publish_requests
+          DROP COLUMN IF EXISTS observation;
+        DROP FUNCTION IF EXISTS m10_requests_guard();
+    """),
+    ("1005_config_outbox.sql", """
+        DROP TABLE IF EXISTS config_outbox;
+        DROP FUNCTION IF EXISTS m10_outbox_guard();
+    """),
     ("1004_config_drifts.sql", """
         DROP TABLE IF EXISTS config_drifts;
     """),
@@ -79,6 +105,8 @@ DOWN_SQL: tuple[tuple[str, str], ...] = (
         DROP FUNCTION IF EXISTS m10_versions_secret_trg();
         DROP FUNCTION IF EXISTS m10_snapshots_guard();
         DROP FUNCTION IF EXISTS m10_drifts_guard();
+        DROP FUNCTION IF EXISTS m10_requests_guard();
+        DROP FUNCTION IF EXISTS m10_outbox_guard();
     """),
 )
 

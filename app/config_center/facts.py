@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import pathlib
 import re
+from datetime import timedelta
 from decimal import Decimal
 from functools import lru_cache
 from typing import Any, NamedTuple
@@ -44,8 +45,12 @@ __all__ = [
     "p0_rollback_modes",
     "gray_steps",
     "drift_scan_policy",
+    "approval_timeout",
+    "fee_cap_pct",
     "gas_defaults",
     "points_defaults",
+    "report_daily_send_at",
+    "step_up_ttl",
     "platform_fee_default_bps",
     "platform_fee_range_bps",
     "share_defaults_bps",
@@ -288,6 +293,39 @@ def gas_defaults() -> dict[str, Any]:
     if defaults["scope"] not in ("global", "chain", "batch"):
         raise FactsError(f"billing.gas_fee_scope 枚举外：{defaults['scope']!r}")
     return defaults
+
+
+def fee_cap_pct() -> int:
+    """平台费率承诺上限（%）（§9「billing.fee_cap_pct = 20」；R-3 已补 facts）。"""
+    value = fact("billing.fee_cap_pct", "M10")
+    if not re.fullmatch(r"\d{1,3}", value):
+        raise FactsError(f"billing.fee_cap_pct 不是整数百分比：{value!r}")
+    pct = int(value)
+    if not 0 <= pct <= 100:
+        raise FactsError(f"billing.fee_cap_pct 越界 0–100：{pct}")
+    return pct
+
+
+def report_daily_send_at() -> str:
+    """值班日报发送时刻（HH:MM，UTC+8）（§9；R-2 已补 facts，产品 §23.7 为 01:15）。"""
+    value = fact("notify.report.daily_send_at", "M10")
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+        raise FactsError(f"notify.report.daily_send_at 不是 HH:MM：{value!r}")
+    return value
+
+
+def approval_timeout() -> timedelta:
+    """双人复核作废时长（§8「双人复核 | 4h 作废；step-up ≤5 分钟」）。"""
+    value = fact("双人复核", "M01 / M14 / M16")
+    match = _require(r"(\d+)\s*h\s*作废", value, "双人复核.作废时长")
+    return timedelta(hours=int(match.group(1)))
+
+
+def step_up_ttl() -> timedelta:
+    """step-up 有效期（§8「step-up ≤5 分钟」）。"""
+    value = fact("双人复核", "M01 / M14 / M16")
+    match = _require(r"step-up\s*≤\s*(\d+)\s*分钟", value, "双人复核.step-up")
+    return timedelta(minutes=int(match.group(1)))
 
 
 def _int_fact(key: str) -> int:

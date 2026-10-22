@@ -31,15 +31,17 @@ M10_MIGRATIONS = (
     "1002_config_publish_requests.sql",
     "1003_config_snapshots.sql",
     "1004_config_drifts.sql",
+    "1005_config_outbox.sql",
+    "1006_publish_request_flow.sql",
 )
 
 M10_TABLES = ("config_items", "config_versions", "config_publish_requests",
-              "config_snapshots", "config_drifts")
+              "config_snapshots", "config_drifts", "config_outbox")
 
 M10_FUNCTIONS = (
     "m10_config_items_guard", "m10_forbid_truncate", "m10_versions_guard",
     "m10_versions_monotonic_trg", "m10_versions_secret_trg", "m10_snapshots_guard",
-    "m10_drifts_guard",
+    "m10_drifts_guard", "m10_outbox_guard", "m10_requests_guard",
 )
 
 #: 001–604 的存量表（升级测试要在这些表上证明「只加不改」）

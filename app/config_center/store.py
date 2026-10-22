@@ -40,6 +40,7 @@ __all__ = [
     "activate",
     "get_version",
     "list_versions",
+    "active_entries",
     "active_version",
     "find_idempotent",
     "digest_of",
@@ -180,6 +181,13 @@ def list_versions(conn: psycopg.Connection, *, key: str, scope: str = DEFAULT_SC
     return _rows(conn, """SELECT * FROM config_versions
                            WHERE key = %s AND scope = %s AND scope_id = %s
                            ORDER BY version""", (key, scope, scope_id))
+
+
+def active_entries(conn: psycopg.Connection) -> list[dict[str, Any]]:
+    """全部 active 版本（INV-08 快照 entries 的来源；policy_version = snapshot_digest[:12]）。"""
+    return _rows(conn, """SELECT key, scope, scope_id, version, content_digest
+                            FROM config_versions WHERE status = 'active'
+                           ORDER BY key, scope, scope_id""")
 
 
 def active_version(conn: psycopg.Connection, *, key: str, scope: str = DEFAULT_SCOPE,

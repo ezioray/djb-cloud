@@ -19,7 +19,8 @@
 """
 from __future__ import annotations
 
-from . import canonical, errors, facts, features, migrate, registry, store, units, validators
+from . import (canonical, errors, facts, features, migrate, outbox, publish, registry, store,
+               units, validators)
 from .canonical import (
     canonical_json,
     policy_version,
@@ -30,6 +31,8 @@ from .canonical import (
 )
 from .errors import (
     ERROR_CODES,
+    ApproverNotAllowed,
+    StateConflict,
     CooldownActive,
     ConfigCenterError,
     CrossFieldViolation,
@@ -83,8 +86,8 @@ from .validators import (
 
 __all__ = [
     # 子模块
-    "canonical", "errors", "facts", "features", "migrate", "registry", "store", "units",
-    "validators",
+    "canonical", "errors", "facts", "features", "migrate", "outbox", "publish", "registry",
+    "store", "units", "validators",
     # 摘要
     "canonical_json", "sha256_hex", "version_digest", "request_digest", "snapshot_digest",
     "policy_version",
@@ -92,8 +95,8 @@ __all__ = [
     "ERROR_CODES", "ConfigCenterError", "ValidationFailed", "UnknownKey", "TypeMismatch",
     "UnitViolation", "RangeViolation", "CrossFieldViolation", "SecretShapeForbidden",
     "DangerousKeyForbidden", "KeyLocked", "CooldownActive", "VersionNotFound", "GrayPlanInvalid",
-    "OutsidePublishWindow", "StepUpRequired", "SelfApprovalForbidden", "IdempotencyConflict",
-    "FactsError",
+    "OutsidePublishWindow", "StepUpRequired", "SelfApprovalForbidden", "ApproverNotAllowed",
+    "StateConflict", "IdempotencyConflict", "FactsError",
     # 注册表
     "MISSING", "ConfigKey", "Domain", "Registry", "DOMAINS", "AUX_NAMESPACES",
     "FORBIDDEN_KEY_PATTERNS", "forbidden_reason",

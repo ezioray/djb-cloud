@@ -31,7 +31,7 @@ from app.config_center import migrate
 def test_empty_database_applies_001_to_1004(schema: str) -> None:
     outputs = apply_migrations(schema)
     assert [item["name"] for item in outputs] == [path.name for path in migration_files()]
-    assert [item["name"] for item in outputs][-5:] == list(M10_MIGRATIONS)
+    assert [item["name"] for item in outputs][-7:] == list(M10_MIGRATIONS)
     assert all(item["rc"] == 0 for item in outputs), [o for o in outputs if o["rc"]]
 
     tables = table_names(schema)
@@ -56,7 +56,7 @@ def test_empty_database_applies_in_glob_order_too(schema: str) -> None:
     assert set(M10_TABLES) <= table_names(schema)
 
 
-def test_module_migrations_are_the_five_expected_files() -> None:
+def test_module_migrations_are_the_seven_expected_files() -> None:
     assert migrate.MODULE_MIGRATIONS == M10_MIGRATIONS
     assert [path.name for path in m10_migration_files()] == list(M10_MIGRATIONS)
     assert len(migrate.BASE_MIGRATIONS) == 19
@@ -132,6 +132,8 @@ def test_constraints_and_indexes_exist(schema: str) -> None:
     assert "config_versions_one_active_uq" in indexes
     assert "config_publish_requests_status_idx" in indexes
     assert "config_drifts_detected_idx" in indexes
+    assert "config_publish_requests_inflight_uq" in indexes   # INV-07
+    assert "config_outbox_pending_idx" in indexes
     # 只追加 / 状态机 / 敏感值护栏都在
     assert "config_items_guard" in triggers
     assert "config_versions_guard" in triggers
@@ -139,6 +141,8 @@ def test_constraints_and_indexes_exist(schema: str) -> None:
     assert "config_versions_secret" in triggers
     assert "config_snapshots_no_mutation" in triggers
     assert "config_drifts_guard" in triggers
+    assert "config_outbox_no_mutation" in triggers
+    assert "config_publish_requests_guard" in triggers
     # INV-08：policy_version 是生成列（information_schema 里 is_generated = ALWAYS）
     policy_columns = [line for line in fp["columns"]
                       if line.startswith("config_snapshots.policy_version:")]
@@ -176,3 +180,4 @@ def test_migration_number_segment() -> None:
     for name in M10_MIGRATIONS:
         number = int(name.split("_", 1)[0])
         assert 1000 <= number <= 1099, name
+    assert [int(name.split("_", 1)[0]) for name in M10_MIGRATIONS] == list(range(1000, 1007))

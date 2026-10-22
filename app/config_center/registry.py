@@ -363,6 +363,8 @@ def _build(facts_path_str: str) -> Registry:  # noqa: ARG001 - 仅用于 lru_cac
     points = facts_mod.points_defaults()
     fee_default = facts_mod.platform_fee_default_bps()
     fee_low, fee_high, fee_confirm = facts_mod.platform_fee_range_bps()
+    fee_cap = facts_mod.fee_cap_pct()
+    daily_send_at = facts_mod.report_daily_send_at()
     share_platform, share_provider, share_total = facts_mod.share_defaults_bps()
     pool = facts_mod.reserved_pool()
     slow_task, mesh = facts_mod.slow_task_discount_pcts()
@@ -390,8 +392,8 @@ def _build(facts_path_str: str) -> Registry:  # noqa: ARG001 - 仅用于 lru_cac
              kill_switch=True, direction="reduce", escalate_above=fee_confirm,
              consumers=("scheduler", "settlement", "provider-console")),
         _key(key="billing.fee_cap_pct", domain="billing", value_type="integer", unit="pct",
-             default=20, default_source="spec:§21.1.1#billing.fee_cap_pct（≤20，未进 facts → CR 待补）",
-             risk="P0", owner="FIN", minimum=0, maximum=20,
+             default=fee_cap, default_source="facts:§9#billing.fee_cap_pct（R-3 已补）",
+             risk="P0", owner="FIN", minimum=0, maximum=fee_cap,
              description="费率承诺上限（公开承诺：服务费率不得超过该比例）",
              direction="reduce", tighten_only=True,
              consumers=("settlement", "transparency-page")),
@@ -456,10 +458,9 @@ def _build(facts_path_str: str) -> Registry:  # noqa: ARG001 - 仅用于 lru_cac
 
         # ── 6 通知模板（notify.，P2）──────────────────────────────────
         _key(key="notify.report.daily_send_at", domain="notify", value_type="string", unit="clock",
-             default=MISSING,
-             default_source="unset:产品 §23.7 为 01:15（UTC+8）但未进 03-facts，本模块不硬编码（CR 已登记）",
+             default=daily_send_at, default_source="facts:§9#notify.report.daily_send_at（R-2 已补）",
              risk="P2", owner="OPS",
-             description="日报发送时刻（HH:MM，UTC+8）",
+             description="日报发送时刻（HH:MM，UTC+8；产品 §23.7 为 01:15）",
              consumers=("reporting", "notify")),
 
         # ── 7 文案与词表（content.）───────────────────────────────────
