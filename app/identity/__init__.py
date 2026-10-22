@@ -15,6 +15,7 @@
     tokens.py       会话与令牌（登录 / 刷新轮换 / 登出 / 鉴权 / step-up）
     scan.py         扫码登录中间态（120 s，一次性）
     router.py       HTTP 路由（T2 的 5 个 spec 操作；不接 app/api.py）
+    admin.py        管理面领域（冻结 / 解冻 / 角色 SoD / 配额版本）
     migrate.py      1xx 迁移与回滚（证据用 CLI）
 
 边界：不 import 任何其它 ``app.*`` 业务模块；不读 M06 / M10 基表；
@@ -22,8 +23,8 @@
 """
 from __future__ import annotations
 
-from . import (clock, credentials, errors, facts, mfa, migrate, models, router, scan, state,
-               tokens)
+from . import (admin, clock, credentials, errors, facts, mfa, migrate, models, router, scan,
+               state, tokens)
 from .models import (
     ACCOUNT_STATES,
     ACCOUNT_TYPES,
@@ -44,7 +45,7 @@ __version__ = "0.2.0-dev-m01t2"
 
 __all__ = [
     "models", "state", "migrate", "facts", "credentials", "mfa", "tokens", "scan",
-    "errors", "router", "clock",
+    "errors", "router", "clock", "admin",
     "ACCOUNT_STATES", "ACCOUNT_TYPES", "ADMIN_ROLES", "ORG_ROLES", "QUOTA_KINDS",
     "FREEZE_MAX_DAYS", "CLOSING_COOLOFF_DAYS", "INVITE_TTL_HOURS", "ROLE_RECLAIM_DAYS",
     "KEY_PREFIX_LEN", "KEY_MAX_PER_ACCOUNT", "SEATS",

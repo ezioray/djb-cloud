@@ -2,7 +2,7 @@
 """M01 契约面测试：spec 1.2.0 的 13 个 M01 操作逐条对账（tasks-11 验收 3）。
 
 对账口径：
-- **T2/T3 已实现的 9 个操作**（login / refresh / logout / profile GET/PATCH + api-keys ×4）：
+- **M01 的 13 个操作已全部实现**（T2 五个 + T3 四个 + T4 四个 admin）：
   路径 + 方法 + ``operationId`` 必须与 spec 一致；成功响应必须包含 spec 的必填字段；
   ``security`` 与 spec 一致（login / refresh 是 ``security: []``）；
   错误响应必须是 spec ``Error`` 信封（``error.type/code/message/request_id``）。
@@ -36,14 +36,14 @@ IMPLEMENTED = {
     ("post", "/api/v1/user/api-keys"): "createApiKey",
     ("delete", "/api/v1/user/api-keys/{id}"): "revokeApiKey",
     ("post", "/api/v1/user/api-keys/{id}/rotate"): "rotateApiKey",
+    # T4：管理面
+    ("post", "/api/v1/admin/accounts/{id}/freeze"): "freezeAccount",
+    ("post", "/api/v1/admin/accounts/{id}/unfreeze"): "unfreezeAccount",
+    ("post", "/api/v1/admin/accounts/{id}/roles"): "updateAccountRoles",
+    ("post", "/api/v1/admin/tenants/{id}/quotas"): "updateTenantQuotas",
 }
-# T4 的 4 个操作：spec 必须有，T3 不得实现
-DEFERRED = {
-    ("post", "/api/v1/admin/accounts/{id}/freeze"): ("freezeAccount", "T4"),
-    ("post", "/api/v1/admin/accounts/{id}/unfreeze"): ("unfreezeAccount", "T4"),
-    ("post", "/api/v1/admin/accounts/{id}/roles"): ("updateAccountRoles", "T4"),
-    ("post", "/api/v1/admin/tenants/{id}/quotas"): ("updateTenantQuotas", "T4"),
-}
+# M01 的 13 个 spec 操作已全部实现；DEFERRED 保留为空表，后续模块新增操作时在此登记
+DEFERRED: dict[tuple[str, str], tuple[str, str]] = {}
 
 
 def _spec() -> dict:
@@ -70,7 +70,7 @@ def _routes() -> dict[tuple[str, str], object]:
     return out
 
 
-def test_implemented_surface_is_exactly_the_nine():
+def test_implemented_surface_is_exactly_the_thirteen():
     assert set(_routes()) == set(IMPLEMENTED)
 
 
@@ -103,6 +103,9 @@ def test_public_endpoints_match_spec_security(spec):
 
 
 def test_deferred_operations_still_declared_and_not_implemented(spec):
+    if not DEFERRED:                                          # M01 13/13 已实现
+        assert len(IMPLEMENTED) == 13
+        return
     routes = _routes()
     for key, (operation_id, owner) in DEFERRED.items():
         method, path = key

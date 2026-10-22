@@ -14,7 +14,7 @@ CI 的执行方式是 ``for f in migrations/*.sql``（见 .github/workflows/ci.y
 
 ``--up`` 会先应用存量基线 001/002（api_keys 原型由 002 建立，1xx 在其上只加列）。
 1xx 段：100–104（T1 模型）+ 105（T2 会话令牌 / MFA 因子 / 扫码票据 / 幂等键）
-        + 106（T3 Key 生命周期的 scopes / expires_at）。
+        + 106（T3 Key 生命周期的 scopes / expires_at）+ 107（T4 配额版本历史）。
 """
 from __future__ import annotations
 
@@ -35,6 +35,10 @@ MODULE_MIGRATIONS = tuple(sorted(p.name for p in MIGRATIONS_DIR.glob("1*.sql")))
 
 # 回滚：逆序删除本模块新增对象；**存量对象只删新增列**，不删表、不改类型（00-conventions §7.2）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("107_identity_quota_history.sql", """
+        DROP TABLE IF EXISTS tenant_quota_history;
+        DROP FUNCTION IF EXISTS identity_forbid_mutation();
+    """),
     ("106_identity_api_keys_lifecycle.sql", """
         DROP INDEX IF EXISTS api_keys_expiry_idx;
         DROP INDEX IF EXISTS api_keys_revoked_after_idx;

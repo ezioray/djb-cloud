@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import uuid as _uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -35,12 +36,13 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import api_keys, clock, credentials, errors, models, tokens
+from . import admin, api_keys, clock, credentials, errors, models, tokens
 
 log = logging.getLogger("djb.identity.http")
 
 IDENTITY_PREFIX = "/api/v1"
 IDEMPOTENCY_HEADER = "X-DJB-Idempotency-Key"
+ADMIN_STEP_UP_HEADER = "X-Admin-Step-Up"
 IDEMPOTENCY_TTL = timedelta(hours=24)
 
 router = APIRouter(prefix=IDENTITY_PREFIX, tags=["identity"])
@@ -163,8 +165,23 @@ def _body_hash(body: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+_SCOPE_UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                            r"[0-9a-fA-F]{12}")
+_SCOPE_INT_RE = re.compile(r"(?<=/)\d+(?=/|$)")
+
+
 def _idem_scope(request: Request) -> str:
-    return f"{request.method} {request.url.path}"
+    """幂等作用域 = 方法 + 归一化路径（路径参数折成 ``{id}``）。
+
+    归一化的两点好处：① 同一操作在不同资源实例上共用同一作用域，避免键跨资源串用；
+    ② 长度稳定落在 ``identity_idempotency.scope`` 的 64 字符上限内；仍然超长时存摘要兜底。
+    """
+    path = _SCOPE_UUID_RE.sub("{id}", request.url.path)
+    path = _SCOPE_INT_RE.sub("{id}", path)
+    scope = f"{request.method} {path}"
+    if len(scope) > 64:                                        # pragma: no cover - 兜底
+        scope = f"{request.method} #{hashlib.sha256(path.encode()).hexdigest()[:32]}"
+    return scope
 
 
 def _idem_lookup(c, scope: str, key: str, request_hash: str,
@@ -475,6 +492,45 @@ def _bump_failures(exc: errors.IdentityError, *, now: datetime, trace_id: str) -
         log.exception("identity.login.failure_bump_failed request_id=%s", trace_id)
 
 
+# --------------------------------------------------------------------------- 管理面身份
+def admin_context(c, request: Request, *, now: datetime, trace_id: str) -> tokens.AuthContext:
+    """adminBearer + 后台角色 + step-up（spec 1.2.1 admin 段）。
+
+    step-up 两种承载都接受：``X-Admin-Step-Up`` 头里带 step_up 令牌（spec 的「凭据」语义），
+    或同一会话在 5 分钟内刚完成过 step-up（T2 的 ``step_up_until``）。
+    """
+    ctx = tokens.authenticate(c, _bearer(request), now=now, trace_id=trace_id)
+    if not ctx.roles:
+        raise errors.AdminForbidden("需要后台角色")
+    step_token = (request.headers.get(ADMIN_STEP_UP_HEADER) or "").strip()
+    if step_token:
+        grant = tokens.authenticate(c, step_token, now=now, allow_pending=True, touch=False)
+        if grant.account.id != ctx.account.id or grant.session is None \
+                or grant.session.kind != "step_up":
+            raise errors.StepUpRequired("step-up 凭据无效或不属于该账户")
+    elif not ctx.step_up_active:
+        raise errors.StepUpRequired("需要二次认证（step-up ≤5 分钟）")
+    return ctx
+
+
+def _state_ack(account: models.Account, changed_at: datetime) -> dict[str, Any]:
+    """spec AccountStateAck（脱敏：不含邮箱 / 手机 / 操作者身份）。"""
+    return {"account_id": str(account.id), "state": account.state,
+            "frozen_until": account.frozen_until.isoformat() if account.frozen_until else None,
+            "changed_at": changed_at.isoformat()}
+
+
+def _roles_ack(payload: dict[str, Any]) -> dict[str, Any]:
+    return {"account_id": payload["account_id"], "roles": payload["roles"],
+            "session_epoch": payload["session_epoch"]}
+
+
+def _quotas_ack(payload: dict[str, Any]) -> dict[str, Any]:
+    return {"tenant_id": payload["tenant_id"], "quotas": payload["quotas"],
+            "policy_version": payload["policy_version"],
+            "effective_at": payload.get("effective_at")}
+
+
 # --------------------------------------------------------------------------- API Key 生命周期
 @router.get("/user/api-keys", operation_id="listApiKeys", summary="列举 API Key（只回前缀）")
 def list_api_keys(request: Request) -> JSONResponse:
@@ -608,6 +664,130 @@ async def rotate_api_key(request: Request, id: str) -> JSONResponse:   # noqa: A
         return _fail(exc, request_id)
     except Exception:                                          # pragma: no cover - 兜底
         log.exception("identity.apikeys.rotate.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 管理面
+async def _admin_body(request: Request) -> dict[str, Any]:
+    body = await _body(request)
+    if not body:
+        raise models.InvalidArgument("请求体必填", reason="empty_body")
+    return body
+
+
+@router.post("/admin/accounts/{id}/freeze", operation_id="freezeAccount",
+             summary="冻结账户（理由 + 期限必填）")
+async def freeze_account(request: Request, id: str) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _admin_body(request)
+        now = clock.utcnow()
+        scope, key = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash(body)
+        with _connection() as c:
+            if key:
+                record = _idem_lookup(c, scope, key, request_hash, now)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                ctx = admin_context(c, request, now=now, trace_id=request_id)
+                account = admin.freeze(c, account_id=id, operator_id=ctx.account.id,
+                                       payload=body, now=now, trace_id=request_id)
+                payload = _state_ack(account, now)
+                if key:
+                    _idem_store(c, scope, key, request_hash, 200, payload, now)
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.admin.freeze.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/admin/accounts/{id}/unfreeze", operation_id="unfreezeAccount",
+             summary="解冻账户（非原冻结人）")
+async def unfreeze_account(request: Request, id: str) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _admin_body(request)
+        now = clock.utcnow()
+        scope, key = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash(body)
+        with _connection() as c:
+            if key:
+                record = _idem_lookup(c, scope, key, request_hash, now)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                ctx = admin_context(c, request, now=now, trace_id=request_id)
+                account = admin.unfreeze(c, account_id=id, operator_id=ctx.account.id,
+                                         payload=body, now=now, trace_id=request_id)
+                payload = _state_ack(account, now)
+                if key:
+                    _idem_store(c, scope, key, request_hash, 200, payload, now)
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.admin.unfreeze.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/admin/accounts/{id}/roles", operation_id="updateAccountRoles",
+             summary="授予 / 回收后台角色（第二人确认）")
+async def update_account_roles(request: Request, id: str) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _admin_body(request)
+        now = clock.utcnow()
+        scope, key = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash(body)
+        with _connection() as c:
+            if key:
+                record = _idem_lookup(c, scope, key, request_hash, now)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                ctx = admin_context(c, request, now=now, trace_id=request_id)
+                result = admin.set_roles(c, account_id=id, operator_id=ctx.account.id,
+                                         payload=body, now=now, trace_id=request_id)
+                payload = _roles_ack(result)
+                if key:
+                    _idem_store(c, scope, key, request_hash, 200, payload, now)
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.admin.roles.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/admin/tenants/{id}/quotas", operation_id="updateTenantQuotas",
+             summary="修改租户配额（升配额需复核）")
+async def update_tenant_quotas(request: Request, id: str) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _admin_body(request)
+        now = clock.utcnow()
+        scope, key = _idem_scope(request), _idem_key(request)
+        request_hash = _body_hash(body)
+        with _connection() as c:
+            if key:
+                record = _idem_lookup(c, scope, key, request_hash, now)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                ctx = admin_context(c, request, now=now, trace_id=request_id)
+                result = admin.set_quotas(c, tenant_id=id, operator_id=ctx.account.id,
+                                          payload=body, now=now, trace_id=request_id)
+                payload = _quotas_ack(result)
+                if key:
+                    _idem_store(c, scope, key, request_hash, 200, payload, now)
+            return _ok(payload, request_id)
+    except errors.IdentityError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("identity.admin.quotas.failed request_id=%s", request_id)
         return _server_error(request_id)
 
 
