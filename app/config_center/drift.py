@@ -21,6 +21,7 @@ from typing import Any, Mapping
 import psycopg
 from psycopg.types.json import Jsonb
 
+from . import audit as audit_mod
 from . import outbox, store
 from .errors import ValidationFailed
 from .registry import load as load_registry
@@ -95,7 +96,8 @@ def _existing_open_drift(conn: psycopg.Connection, *, key: str, scope: str, scop
 def _record_drift(conn: psycopg.Connection, *, key: str, scope: str, scope_id: str,
                   desired: int | None, effective: int | None, running: int | None,
                   expected: Any, actual: Any, detected_at: datetime,
-                  trace_id: str | None) -> dict[str, Any] | None:
+                  trace_id: str | None,
+                  audit: "audit_mod.AuditSink | None" = None) -> dict[str, Any] | None:
     if _existing_open_drift(conn, key=key, scope=scope, scope_id=scope_id,
                             desired=desired, effective=effective, running=running):
         return None                                    # 同一组版本已有未解决漂移：不重复落
@@ -113,6 +115,12 @@ def _record_drift(conn: psycopg.Connection, *, key: str, scope: str, scope_id: s
         detected_at=detected_at, scope=scope, scope_id=scope_id, trace_id=trace_id,
         occurred_at=detected_at)
     outbox.append_event(conn, event)
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.drift.detected", actor="system:drift_scan", key=key, scope=scope,
+        scope_id=scope_id, trace_id=trace_id, occurred_at=detected_at,
+        before=expected, after=actual,
+        metadata={"desired_version": desired, "effective_version": effective,
+                  "running_version": running}))
     return row
 
 
@@ -123,6 +131,7 @@ def scan_drifts(
     running: Mapping[Any, int] | None = None,
     now: datetime | None = None,
     trace_id: str | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> list[dict[str, Any]]:
     """扫描一次：A≠B（desired vs effective）与 B≠C（effective vs running），只写不一致项。"""
     if desired is None and running is None:
@@ -147,7 +156,7 @@ def scan_drifts(
                     desired=want, effective=effective, running=None,
                     expected={"source": "desired", "version": want},
                     actual={"source": "effective", "version": effective},
-                    detected_at=moment, trace_id=trace_id)
+                    detected_at=moment, trace_id=trace_id, audit=audit)
                 if row is not None:
                     drift_rows.append(row)
 
@@ -159,7 +168,7 @@ def scan_drifts(
                     desired=None, effective=effective, running=reported,
                     expected={"source": "effective", "version": effective},
                     actual={"source": "running", "version": reported},
-                    detected_at=moment, trace_id=trace_id)
+                    detected_at=moment, trace_id=trace_id, audit=audit)
                 if row is not None:
                     drift_rows.append(row)
     return drift_rows
@@ -171,13 +180,15 @@ def scan_effective_vs_running(
     *,
     now: datetime | None = None,
     trace_id: str | None = None,
+    audit: "audit_mod.AuditSink | None" = None,
 ) -> list[dict[str, Any]]:
     """发布后收敛检查的便捷入口（B≠C）。"""
-    return scan_drifts(conn, running=running, now=now, trace_id=trace_id)
+    return scan_drifts(conn, running=running, now=now, trace_id=trace_id, audit=audit)
 
 
 def resolve_drift(conn: psycopg.Connection, drift_id: str, *, resolution: str,
-                  now: datetime | None = None) -> dict[str, Any]:
+                  now: datetime | None = None,
+                  audit: "audit_mod.AuditSink | None" = None) -> dict[str, Any]:
     """标记已解决（只能由 NULL 置一次；1004 触发器保证不可撤销、不可改结论）。"""
     moment = _now(now)
     resolution = resolution.strip()
@@ -191,6 +202,10 @@ def resolve_drift(conn: psycopg.Connection, drift_id: str, *, resolution: str,
                (moment, resolution, drift_id))
     if row is None:
         raise ValidationFailed(f"漂移 {drift_id} 不存在或已解决")
+    audit_mod.emit(audit, audit_mod.build_event(
+        "config.drift.resolved", actor="operator", key=row["key"], scope=row["scope"],
+        scope_id=row["scope_id"], reason=resolution, occurred_at=moment,
+        metadata={"drift_id": str(drift_id)}))
     return row
 
 

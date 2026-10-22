@@ -12,22 +12,28 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from .errors import ValidationFailed
 
 __all__ = [
     "MAX_ATTEMPTS",
+    "BACKOFF_SECONDS",
     "dispatch_pending",
     "pending_count",
     "dead_letters",
+    "requeue_dead_letter",
 ]
 
 #: 02-events §2：指数退避 8 次后进 DLQ（内部算法常量，不是业务数字）
 MAX_ATTEMPTS = 8
+#: 02-events §2 的退避序列：1s / 5s / 30s / 5min / 30min（之后维持 30min）
+BACKOFF_SECONDS: tuple[int, ...] = (1, 5, 30, 300, 1800)
 
 
 def _rows(conn: psycopg.Connection, sql: str, params: Any = ()) -> list[dict[str, Any]]:
@@ -71,7 +77,8 @@ def dispatch_pending(
     rows = _rows(conn,
                  """SELECT * FROM config_outbox
                      WHERE published_at IS NULL AND dead_lettered_at IS NULL
-                     ORDER BY created_at, event_id LIMIT %s""", (limit,))
+                       AND (next_attempt_at IS NULL OR next_attempt_at <= %s)
+                     ORDER BY created_at, event_id LIMIT %s""", (moment, limit))
     delivered: list[str] = []
     failed: list[str] = []
     dead: list[str] = []
@@ -85,19 +92,23 @@ def dispatch_pending(
             if attempts >= MAX_ATTEMPTS:
                 conn.execute(
                     """UPDATE config_outbox
-                          SET delivery_attempts = %s, last_error = %s, dead_lettered_at = %s
+                          SET delivery_attempts = %s, last_error = %s, dead_lettered_at = %s,
+                              last_attempt_at = %s, next_attempt_at = NULL
                         WHERE event_id = %s""",
-                    (attempts, message, moment, row["event_id"]))
+                    (attempts, message, moment, moment, row["event_id"]))
                 dead.append(str(row["event_id"]))
                 if on_dead_letter is not None:
                     on_dead_letter({**row, "delivery_attempts": attempts, "last_error": message,
                                     "dead_lettered_at": moment})
             else:
+                backoff = BACKOFF_SECONDS[min(attempts - 1, len(BACKOFF_SECONDS) - 1)]
                 conn.execute(
                     """UPDATE config_outbox
-                          SET delivery_attempts = %s, last_error = %s
+                          SET delivery_attempts = %s, last_error = %s,
+                              last_attempt_at = %s, next_attempt_at = %s
                         WHERE event_id = %s""",
-                    (attempts, message, row["event_id"]))
+                    (attempts, message, moment, moment + timedelta(seconds=backoff),
+                     row["event_id"]))
                 failed.append(str(row["event_id"]))
         else:
             conn.execute(
@@ -116,3 +127,36 @@ def dead_letters(conn: psycopg.Connection, *, limit: int = 50) -> list[dict[str,
     return _rows(conn,
                  """SELECT * FROM config_outbox WHERE dead_lettered_at IS NOT NULL
                      ORDER BY dead_lettered_at DESC LIMIT %s""", (limit,))
+
+
+def requeue_dead_letter(conn: psycopg.Connection, event_id: str, *,
+                        now: datetime | None = None) -> dict[str, Any]:
+    """人工重放死信：基于原 payload **新增一条事件**（outbox 只追加，原死信不可撤销）。
+
+    新事件沿用原 type / payload / aggregate / trace，携带新的 event_id 与幂等键后缀，
+    投递计数从 0 开始（02-events §2「死信只能人工重放」）。
+    """
+    moment = _now(now)
+    row = conn.execute(
+        """SELECT * FROM config_outbox WHERE event_id = %s AND dead_lettered_at IS NOT NULL""",
+        (event_id,)).fetchone()
+    if row is None:
+        raise ValidationFailed(f"死信不存在或未进死信：{event_id}")
+    columns = [desc.name for desc in conn.execute(
+        "SELECT * FROM config_outbox LIMIT 0").description]
+    original = dict(zip(columns, row))
+    suffix = uuid.uuid4().hex[:8]
+    new_id = uuid.uuid4()
+    new_key = f"{original['idempotency_key']}:replay:{suffix}"
+    conn.execute(
+        """INSERT INTO config_outbox
+             (event_id, type, version, occurred_at, producer, aggregate_type, aggregate_id,
+              correlation_id, causation_id, trace_id, idempotency_key, payload, created_at)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (new_id, original["type"], original["version"], moment, original["producer"],
+         original["aggregate_type"], original["aggregate_id"], original["correlation_id"],
+         original["event_id"], original["trace_id"], new_key,
+         Jsonb(original["payload"]), moment))
+    new_row = conn.execute("SELECT * FROM config_outbox WHERE event_id = %s",
+                           (new_id,)).fetchone()
+    return dict(zip(columns, new_row))

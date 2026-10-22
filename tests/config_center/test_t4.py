@@ -325,12 +325,14 @@ def test_dispatcher_failures_go_to_dlq(conn):
         raise RuntimeError("下游不可用")
 
     for attempt in range(1, dispatcher.MAX_ATTEMPTS):
-        stats = dispatcher.dispatch_pending(conn, publisher=boom, now=NOW,
+        stats = dispatcher.dispatch_pending(conn, publisher=boom,
+                                            now=NOW + timedelta(hours=attempt),
                                             on_dead_letter=alerts.append)
         assert stats["failed"] and not stats["dead_lettered"]
         row = conn.execute("SELECT delivery_attempts, last_error FROM config_outbox").fetchone()
         assert row[0] == attempt and "下游不可用" in row[1]
-    stats = dispatcher.dispatch_pending(conn, publisher=boom, now=NOW,
+    stats = dispatcher.dispatch_pending(conn, publisher=boom,
+                                        now=NOW + timedelta(hours=dispatcher.MAX_ATTEMPTS),
                                         on_dead_letter=alerts.append)
     assert stats["dead_lettered"] and stats["pending"] == 0
     assert len(alerts) == 1 and alerts[0]["delivery_attempts"] == dispatcher.MAX_ATTEMPTS

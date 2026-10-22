@@ -31,7 +31,7 @@ from app.config_center import migrate
 def test_empty_database_applies_001_to_1004(schema: str) -> None:
     outputs = apply_migrations(schema)
     assert [item["name"] for item in outputs] == [path.name for path in migration_files()]
-    assert [item["name"] for item in outputs][-8:] == list(M10_MIGRATIONS)
+    assert [item["name"] for item in outputs][-9:] == list(M10_MIGRATIONS)
     assert all(item["rc"] == 0 for item in outputs), [o for o in outputs if o["rc"]]
 
     tables = table_names(schema)
@@ -56,7 +56,7 @@ def test_empty_database_applies_in_glob_order_too(schema: str) -> None:
     assert set(M10_TABLES) <= table_names(schema)
 
 
-def test_module_migrations_are_the_eight_expected_files() -> None:
+def test_module_migrations_are_the_nine_expected_files() -> None:
     assert migrate.MODULE_MIGRATIONS == M10_MIGRATIONS
     assert [path.name for path in m10_migration_files()] == list(M10_MIGRATIONS)
     assert len(migrate.BASE_MIGRATIONS) == 19
@@ -180,4 +180,4 @@ def test_migration_number_segment() -> None:
     for name in M10_MIGRATIONS:
         number = int(name.split("_", 1)[0])
         assert 1000 <= number <= 1099, name
-    assert [int(name.split("_", 1)[0]) for name in M10_MIGRATIONS] == list(range(1000, 1008))
+    assert [int(name.split("_", 1)[0]) for name in M10_MIGRATIONS] == list(range(1000, 1009))

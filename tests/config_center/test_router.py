@@ -20,7 +20,7 @@ pytest.importorskip("httpx")
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.config_center import drift, registry, router
+from app.config_center import audit, drift, registry, router
 from configkit import apply_migrations, connect, create_schema, dsn, drop_schema
 
 NOW = datetime(2026, 10, 21, 2, 30, tzinfo=timezone.utc)          # 周三 10:30 CST
@@ -41,7 +41,12 @@ def router_schema(db, schema_prefix):
 
 
 @pytest.fixture(scope="module")
-def client(router_schema):
+def audit_sink():
+    return audit.InMemoryAuditSink()
+
+
+@pytest.fixture(scope="module")
+def client(router_schema, audit_sink):
     @contextmanager
     def factory():
         conn = psycopg.connect(dsn(), autocommit=False,
@@ -57,7 +62,7 @@ def client(router_schema):
 
     app = FastAPI()
     app.include_router(router.create_router(
-        connection_factory=factory, now_provider=lambda: NOW))
+        connection_factory=factory, now_provider=lambda: NOW, audit_sink=audit_sink))
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
 
@@ -76,6 +81,7 @@ def test_operation_ids_match_spec_1_2_1(client):
         "listConfigItems", "listConfigDrifts", "listConfigNamespaces", "getConfigItem",
         "getConfigDiff", "getConfigImpact", "createConfigDraft", "publishConfigItem",
         "approveConfigPublish", "rollbackConfigItem", "killSwitchConfigItem",
+        "promoteConfigPublish", "listConfigAudit",
     }
 
 
@@ -273,6 +279,34 @@ def test_kill_switch_endpoint(client):
                           json={"value": 1600, "ttl_seconds": 60, "reason": "借开关放宽"},
                           headers=PROPOSER)
     assert widened.status_code == 403 and widened.json()["error"]["code"] == 47004
+
+
+# ─────────────────────────────────────────────── S2：灰度推进 / M16 审计只读
+def test_promote_requires_gray_switch(client):
+    draft = client.post("/api/v1/admin/config/treasury.platform_share_bps",
+                        json=draft_payload(1500), headers=PROPOSER)
+    version = draft.json()["version"]
+    published = client.post("/api/v1/admin/config/treasury.platform_share_bps/publish",
+                            json={"version": version, "reason": "灰度推进测试"}, headers=PROPOSER)
+    request_id = published.json()["request_id"]
+    client.post(f"/api/v1/admin/config/publish-requests/{request_id}/approve",
+                json={"decision": "approve", "reason": "复核通过"}, headers=APPROVER)
+    promoted = client.post(f"/api/v1/admin/config/publish-requests/{request_id}/promote",
+                           json={"target_stage": "next_bucket"}, headers=PROPOSER)
+    assert promoted.status_code == 409
+    assert promoted.json()["error"]["code"] == 47007
+
+
+def test_audit_endpoint_lists_injected_sink(client, audit_sink):
+    response = client.get("/api/v1/admin/config/billing.service_fee_bps/audit",
+                          headers=PROPOSER, params={"limit": 20})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "m16-injected"
+    assert body["data"] and all(row["key"] == "billing.service_fee_bps" for row in body["data"])
+    assert any(row["action"] == "config.published" for row in body["data"])
+    # 审计事件来自真实动作，且不含明文敏感值
+    assert all("value" not in row for row in body["data"])
 
 
 # ─────────────────────────────────────────────── 漂移清单

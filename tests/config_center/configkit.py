@@ -34,6 +34,7 @@ M10_MIGRATIONS = (
     "1005_config_outbox.sql",
     "1006_publish_request_flow.sql",
     "1007_t4_emergency_and_delivery.sql",
+    "1008_outbox_backoff.sql",
 )
 
 M10_TABLES = ("config_items", "config_versions", "config_publish_requests",
