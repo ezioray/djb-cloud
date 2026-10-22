@@ -1,0 +1,13 @@
+{
+  "module": "M04",
+  "case": "boundary",
+  "description": "生效配额 = min(租户, Key, 节点)",
+  "input": {
+    "tenant": 100,
+    "key": 50,
+    "node": 20
+  },
+  "expect": {
+    "effective": 20
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "module": "M02",
+  "case": "boundary",
+  "description": "容量 0 允许公告但不接单",
+  "input": {
+    "capacity": 0
+  },
+  "expect": {
+    "accepted": false,
+    "http": 200
+  }
+}

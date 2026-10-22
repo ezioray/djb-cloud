@@ -1,0 +1,15 @@
+{
+  "module": "M06",
+  "case": "success",
+  "description": "借贷平衡分录落账并生成哈希链",
+  "input": {
+    "debit": "1101",
+    "credit": "4101",
+    "amount_micro": 1000,
+    "source_type": "usage_settle"
+  },
+  "expect": {
+    "http": 201,
+    "diff": 0
+  }
+}

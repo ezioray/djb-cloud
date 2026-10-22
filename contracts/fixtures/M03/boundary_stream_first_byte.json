@@ -1,0 +1,12 @@
+{
+  "module": "M03",
+  "case": "boundary",
+  "description": "SSE 首字节 P95 ≤1.2s 的契约字段存在",
+  "input": {
+    "stream": true
+  },
+  "expect": {
+    "http": 200,
+    "content_type": "text/event-stream"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "module": "M05",
+  "case": "boundary",
+  "description": "收据 24h 窗口边界",
+  "input": {
+    "age_hours": 24
+  },
+  "expect": {
+    "accepted": true,
+    "http": 201
+  }
+}

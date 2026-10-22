@@ -1,0 +1,13 @@
+{
+  "module": "M04",
+  "case": "success",
+  "description": "报价簿撮合返回 quote_id 与价格",
+  "input": {
+    "model": "m1",
+    "mode": "realtime"
+  },
+  "expect": {
+    "http": 200,
+    "has_quote": true
+  }
+}

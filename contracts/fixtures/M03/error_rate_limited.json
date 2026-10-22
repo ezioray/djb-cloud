@@ -1,0 +1,13 @@
+{
+  "module": "M03",
+  "case": "error",
+  "description": "超限返回 429 + Retry-After",
+  "input": {
+    "model": "m1",
+    "burst": 1000
+  },
+  "expect": {
+    "http": 429,
+    "retry_after": true
+  }
+}

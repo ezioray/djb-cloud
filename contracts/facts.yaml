@@ -1,0 +1,335 @@
+# DJB S1 facts（机器源，禁止手改）
+# 生成：python3 tools/gen_facts.py；校验：python3 tools/gen_facts.py --check
+# 人工源：product/v4/modules/03-facts.md
+version: 1
+generated_from: contracts/03-facts.md
+source_sha256: 89bd3f623e8211d5566c19e66aca511edb82f0cd297ba0241627aa90a5318c28
+rule: 机器源；由 tools/gen_facts.py 从 03-facts.md 生成，禁止手改。
+sections:
+- id: 1
+  title: 链与确认
+  owner: M08
+  facts:
+  - key: 一期链
+    value: Polygon PoS
+    note: TRON 延后到 S4；不建跨链桥
+  - key: 确认数
+    value: 64；大额 200
+    note: 大额阈值按日限额 50% 判定
+  - key: gas 预留
+    value: ≥10 POL
+    note: 低于此值暂停归集并告警
+- id: 2
+  title: 钱包池与扩容
+  owner: M08
+  facts:
+  - key: min_spare
+    value: '3'
+    note: ''
+  - key: max_active_hot / max_active_warm
+    value: 8 / 4
+    note: ''
+  - key: switch_threshold_pct
+    value: '70'
+    note: ''
+  - key: activate_batch_size
+    value: 4（1–8 可配）
+    note: ''
+  - key: provision_lead_time_h
+    value: '12'
+    note: ''
+  - key: 预测窗口 / 跨度
+    value: 14 天 / 7 天
+    note: ''
+  - key: 目标容量
+    value: ≥2× 7 天预测
+    note: ''
+  - key: 预生成触发
+    value: 预计利用率 >60%
+    note: ''
+  - key: 单钱包 cap
+    value: min(10,000 USD, 5 天预测)
+    note: ''
+  - key: 池合计上限
+    value: 50,000 USD 或 treasury 10%，取小
+    note: ''
+  - key: cap 被压下限
+    value: 1,000 USD
+    note: ''
+  - key: max_active 自动上调
+    value: 每次 +4，硬顶 20，只升不降
+    note: ''
+  - key: 批次 TTL
+    value: 24h
+    note: ''
+  - key: 一期池
+    value: Polygon × {客户热、客户温、平台温}；平台热池不建
+    note: ''
+- id: 3
+  title: 归集与出款
+  owner: M08
+  facts:
+  - key: 归集触发
+    value: 余额 > cap 60%，或每日 02:00（UTC+4）
+    note: ''
+  - key: 尘埃
+    value: <1 USDT 留下批
+    note: ''
+  - key: 归集签名
+    value: 逐批签，无免签
+    note: ''
+  - key: 大额延迟
+    value: 单笔 > 日限额 50% → 24h 链下队列，可撤销
+    note: ''
+  - key: 收款人白名单
+    value: 72h 冷却 + 首笔 ≤100 USDT 试转
+    note: ''
+  - key: 地址变更
+    value: 出款前 7 天禁改；24h 冷却；旧地址监听 ≥90 天
+    note: ''
+  - key: 分润节奏
+    value: 每周一 10:00（UTC+4）；单笔 ≥10 USDT，不足滚存
+    note: ''
+  - key: 出款资产
+    value: 只发 USDT
+    note: ''
+- id: 4
+  title: 费率、分润与 gas
+  owner: M04 / M08
+  facts:
+  - key: 平台费率默认
+    value: 1500 bps（15%）
+    note: ''
+  - key: 平台费率范围
+    value: 0–10000 bps；>3000 需决策人二次确认
+    note: ''
+  - key: 平台 / 共享方默认
+    value: 1500 / 8500 bps，和为 10000
+    note: ''
+  - key: 分级减免
+    value: −10% / −20% / −30% → 13.5% / 12% / 10.5%
+    note: ''
+  - key: 慢任务 / 组网折扣
+    value: 40% off / 50% off
+    note: ''
+  - key: gas 模式
+    value: INTERNAL 默认；EXTERNAL/PLATFORM、EXTERNAL/PAYER 可切；下一批生效
+    note: ''
+  - key: 预留池
+    value: 默认 30%，可调 10–50%；公共池保底 ≥50%
+    note: ''
+  - key: 生效规则
+    value: 下一结算周期生效；不追溯；写 policy_version 快照
+    note: ''
+- id: 5
+  title: 收款与退款
+  owner: M08
+  facts:
+  - key: 卡入账冻结
+    value: 10% × 90 天
+    note: ''
+  - key: 微信/支付宝
+    value: 5% × 30 天；默认关闭
+    note: ''
+  - key: 拒付窗口 / 证据
+    value: 120 天 / ≤7 天
+    note: ''
+  - key: 退款
+    value: 14 天、原路、扣渠道费与网络费；唯一 refund_request
+    note: ''
+  - key: 汇率加点
+    value: 0.3%（统一，不分档）
+    note: ''
+- id: 6
+  title: 账本
+  owner: M06
+  facts:
+  - key: 科目数
+    value: 42（资产 12 / 负债权益 12 / 收入 6 / 费用损失 10 / 非现金 2）
+    note: ''
+  - key: 资金事件
+    value: E1–E17
+    note: ''
+  - key: 收入口径
+    value: 毛额法：4101 全额，5501 成本
+    note: ''
+  - key: 不变量
+    value: I-1…I-29 全部 P0
+    note: ''
+  - key: 记账单位
+    value: 整数最小单位（USD 分）；不 UPDATE/DELETE
+    note: ''
+  - key: 冲正
+    value: 新分录 + reverse_of；原分录 void
+    note: ''
+  - key: Merkle
+    value: journal / audit / por / daily_close 四类根
+    note: ''
+- id: 7
+  title: 对账与储备
+  owner: M09
+  facts:
+  - key: 链上容差
+    value: 0（±1 最小单位）
+    note: ''
+  - key: PSP 容差
+    value: 到账 ±T+3；费率 ±0.10%
+    note: ''
+  - key: 银行容差
+    value: 到账 ±T+2；手续费 ±0.50 USD
+    note: ''
+  - key: 汇率容差
+    value: ±0.20%
+    note: ''
+  - key: 差异档位
+    value: P0 >1,000 USD 或结构性（15 分钟首响）；P1 100–1,000（1 小时）；P2 <100（1 个工作日）
+    note: ''
+  - key: 放款闸门
+    value: 未签核 / 存在未结 P0/P1 → 不放款
+    note: ''
+  - key: PoR
+    value: 覆盖率 ≥100%；缺口即停新业务
+    note: ''
+  - key: 脱锚
+    value: '>2% 且持续 24h → 停出款与兑换；损失进 5105'
+    note: ''
+- id: 8
+  title: 账户、权限与保留
+  owner: M01 / M14 / M16
+  facts:
+  - key: 账户状态
+    value: pending_verify → normal ⇄ frozen(frozen_until) → closing(30d) → closed
+    note: ''
+  - key: 冻结上限
+    value: 单次 ≤180 天
+    note: ''
+  - key: 后台角色
+    value: 8 个：SUPER / SVC / OPS / AUDIT / RISK / FIN / CS / VIEWER
+    note: ''
+  - key: 双人复核
+    value: 4h 作废；step-up ≤5 分钟
+    note: ''
+  - key: 会话
+    value: 30 分钟滑动 / 15 分钟空闲 / 12 小时绝对
+    note: ''
+  - key: break-glass
+    value: 只读；单次 ≤4h
+    note: ''
+  - key: 备份
+    value: 35 天（日 7 + 周 4）；季度恢复演练
+    note: ''
+  - key: 审计保留
+    value: 审计日志 ≥3 年（P0 ≥5 年）；配置审计 ≥3 年；凭证 ≥5 年；账本长期
+    note: ''
+- id: 9
+  title: 配置与发布
+  owner: M10
+  facts:
+  - key: S1 范围
+    value: 十域 key 注册 + schema 两道校验 + 受控发布 + 回滚 + LKG + 审计链 + 危险键禁改
+    note: ''
+  - key: 冷却
+    value: P0 24h / P1 60min / P2 无
+    note: ''
+  - key: 发布窗口
+    value: 工作日 10:00–17:00（UTC+8）
+    note: ''
+  - key: P0 回滚
+    value: 只允许人工
+    note: ''
+  - key: 灰度
+    value: S2–S3；1% → 5% → 25% → 100%，每步观测窗
+    note: ''
+  - key: 漂移
+    value: 每日扫描；三源对比
+    note: ''
+  - key: billing.gas_fee_mode
+    value: INTERNAL
+    note: 仅 INTERNAL / EXTERNAL；EXTERNAL 时必须指定承担方
+  - key: billing.gas_fee_bearer
+    value: PLATFORM
+    note: PLATFORM / PAYER（仅 EXTERNAL 生效）
+  - key: billing.gas_fee_scope
+    value: global
+    note: global / chain / batch
+  - key: billing.channel_fee_bps
+    value: '0'
+    note: S3 前不启用
+  - key: points.transfer_enabled
+    value: 'false'
+    note: 后台开关；默认不可转让（K4）；仅 admin 可开
+  - key: points.transfer_per_tx_cap
+    value: '1000'
+    note: 单笔转让上限（COP）
+  - key: points.transfer_daily_out_cap
+    value: '10000'
+    note: 单日转出上限（COP）
+  - key: points.transfer_daily_in_cap
+    value: '10000'
+    note: 单日转入上限（COP）
+  - key: points.transfer_lock_days
+    value: '7'
+    note: 转让锁定天数
+  - key: points.redeem_rate_bps
+    value: '10000'
+    note: 1 COP = 1 USD 分
+- id: 10
+  title: SLO 与阶段目标
+  owner: M03 / M16
+  facts:
+  - key: 首字节
+    value: P95 ≤1.2s（分区域）；网关额外 ≤20ms
+    note: ''
+  - key: 回调延迟 P95
+    value: ≤30s（支付通道）
+    note: ''
+  - key: S1 验收
+    value: ≥30 在线节点 · ≥8 模型 · ≥2 家上游；账本复算差异 0；收据差异率 ≤1%
+    note: ''
+  - key: S2 验收
+    value: 连续 ≥30 天公平治理 + 对账 0 未解决差异
+    note: ''
+  - key: S3 验收
+    value: 首次结算完成 + 连续 30 天零差异；PoR 首次 ≥100%
+    note: ''
+- id: 11
+  title: 客户端
+  owner: M15
+  facts:
+  - key: 阶段
+    value: S1 Linux CLI + daemon；S2 三平台最小托盘；S3 完整 GUI
+    note: ''
+  - key: 自动更新
+    value: 5% → 25% → 100%；每桶观测 ≥24h
+    note: ''
+  - key: A2 prompt
+    value: 五字段模板（目标、约束、输入、输出、验收）
+    note: ''
+  - key: 不做
+    value: 存储共享；内核扩展/显卡驱动静默安装；静默提权
+    note: ''
+- id: 12
+  title: 信誉与 COP
+  owner: M07
+  facts:
+  - key: 信誉分权重
+    value: 成功率 4000 / 延迟 3000 / 在线率 2000 / 让路 1000 bps，和 = 10000
+    note: ''
+  - key: 信誉窗口
+    value: 30 天（7–90 可配）
+    note: ''
+  - key: 等级
+    value: L1–L5；L5 仅人工授予；等级会掉级
+    note: ''
+  - key: 邀请比例 / 时长
+    value: 400 bps / 12 个月（单层）
+    note: ''
+  - key: COP 可提现 / 可转让
+    value: 不可提现；转让默认关（points.transfer_enabled=false）
+    note: ''
+  - key: 转让限额
+    value: 单笔 1000；单日转出 10000；单日转入 10000；锁定 7 天
+    note: ''
+  - key: 兑换
+    value: 1 COP = 1 USD 分（points.redeem_rate_bps=10000）
+    note: ''

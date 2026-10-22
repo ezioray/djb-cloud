@@ -1,0 +1,2 @@
+# 架构门禁 allowlist（格式：相对路径:目标包；仅 Lead 批准）
+# 例：app/identity/bootstrap.py:app.config_center

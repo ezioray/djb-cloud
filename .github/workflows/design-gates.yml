@@ -1,0 +1,30 @@
+name: design-gates
+
+on:
+  push:
+    branches: [main, integration, "feat/**", "chore/**", "fix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  design-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install pyyaml
+      - name: Facts (03-facts → facts.yaml)
+        run: python tools/gen_facts.py --check
+      - name: Fixtures
+        run: python tools/ci/fixtures_check.py
+      - name: Migration numbering
+        run: python tools/ci/migration_check.py
+      - name: Architecture boundaries
+        run: python tools/ci/architecture_check.py
+      - name: Event registry
+        run: python tools/ci/event_schema.py

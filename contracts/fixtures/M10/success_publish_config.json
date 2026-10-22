@@ -1,0 +1,14 @@
+{
+  "module": "M10",
+  "case": "success",
+  "description": "草稿→发布→双人复核→active",
+  "input": {
+    "key": "billing.gas_fee_mode",
+    "value": "INTERNAL",
+    "approver": "u2"
+  },
+  "expect": {
+    "http": 200,
+    "state": "active"
+  }
+}

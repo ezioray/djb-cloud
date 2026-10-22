@@ -1,0 +1,12 @@
+{
+  "module": "M06",
+  "case": "boundary",
+  "description": "金额为 0 拒绝",
+  "input": {
+    "amount_micro": 0
+  },
+  "expect": {
+    "http": 422,
+    "error": "42220"
+  }
+}

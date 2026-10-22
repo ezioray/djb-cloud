@@ -1,0 +1,12 @@
+{
+  "module": "M10",
+  "case": "boundary",
+  "description": "P0 键 24h 冷却边界",
+  "input": {
+    "key": "treasury.platform_share_bps",
+    "elapsed_hours": 24
+  },
+  "expect": {
+    "allowed": true
+  }
+}

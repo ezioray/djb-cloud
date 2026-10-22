@@ -1,0 +1,12 @@
+{
+  "module": "M04",
+  "case": "error",
+  "description": "无可用节点返回 NO_ROUTE",
+  "input": {
+    "model": "unknown"
+  },
+  "expect": {
+    "http": 503,
+    "error": "NO_ROUTE"
+  }
+}

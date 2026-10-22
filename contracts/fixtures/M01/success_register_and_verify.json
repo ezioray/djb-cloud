@@ -1,0 +1,14 @@
+{
+  "module": "M01",
+  "case": "success",
+  "description": "注册→验证码→normal，返回 account_id 与会话",
+  "input": {
+    "email": "user@example.test",
+    "password": "S3cret!",
+    "verify_code": "123456"
+  },
+  "expect": {
+    "state": "normal",
+    "http": 201
+  }
+}

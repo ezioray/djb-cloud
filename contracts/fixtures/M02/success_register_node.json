@@ -1,0 +1,16 @@
+{
+  "module": "M02",
+  "case": "success",
+  "description": "节点注册返回 node_id 与 protocol_version",
+  "input": {
+    "pubkey": "ed25519:...",
+    "models": [
+      "m1"
+    ],
+    "protocol_version": "1.0"
+  },
+  "expect": {
+    "http": 201,
+    "state": "pending_review"
+  }
+}

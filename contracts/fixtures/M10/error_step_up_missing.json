@@ -1,0 +1,13 @@
+{
+  "module": "M10",
+  "case": "error",
+  "description": "缺 step-up 返回 424/42401",
+  "input": {
+    "key": "treasury.platform_share_bps",
+    "value": 3000
+  },
+  "expect": {
+    "http": 424,
+    "error": "42401"
+  }
+}

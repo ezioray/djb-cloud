@@ -1,0 +1,12 @@
+{
+  "module": "M02",
+  "case": "error",
+  "description": "frozen 节点心跳返回 40305",
+  "input": {
+    "node_id": "n_frozen"
+  },
+  "expect": {
+    "http": 403,
+    "error": "40305"
+  }
+}

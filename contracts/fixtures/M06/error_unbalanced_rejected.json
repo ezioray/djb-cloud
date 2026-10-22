@@ -1,0 +1,15 @@
+{
+  "module": "M06",
+  "case": "error",
+  "description": "借贷不平衡拒绝",
+  "input": {
+    "debit": "1101",
+    "credit": "4101",
+    "amount_micro": 1000,
+    "credit_micro": 999
+  },
+  "expect": {
+    "http": 422,
+    "error": "40920"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "module": "M05",
+  "case": "success",
+  "description": "供方/需方双签收据受理",
+  "input": {
+    "usage_id": "u1",
+    "sig_provider": "...",
+    "sig_consumer": "..."
+  },
+  "expect": {
+    "http": 201,
+    "settled": true
+  }
+}

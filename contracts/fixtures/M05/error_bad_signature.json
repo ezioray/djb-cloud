@@ -1,0 +1,13 @@
+{
+  "module": "M05",
+  "case": "error",
+  "description": "签名不符拒绝",
+  "input": {
+    "usage_id": "u1",
+    "sig_provider": "bad"
+  },
+  "expect": {
+    "http": 422,
+    "error": "42220"
+  }
+}

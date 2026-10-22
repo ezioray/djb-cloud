@@ -1,0 +1,13 @@
+{
+  "module": "M01",
+  "case": "error",
+  "description": "closed 账户不可再冻结",
+  "input": {
+    "account_id": "acc_closed",
+    "action": "freeze"
+  },
+  "expect": {
+    "http": 409,
+    "error": "40920"
+  }
+}

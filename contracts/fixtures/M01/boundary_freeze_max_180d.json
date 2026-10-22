@@ -1,0 +1,12 @@
+{
+  "module": "M01",
+  "case": "boundary",
+  "description": "冻结 180 天允许，181 天拒绝",
+  "input": {
+    "days": 180
+  },
+  "expect": {
+    "state": "frozen",
+    "http": 200
+  }
+}

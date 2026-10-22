@@ -1,0 +1,18 @@
+{
+  "module": "M03",
+  "case": "success",
+  "description": "非流式对话返回 usage 与 request_id",
+  "input": {
+    "model": "m1",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ]
+  },
+  "expect": {
+    "http": 200,
+    "has_usage": true
+  }
+}
