@@ -70,8 +70,8 @@ def test_migration_segment_is_1000_to_1099_and_unique():
         assert number not in numbers, f"{path.name} 与 {numbers[number]} 编号重复"
         numbers[number] = path.name
     module_numbers = sorted(n for n in numbers if 1000 <= n <= 1099)
-    assert module_numbers == list(range(1000, 1007))                      # 1000–1006
-    assert len(migrate.MODULE_MIGRATIONS) == 7
+    assert module_numbers == list(range(1000, 1008))                      # 1000–1007
+    assert len(migrate.MODULE_MIGRATIONS) == 8
     assert set(migrate.MODULE_MIGRATIONS) == {numbers[n] for n in module_numbers}
     # 迁移段独占：M11 的 1100+ 尚未出现，本任务不越界
     assert all(n < 1100 for n in module_numbers)

@@ -19,8 +19,8 @@
 """
 from __future__ import annotations
 
-from . import (canonical, errors, facts, features, migrate, outbox, publish, registry, store,
-               units, validators)
+from . import (canonical, dispatcher, drift, errors, facts, features, migrate, outbox, publish,
+               registry, snapshot, store, units, validators)
 from .canonical import (
     canonical_json,
     policy_version,
@@ -86,8 +86,8 @@ from .validators import (
 
 __all__ = [
     # 子模块
-    "canonical", "errors", "facts", "features", "migrate", "outbox", "publish", "registry",
-    "store", "units", "validators",
+    "canonical", "dispatcher", "drift", "errors", "facts", "features", "migrate", "outbox",
+    "publish", "registry", "snapshot", "store", "units", "validators",
     # 摘要
     "canonical_json", "sha256_hex", "version_digest", "request_digest", "snapshot_digest",
     "policy_version",

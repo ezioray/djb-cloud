@@ -121,7 +121,7 @@ def test_pending_and_mark_published(conn):
 
 def test_outbox_is_append_only(conn):
     row = outbox.append_event(conn, published())
-    assert_db_error(conn, "only published_at", lambda c: c.execute(
+    assert_db_error(conn, "only delivery fields", lambda c: c.execute(
         "UPDATE config_outbox SET payload = %s WHERE event_id = %s",
         (Jsonb({"x": 1}), row["event_id"])))
     assert_db_error(conn, "append-only", lambda c: c.execute(
@@ -129,7 +129,7 @@ def test_outbox_is_append_only(conn):
     assert_db_error(conn, "TRUNCATE not allowed", lambda c: c.execute("TRUNCATE config_outbox"))
     # 已投递的不能改回去
     outbox.mark_published(conn, row["event_id"], published_at=NOW)
-    assert_db_error(conn, "only published_at NULL", lambda c: c.execute(
+    assert_db_error(conn, "write-once", lambda c: c.execute(
         "UPDATE config_outbox SET published_at = NULL WHERE event_id = %s", (row["event_id"],)))
 
 
