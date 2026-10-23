@@ -49,6 +49,12 @@ RECEIPT_STATES: tuple[str, ...] = ("accepted", "rejected", "expired")      # spe
 #: 亏损池原因（M05 §6 流程 3 / §7 兜底切换与流式中断；T4 扩展需登记）
 LOSS_POOL_REASONS: tuple[str, ...] = (
     "fallback_switch", "stream_interrupt", "upstream_consumed")
+#: 上游账单导入的期间形状（spec ``UpstreamBillImportRequest.period``：YYYY-MM）
+BILL_PERIOD_PATTERN = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
+#: 单次账单导入的行数上限（spec ``rows`` maxItems=500，与收据批同一口径）
+BILL_ROWS_MAX = BATCH_MAX
+#: 幂等键 / 证据引用长度（与 503/504 DDL 对齐）
+MAX_REQUEST_KEY_LEN = 200
 
 # ─────────────────────────────────────────────────────────── 金额（00-conventions §3 / facts §6）
 #: USD 分：1 USD = 100 分（S1 只有 USD，03-facts §6 记账单位）
@@ -59,6 +65,9 @@ PRICE_MICRO_SCALE = 6
 MICRO_PER_MINOR = 10 ** (PRICE_MICRO_SCALE - MINOR_UNIT_SCALE)            # 1e4
 #: 展示/往返用币种代码（S1 仅 USD；非 USD 在入口拒绝，不做汇率换算）
 CURRENCY = "USD"
+#: 比例换算（00-conventions §3.5：比例用 bps，万分之一；1% = 100 bps）
+BPS_PER_PCT = 100
+BPS_DENOMINATOR = 10_000
 
 # ─────────────────────────────────────────────────────────── 长度上限（与 501/502 DDL 逐条对齐）
 MAX_ID_LEN = 128
@@ -112,7 +121,10 @@ TABLES: tuple[str, ...] = (
     "usage_corrections",
     "upstream_bills",
     "loss_pool_entries",
+    "metering_outbox",
 )
+#: 事件 outbox（02-events §2.1「本地事务 + outbox」；CR-5 已批准，迁移 506）
+OUTBOX_TABLE = "metering_outbox"
 #: 只读依赖：跨模块只读**视图**（01-ownership §2 / 00-conventions §7.4）
 NODE_SNAPSHOT_VIEW = "v_supply_node_snapshot"        # M02：节点身份 / 归属 / 生命周期
 ACCOUNT_VIEW = "v_identity_accounts"                 # M01：账户状态（T3 起用，T1/T2 只登记）
@@ -134,6 +146,27 @@ EVENT_AGGREGATE_TYPE: dict[str, str] = {
     "usage.recorded": "usage_record",
     "usage.settled": "usage_record",
 }
+#: 投递语义（02-events §2.3 / §2.4）：指数退避 1s/5s/30s/5min/30min，最多 8 次后进死信
+EVENT_BACKOFF_S: tuple[int, ...] = (1, 5, 30, 300, 1_800)
+EVENT_MAX_ATTEMPTS = 8
+#: 派发批大小（单次 drain 的默认上限；与 M04/M06 同款口径）
+OUTBOX_PENDING_PAGE_DEFAULT = 100
+#: 已发布事件的保留天数（M05 §5：metering_outbox「已发布 30 天」）
+OUTBOX_PUBLISHED_RETENTION_DAYS = 30
+#: last_error 截断长度（不把堆栈 / 连接串写进库）
+OUTBOX_ERROR_MAX_LEN = 200
+
+# ─────────────────────────────────────────────────────────── M06 E6 计量结算（M05 §6 流程 2）
+#: E6「计量结算与消耗」：借 2101（服务预付款）/ 贷 4101（服务费收入，毛额法全额）
+#: 出处：product/v4/src/20-payment-ledger.md §20.3.1 E6 · 03-facts §6 收入口径（毛额法）
+E6_EVENT_TYPE = "E6"
+E6_SOURCE_TYPE = "usage_settle"
+E6_EVENT_SEQ = 1
+E6_ENTRY_TYPE = "consume"
+E6_LINES: tuple[tuple[str, str], ...] = (("2101", "D"), ("4101", "C"))
+#: 贷方行用科目账户（M06 约定 coa:<code>），借方行用需方账户
+E6_CREDIT_ACCOUNT = "coa:4101"
+
 #: 本模块**消费**的事件（M05 §4.2；T3 接线，T1/T2 只登记幂等口径）
 CONSUMED_EVENTS: dict[str, str] = {
     "request.completed": "request_id",        # 缺失时以收据为准并标 estimated

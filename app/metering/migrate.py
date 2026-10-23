@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""M05 迁移执行器：501–505 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
+"""M05 迁移执行器：501–508 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
 
 为什么回滚 SQL 放在 Python 里而不是 ``migrations/5xx_*_down.sql``：
 CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执行（M02/M04/M06/M10 同因），
@@ -13,7 +13,7 @@ CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执�
     python -m app.metering.migrate --schema m05_t12_x --status
 
 ``--up`` 先应用**前置段**（编号 < 500 的全部迁移：001–006 / 1xx / 2xx / 4xx），再按数字序
-应用 501–505——M05 只依赖 M02 的节点视图与 M01 的账户口径，其余模块与本模块无关。
+应用 501–508——M05 只依赖 M02 的节点视图与 M01 的账户口径，其余模块与本模块无关。
 ``--down`` 只回滚 5xx，**不动**任何前置对象。
 """
 from __future__ import annotations
@@ -52,10 +52,66 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "503_usage_corrections.sql": ("table", "usage_corrections", ""),
     "504_upstream_bills.sql": ("table", "upstream_bills", ""),
     "505_loss_pool_entries.sql": ("table", "loss_pool_entries", ""),
+    "506_metering_outbox.sql": ("table", "metering_outbox", ""),
+    "507_usage_corrections_request_key.sql": ("column", "usage_corrections", "request_key"),
+    # 508 只放宽状态机（不新增对象）→ 无独立标记，status 里标 note
 }
 
 #: 回滚：逆序删本模块新增对象（**不碰**任何前置对象；可重复执行）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("509_corrections_review_check.sql", """
+        -- 收回 509 的放宽：恢复 503 的「负向校正必须有复核人」硬约束
+        ALTER TABLE IF EXISTS usage_corrections DROP CONSTRAINT IF EXISTS usage_corrections_review_ck;
+        ALTER TABLE IF EXISTS usage_corrections ADD CONSTRAINT usage_corrections_review_ck
+          CHECK (delta_minor > 0 OR second_approver IS NOT NULL) NOT VALID;
+    """),
+    ("508_usage_state_settled_to_corrected.sql", """
+        -- 收回 settled → corrected：恢复 501 的状态机（recorded 出发两条边）
+        CREATE OR REPLACE FUNCTION m05_usage_state_guard() RETURNS trigger AS $$
+        DECLARE
+          mutable TEXT[] := ARRAY['state', 'settled_at', 'corrected_at', 'correction_id'];
+        BEGIN
+          IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'usage_records is append-only: DELETE not allowed (M05 INV-06)'
+              USING ERRCODE = '42501';
+          END IF;
+          IF (to_jsonb(NEW) - mutable) IS DISTINCT FROM (to_jsonb(OLD) - mutable) THEN
+            RAISE EXCEPTION 'usage_records: only state machine columns may change (M05 INV-06)'
+              USING ERRCODE = '42501';
+          END IF;
+          IF OLD.state = NEW.state THEN
+            IF to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN
+              RAISE EXCEPTION 'usage_records: no-op state update with changed columns is not allowed'
+                USING ERRCODE = '42501';
+            END IF;
+            RETURN NEW;
+          END IF;
+          IF NOT (OLD.state = 'recorded' AND NEW.state IN ('settled', 'corrected')) THEN
+            RAISE EXCEPTION 'usage_records: illegal transition % -> % (M05 §3)',
+              OLD.state, NEW.state USING ERRCODE = '42501';
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """),
+    ("507_usage_corrections_request_key.sql", """
+        DROP INDEX IF EXISTS usage_corrections_request_key_uq;
+        ALTER TABLE IF EXISTS usage_corrections
+          DROP CONSTRAINT IF EXISTS usage_corrections_request_key_ck;
+        ALTER TABLE IF EXISTS usage_corrections DROP COLUMN IF EXISTS request_key;
+    """),
+    ("506_metering_outbox.sql", """
+        DROP TRIGGER IF EXISTS metering_outbox_insert_guard ON metering_outbox;
+        DROP TRIGGER IF EXISTS metering_outbox_no_truncate ON metering_outbox;
+        DROP TRIGGER IF EXISTS metering_outbox_guard ON metering_outbox;
+        DROP FUNCTION IF EXISTS m05_outbox_insert_guard();
+        DROP FUNCTION IF EXISTS m05_outbox_guard();
+        DROP INDEX IF EXISTS metering_outbox_published_idx;
+        DROP INDEX IF EXISTS metering_outbox_aggregate_idx;
+        DROP INDEX IF EXISTS metering_outbox_pending_idx;
+        DROP INDEX IF EXISTS metering_outbox_idempotency_uq;
+        DROP TABLE IF EXISTS metering_outbox;
+    """),
     ("505_loss_pool_entries.sql", """
         DROP TRIGGER IF EXISTS loss_pool_no_truncate ON loss_pool_entries;
         DROP TRIGGER IF EXISTS loss_pool_no_mutation ON loss_pool_entries;
@@ -190,7 +246,13 @@ def status(conn: psycopg.Connection) -> list[dict[str, Any]]:
     """每个 5xx 迁移是否已应用。"""
     report: list[dict[str, Any]] = []
     for name in MODULE_MIGRATIONS:
-        kind, table, column = _MARKERS[name]
+        marker = _MARKERS.get(name)
+        if marker is None:
+            # 508 之类「只放宽约束、不新增对象」的迁移没有独立标记（不能靠猜）
+            report.append({"name": name, "applied": None,
+                           "note": "无独立对象（约束放宽型迁移）"})
+            continue
+        kind, table, column = marker
         report.append({"name": name, "applied": _exists(conn, kind, table, column)})
     return report
 
@@ -230,7 +292,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"down {item['name']} rc={item['rc']} statements={item['statements']}")
         else:
             for item in status(conn):
-                print(f"{'APPLIED ' if item['applied'] else 'MISSING '} {item['name']}")
+                if item["applied"] is None:
+                    print(f"UNKNOWN  {item['name']}  ({item.get('note', '')})")
+                else:
+                    print(f"{'APPLIED ' if item['applied'] else 'MISSING '} {item['name']}")
         return 0
     except Exception as exc:                                       # pragma: no cover - CLI
         print(f"迁移失败：{type(exc).__name__}: {exc}", file=sys.stderr)

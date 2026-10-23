@@ -190,7 +190,7 @@ def test_facts_enums_match_spec():
 
 def test_facts_tables_match_ownership():
     assert facts.TABLES == ("usage_records", "metering_receipts", "usage_corrections",
-                            "upstream_bills", "loss_pool_entries")
+                            "upstream_bills", "loss_pool_entries", "metering_outbox")
     assert facts.NODE_SNAPSHOT_VIEW == "v_supply_node_snapshot"
 
 
@@ -229,6 +229,9 @@ def _fixtures() -> list[dict]:
             for path in sorted(FIXTURES_DIR.glob("*.json"))]
 
 
+ALLOWED_HTTP = {200, 201, 202, 400, 401, 403, 404, 409, 413, 422, 424, 429, 500}
+
+
 def test_m05_fixtures_exist_and_match_schema():
     """``contracts/fixtures/M05/*.json`` 必须符合 ``_schema.json``（只校验结构，不改他人文件）。"""
     payloads = _fixtures()
@@ -240,6 +243,21 @@ def test_m05_fixtures_exist_and_match_schema():
         assert item["module"] == "M05"
         assert isinstance(item["input"], dict) and isinstance(item["expect"], dict)
         assert item["description"].strip()
+        http = item["expect"].get("http")
+        if http is not None:
+            assert http in ALLOWED_HTTP, (item["case"], http)
+
+
+def test_fixtures_cover_m05_contract_surface():
+    """T5：fixtures 覆盖 收据 / 明细分页 / 校正复核 / 账单容差 / outbox 五个面。"""
+    descriptions = " ".join(item["description"] for item in _fixtures())
+    for keyword in ("双签", "明细", "校正", "账单", "outbox"):
+        assert keyword in descriptions, keyword
+    receipt_fixtures = [item for item in _fixtures() if "receipt" in str(item["input"])]
+    assert receipt_fixtures, "缺收据类 fixture"
+    assert all(item["expect"].get("http") != 201 for item in receipt_fixtures
+               if item["case"] in {"success", "boundary"}), \
+        "spec 的 POST /node/receipts 成功响应是 200（不是 201）"
 
 
 def test_bad_signature_fixture_code_is_tracked_against_spec_46001():

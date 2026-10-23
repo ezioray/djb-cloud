@@ -7,6 +7,6 @@
   },
   "expect": {
     "accepted": true,
-    "http": 201
+    "http": 200
   }
 }

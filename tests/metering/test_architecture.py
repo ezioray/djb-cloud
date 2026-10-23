@@ -67,6 +67,18 @@ def _is_local(root: str) -> bool:
     return (MODULE_DIR / f"{root}.py").exists() or (MODULE_DIR / root).is_dir()
 
 
+def test_rollback_sql_only_drops_m05_objects():
+    """回滚 SQL 在 migrate.py 里：只允许 DROP 本模块对象，不得 ALTER / DROP 上游表。"""
+    from app.metering import migrate
+
+    for name, script in migrate.DOWN_SQL:
+        for match in re.finditer(r"DROP TABLE IF EXISTS\s+([a-z_][a-z0-9_]*)", script):
+            assert match.group(1) in M05_TABLES, (name, match.group(1))
+        for table in UPSTREAM_BASE_TABLES:
+            assert f"ALTER TABLE {table}" not in script, (name, table)
+            assert f"DROP TABLE IF EXISTS {table}" not in script, (name, table)
+
+
 def test_no_cross_module_imports():
     offenders: list[str] = []
     for path in _module_files():
@@ -95,6 +107,8 @@ def test_sql_only_touches_own_tables_and_allowed_views():
     allowed = set(M05_TABLES) | ALLOWED_FOREIGN_OBJECTS | extra
     offenders: list[str] = []
     for path in _module_files():
+        if path.name == "migrate.py":
+            continue                      # 回滚 DDL 由 test_migrations + DOWN_SQL 专项检查
         for literal in _string_literals(path):
             for match in SQL_TABLE_RE.finditer(literal):
                 table = match.group(1).lower()

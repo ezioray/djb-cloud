@@ -1,0 +1,17 @@
+{
+  "module": "M05",
+  "case": "error",
+  "description": "校正 ≥50 USD 缺复核人 → 409 + 40902（spec 双人复核）",
+  "input": {
+    "usage_id": "u1",
+    "delta": {
+      "amount": "80.00",
+      "unit": "USD"
+    },
+    "reason_code": "underbill"
+  },
+  "expect": {
+    "http": 409,
+    "error": "40902"
+  }
+}

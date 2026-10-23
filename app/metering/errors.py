@@ -123,6 +123,22 @@ class NodeIdentityMismatch(InvalidArgument):
     reason = "node_identity_mismatch"
 
 
+class Conflict(MeteringError):
+    """状态冲突（40902）：双人复核缺失 / 复核人 = 操作人 / 校正累计超额（M05 INV-08）。"""
+
+    status_code = 409
+    code = "40902"
+    reason = "state_conflict"
+
+
+class StepUpRequired(MeteringError):
+    """管理面高危动作缺少 step-up（424 / 42401；spec AdminStepUp）。"""
+
+    status_code = 424
+    code = "42401"
+    reason = "step_up_required"
+
+
 # --------------------------------------------------------------------------- 404xx
 class NotFound(MeteringError):
     status_code = 404
@@ -156,6 +172,14 @@ class StoreUnavailable(MeteringError):
     reason = "store_unavailable"
 
 
+class LedgerUnavailable(MeteringError):
+    """M06 账本 provider 未接线（同步落账仅管理面重放用；fail-closed，不假装已入账）。"""
+
+    status_code = 500
+    code = "50001"
+    reason = "ledger_unavailable"
+
+
 _ERROR_TYPES = {
     400: "invalid_request_error",
     401: "authentication_error",
@@ -178,6 +202,8 @@ def error_type_for(status_code: int) -> str:
 __all__ = [
     "MeteringError", "InvalidArgument", "AmountPrecisionRejected", "UnsupportedCurrency",
     "BatchTooLarge", "ReceiptWindowExceeded", "DuplicateRequestAttempt", "AmountMismatch",
-    "AuthUnavailable", "Unauthorized", "Forbidden", "NodeIdentityMismatch", "NotFound",
-    "SignatureMismatch", "KeysUnavailable", "StoreUnavailable", "error_type_for",
+    "AuthUnavailable", "Unauthorized", "Forbidden", "NodeIdentityMismatch", "Conflict",
+    "StepUpRequired", "NotFound",
+    "SignatureMismatch", "KeysUnavailable", "StoreUnavailable", "LedgerUnavailable",
+    "error_type_for",
 ]

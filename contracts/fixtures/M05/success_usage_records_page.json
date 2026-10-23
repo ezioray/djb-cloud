@@ -1,0 +1,14 @@
+{
+  "module": "M05",
+  "case": "success",
+  "description": "用量明细游标分页（默认 50、上限 200）",
+  "input": {
+    "account_id": "acc_1",
+    "limit": 50
+  },
+  "expect": {
+    "http": 200,
+    "data_is_array": true,
+    "page_has_more": true
+  }
+}

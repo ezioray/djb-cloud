@@ -31,9 +31,13 @@ M05_MIGRATIONS = (
     "503_usage_corrections.sql",
     "504_upstream_bills.sql",
     "505_loss_pool_entries.sql",
+    "506_metering_outbox.sql",
+    "507_usage_corrections_request_key.sql",
+    "508_usage_state_settled_to_corrected.sql",
+    "509_corrections_review_check.sql",
 )
 M05_TABLES = ("usage_records", "metering_receipts", "usage_corrections", "upstream_bills",
-              "loss_pool_entries")
+              "loss_pool_entries", "metering_outbox")
 #: 跨模块只读视图（01-ownership §2 / 00-conventions §7.4）
 SUPPLY_VIEWS = ("v_supply_node_snapshot", "v_supply_capacity_latest")
 IDENTITY_VIEWS = ("v_identity_accounts",)

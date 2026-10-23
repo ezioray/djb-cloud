@@ -20,9 +20,16 @@
     signing.py        6 字段规范串 + 双侧 HMAC-SHA256 验签（CR-2，密钥只做引用）
     models.py         UUIDv7 / 收据解析 / 受理结论 / 用量行（纯函数）
     events.py         ``receipt.signed`` / ``usage.recorded`` / ``usage.settled`` 信封（T3 投递）
+    events.py         ``receipt.signed`` / ``usage.recorded`` / ``usage.settled`` 信封
+    outbox.py         本地事务 + outbox：同事务入队 / 至少一次派发 / 退避 / 死信 / 保留期
+    settlement.py     M06 E6 的注入式对接（同步仅管理面重放，默认被开关挡住）
+    consumers.py      消费 request.completed / request.failed / booking.created / config.published
     receipts.py       批量受理：幂等 + 24h 窗口 + 双签 + 金额复核 + 同事务落库
     usage.py          用量汇总（model / day）与明细（游标分页）
-    migrate.py        501–505 迁移与回滚（证据用 CLI）
+    corrections.py    校正：只追加 + 累计不超原额 + 双人复核 + 幂等键
+    bills.py          上游账单导入（幂等 / 1% 容差 / >1% 追加校正）
+    loss_pool.py      亏损池：只记「上游已消耗、用户未计费」，注入 sink 接 M06
+    migrate.py        501–508 迁移与回滚（证据用 CLI）
     router.py         4 个端点（**不接 app/api.py**，由 Lead 合并时 include）
 
 边界：不 import 任何其它 ``app.*`` 业务模块（只用 ``app.db``）；节点存在性只读 M02 的
@@ -31,12 +38,13 @@
 """
 from __future__ import annotations
 
-from . import (amounts, clock, config_source, errors, events, facts, features, models,
-               receipts, signing, usage)
+from . import (amounts, bills, clock, config_source, consumers, corrections, errors, events,
+               facts, features, loss_pool, models, outbox, receipts, settlement, signing, usage)
 
-__version__ = "0.2.0-dev-m05t2"
+__version__ = "0.5.0-dev-m05t5"
 
 __all__ = [
     "facts", "errors", "clock", "config_source", "features", "amounts", "signing", "models",
-    "events", "receipts", "usage",
+    "events", "outbox", "settlement", "consumers", "receipts", "usage", "corrections", "bills",
+    "loss_pool",
 ]
