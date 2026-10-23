@@ -68,8 +68,8 @@ def test_headers_carry_event_timestamp_and_signature():
 def test_payload_has_contract_fields_and_no_bodies(hc):
     batch = _batch(hc)
     payload = webhook.build_payload(event_type="batch.queued", batch=batch, occurred_at=NOW)
-    assert set(payload) == {"event", "batch_id", "status", "progress", "eta_seconds",
-                            "checkpoint_resumes", "occurred_at", "cost"}
+    assert set(payload) == {"event", "batch_id", "account_id", "status", "progress",
+                            "eta_seconds", "checkpoint_resumes", "occurred_at", "cost"}
     assert payload["progress"] == {"completed": 0, "total": 3}
     assert payload["cost"] == {"estimated": {"amount": "5.00", "unit": "USD"}}
     assert payload["occurred_at"].endswith("Z")
