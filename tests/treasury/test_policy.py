@@ -315,7 +315,10 @@ def test_refund_window_route_and_amounts():
     policy.check_refund_window(deadline, NOW)
     with pytest.raises(errors.Conflict):
         policy.check_refund_window(deadline, deadline + timedelta(seconds=1))
-    policy.check_original_route("psp:mock:txn-1", "PSP:mock:txn-1")
+    policy.check_original_route("psp:mock:txn-1", "psp:mock:txn-1")
+    # 1.2.7：提供时必须逐字相等（大小写不同也算不一致）
+    with pytest.raises(errors.Conflict):
+        policy.check_original_route("psp:mock:txn-1", "PSP:mock:txn-1")
     with pytest.raises(errors.Conflict):
         policy.check_original_route("psp:mock:txn-1", "psp:mock:txn-2")
     with pytest.raises(errors.BadRequest):
@@ -374,3 +377,23 @@ def test_address_whitelist_rules():
 def test_utilization_pct():
     assert policy.utilization_pct(balance_minor=70, cap_minor=100) == 70
     assert policy.utilization_pct(balance_minor=1, cap_minor=0) == 100
+
+
+def test_successful_routes_and_resolution():
+    attempts = [
+        {"provider": "mock", "provider_txn_id": "txn-1", "status": "failed"},
+        {"provider": "mock", "provider_txn_id": "txn-2", "status": "succeeded"},
+        {"provider": "mock", "provider_txn_id": None, "status": "succeeded"},
+    ]
+    assert policy.successful_routes(attempts) == ("psp:mock:txn-2",)
+    assert policy.resolve_original_route(attempts) == "psp:mock:txn-2"
+    with pytest.raises(errors.Conflict) as none_error:
+        policy.resolve_original_route([{"provider": "mock", "provider_txn_id": "t",
+                                        "status": "failed"}])
+    assert none_error.value.reason == "original_route_unavailable"
+    with pytest.raises(errors.Conflict) as multi_error:
+        policy.resolve_original_route([
+            {"provider": "mock", "provider_txn_id": "a", "status": "succeeded"},
+            {"provider": "mock", "provider_txn_id": "b", "status": "succeeded"},
+        ])
+    assert multi_error.value.reason == "original_route_unavailable"

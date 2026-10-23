@@ -142,7 +142,10 @@ def get_order_view(conn: Any, identifier: str, *, account_id: str | None) -> dic
     if row is None:
         raise NotFound("支付订单不存在")
     attempts = store.list_attempts(conn, str(row["order_id"]))
-    return models.order_detail_payload(row, attempts)
+    # 1.2.7：只回掩码；唯一成功 attempt 才可确定原路（0 条或 >1 条 → null）
+    routes = policy.successful_routes(attempts)
+    masked = models.mask_original_route(routes[0]) if len(routes) == 1 else None
+    return models.order_detail_payload(row, attempts, original_route_masked=masked)
 
 
 def cancel_order(conn: Any, identifier: str, *, account_id: str | None,
