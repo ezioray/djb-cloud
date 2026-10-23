@@ -201,3 +201,30 @@ def test_reputation_routes_are_wired():
     for method, path in paths:
         response = client.request(method, path, json={})
         assert response.status_code != 404, (method, path, response.status_code)
+
+
+# ── M11 风控接线（spec 1.2.4）──────────────────────────────────────────────
+
+def test_risk_endpoints_require_admin():
+    for path in ("/api/v1/admin/risk/rules", "/api/v1/admin/risk/cases",
+                 "/api/v1/admin/risk/limits?subject_type=account&subject_id=x"):
+        response = client.get(path)
+        assert response.status_code == 401, (path, response.status_code, response.text[:160])
+        assert response.json()["error"]["code"] == 40101
+
+
+def test_risk_routes_are_wired():
+    paths = [
+        ("GET", "/api/v1/admin/risk/rules"),
+        ("POST", "/api/v1/admin/risk/rules"),
+        ("GET", "/api/v1/admin/risk/limits"),
+        ("POST", "/api/v1/admin/risk/limits"),
+        ("GET", "/api/v1/admin/risk/cases"),
+        ("GET", "/api/v1/admin/risk/cases/x"),
+        ("POST", "/api/v1/admin/risk/cases/x/decisions"),
+        ("POST", "/api/v1/admin/risk/appeals"),
+        ("POST", "/api/v1/admin/risk/appeals/x/decide"),
+    ]
+    for method, path in paths:
+        response = client.request(method, path, json={})
+        assert response.status_code != 404, (method, path, response.status_code)

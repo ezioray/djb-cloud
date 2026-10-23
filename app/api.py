@@ -24,6 +24,7 @@ from .nodes import router as node_router
 from .notify.router import create_router as create_notify_router
 from .recon.router import create_router as create_recon_router
 from .reputation.router import create_router as create_reputation_router
+from .risk.router import create_router as create_risk_router
 from .scheduling.router import router as scheduling_router
 from .supply.router import router as supply_router
 
@@ -131,6 +132,14 @@ app.include_router(create_notify_router(
 app.include_router(create_reputation_router(
     connection_factory=db.conn,
     principal_resolver=_user_principal,
+    admin_resolver=_admin_dev_principal,
+))
+
+
+# ── M11 风控接线（spec 1.2.4）─────────────────────────────────────────────
+# 管理面主体同 M07/M09；阈值不入库/响应/事件，限额执行由 M03/M04/M08 读 v_risk_limits。
+app.include_router(create_risk_router(
+    connection_factory=db.conn,
     admin_resolver=_admin_dev_principal,
 ))
 
