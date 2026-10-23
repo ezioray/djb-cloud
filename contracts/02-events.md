@@ -51,6 +51,7 @@
 | capacity.announced | M02 | node_id, models, gpu, ram, expires_at | M04 |
 | request.completed | M03 | request_id, model, tokens_in/out, latency_ms, node_id | M05 M11 |
 | request.failed | M03 | request_id, error_code, upstream_error_class | M05 M11 |
+| batch.queued / batch.started / batch.checkpoint_restored / batch.completed / batch.failed / batch.eta_updated | M03 | batch_id, account_id, status, progress, eta_seconds, cost_estimate/actual | 外部 webhook · M14 |
 | quote.created / quote.expired | M04 | quote_id, model, price, ttl_s | M03 |
 | booking.created / booking.expired | M04 | booking_id, node_id, request_id, expires_at | M03 M05 |
 | routing.decided | M04 | request_id, node_id, reason_codes, snapshot_id | M03 M16 |
@@ -89,6 +90,9 @@
 | deploy.completed / backup.completed | M16 | run_id, env, status | M14 M12 |
 
 > 新增事件必须同时在 01-ownership 与本文登记；payload 字段以模块规格为准，但必须遵守信封规则。
+>
+> **node.registered 的 account_id 允许为 null**：S1 先注册（pending_review）后网页绑定，首次注册事件无归属账户；
+> 归属以随后的 `node.state.changed(reason=bound)` 为准。消费方（M04/M11）不得用 node.registered.account_id 建非空索引。
 
 ---
 
