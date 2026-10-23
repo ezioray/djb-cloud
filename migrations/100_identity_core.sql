@@ -139,7 +139,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (
       SELECT 1 FROM pg_constraint
-       WHERE conname = 'orgs_owner_account_fk' AND conrelid = 'orgs'::regclass) THEN
+       WHERE conname = 'orgs_owner_account_fk' AND connamespace = current_schema()::regnamespace AND conrelid = 'orgs'::regclass) THEN
     ALTER TABLE orgs ADD CONSTRAINT orgs_owner_account_fk
       FOREIGN KEY (owner_account_id) REFERENCES user_accounts (id) ON DELETE RESTRICT;
   END IF;

@@ -69,7 +69,7 @@ BEGIN
     RAISE EXCEPTION '1205: notification_preferences 缺列 p0_opt_out';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'notification_preferences_p0_ck') THEN
+                  WHERE conname = 'notification_preferences_p0_ck' AND connamespace = current_schema()::regnamespace) THEN
     RAISE EXCEPTION '1205: 缺 INV-01 兜底约束 notification_preferences_p0_ck';
   END IF;
 END

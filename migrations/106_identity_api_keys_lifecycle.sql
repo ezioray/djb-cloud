@@ -12,14 +12,14 @@ ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_scopes_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_scopes_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     -- scopes 只接受字符串数组；NULL = 未声明（等价于全量 scopes，由网关按账户权限裁决）
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_scopes_chk
       CHECK (scopes IS NULL OR jsonb_typeof(scopes) = 'array') NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_expires_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_expires_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_expires_chk
       CHECK (expires_at IS NULL OR expires_at > created_at) NOT VALID;
   END IF;

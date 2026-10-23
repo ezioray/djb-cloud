@@ -67,7 +67,7 @@ COMMENT ON COLUMN audit_anchors.merkle_root IS
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'audit_anchors_period_uq'
+                  WHERE conname = 'audit_anchors_period_uq' AND connamespace = current_schema()::regnamespace
                     AND conrelid = 'audit_anchors'::regclass) THEN
     RAISE EXCEPTION '1401: 缺唯一约束 audit_anchors_period_uq';
   END IF;

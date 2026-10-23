@@ -25,7 +25,7 @@ BEGIN
   -- 租户隔离：api_keys.(account_id, tenant_id) 必须与 user_accounts 的同一行一致。
   -- NOT VALID：存量行（002 三列插入，account_id 为空）不回溯校验，但新行一律校验。
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_account_tenant_fk'
+                  WHERE conname = 'api_keys_account_tenant_fk' AND connamespace = current_schema()::regnamespace
                     AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_account_tenant_fk
       FOREIGN KEY (account_id, tenant_id) REFERENCES user_accounts (id, tenant_id)
@@ -34,39 +34,39 @@ BEGIN
 
   -- 轮换链：旧钥 → 新钥（同事务内旧钥 revoked_at=now，重叠窗口 0）
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_rotated_from_fk'
+                  WHERE conname = 'api_keys_rotated_from_fk' AND connamespace = current_schema()::regnamespace
                     AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_rotated_from_fk
       FOREIGN KEY (rotated_from) REFERENCES api_keys (id) ON DELETE RESTRICT NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_qps_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_qps_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_qps_chk CHECK (qps IS NULL OR qps > 0) NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_daily_usd_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_daily_usd_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_daily_usd_chk
       CHECK (daily_usd_minor IS NULL OR daily_usd_minor > 0) NOT VALID;
   END IF;
 
   -- 只存 sha256 十六进制；明文形态（如 'sk-...'）不可能通过
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_hash_shape_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_hash_shape_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_hash_shape_chk
       CHECK (key_hash ~ '^[0-9a-f]{64}$') NOT VALID;
   END IF;
 
   -- 前缀 8 位（M01 §8.2），仅展示与排障
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_prefix_shape_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_prefix_shape_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_prefix_shape_chk
       CHECK (key_prefix ~ '^[A-Za-z0-9_-]{8}$') NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'api_keys_revoke_chk' AND conrelid = 'api_keys'::regclass) THEN
+                  WHERE conname = 'api_keys_revoke_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'api_keys'::regclass) THEN
     ALTER TABLE api_keys ADD CONSTRAINT api_keys_revoke_chk
       CHECK (revoked_at IS NULL OR revoked_reason IS NOT NULL) NOT VALID;
   END IF;

@@ -17,7 +17,7 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS offline_announced_at TIMESTAMPTZ;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_heartbeat_seq_chk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_heartbeat_seq_chk' AND connamespace = current_schema()::regnamespace) THEN
     ALTER TABLE nodes ADD CONSTRAINT nodes_heartbeat_seq_chk
       CHECK (heartbeat_seq >= 0) NOT VALID;
   END IF;

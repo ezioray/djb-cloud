@@ -56,17 +56,17 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS lifecycle_state TEXT
 -- ---------------------------------------------------------------- 约束（NOT VALID：不改存量行）
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_access_modes_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_access_modes_ck' AND connamespace = current_schema()::regnamespace) THEN
     ALTER TABLE nodes ADD CONSTRAINT nodes_access_modes_ck
       CHECK (access_modes <@ ARRAY['A1', 'A2', 'B']::text[]) NOT VALID;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_binding_pair_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_binding_pair_ck' AND connamespace = current_schema()::regnamespace) THEN
     -- INV-08：一个节点同时只有一条有效绑定；bound_account_id 与 bound_at 同生同灭
     ALTER TABLE nodes ADD CONSTRAINT nodes_binding_pair_ck
       CHECK ((bound_account_id IS NULL) = (bound_at IS NULL)
              AND (revoked_at IS NULL OR bound_at IS NULL OR revoked_at >= bound_at)) NOT VALID;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_key_overlap_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_key_overlap_ck' AND connamespace = current_schema()::regnamespace) THEN
     -- INV-10：轮换重叠 ≤24 h，重叠期内旧钥只验签
     ALTER TABLE nodes ADD CONSTRAINT nodes_key_overlap_ck
       CHECK (prev_key_expires_at IS NULL
@@ -75,12 +75,12 @@ BEGIN
                  AND prev_key_expires_at > key_issued_at
                  AND prev_key_expires_at <= key_issued_at + interval '24 hours')) NOT VALID;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_retired_chk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_retired_chk' AND connamespace = current_schema()::regnamespace) THEN
     -- 清退必须留摘除时刻（存量行可能不满足，故 NOT VALID）
     ALTER TABLE nodes ADD CONSTRAINT nodes_retired_chk
       CHECK (state <> 'retired' OR retired_at IS NOT NULL) NOT VALID;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_policy_version_chk') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nodes_policy_version_chk' AND connamespace = current_schema()::regnamespace) THEN
     ALTER TABLE nodes ADD CONSTRAINT nodes_policy_version_chk
       CHECK (char_length(policy_version) BETWEEN 1 AND 64) NOT VALID;
   END IF;

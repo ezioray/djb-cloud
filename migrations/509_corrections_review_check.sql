@@ -21,7 +21,7 @@ COMMENT ON CONSTRAINT usage_corrections_review_ck ON usage_corrections IS
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'usage_corrections_review_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'usage_corrections_review_ck' AND connamespace = current_schema()::regnamespace) THEN
     RAISE EXCEPTION '509: 缺约束 usage_corrections_review_ck';
   END IF;
 END

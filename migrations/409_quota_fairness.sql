@@ -17,11 +17,11 @@ ALTER TABLE quota_usage ADD COLUMN IF NOT EXISTS share_updated_at  TIMESTAMPTZ;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quota_usage_frozen_reason_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quota_usage_frozen_reason_ck' AND connamespace = current_schema()::regnamespace) THEN
     ALTER TABLE quota_usage ADD CONSTRAINT quota_usage_frozen_reason_ck
       CHECK (frozen_reason IS NULL OR char_length(frozen_reason) BETWEEN 1 AND 64) NOT VALID;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quota_usage_frozen_pair_ck') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'quota_usage_frozen_pair_ck' AND connamespace = current_schema()::regnamespace) THEN
     ALTER TABLE quota_usage ADD CONSTRAINT quota_usage_frozen_pair_ck
       CHECK ((frozen_until IS NULL) = (frozen_reason IS NULL)) NOT VALID;
   END IF;

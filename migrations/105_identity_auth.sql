@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS sessions_refresh_uq ON sessions (refresh_hash)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'sessions_token_hash_chk'
+                  WHERE conname = 'sessions_token_hash_chk' AND connamespace = current_schema()::regnamespace
                     AND conrelid = 'sessions'::regclass) THEN
     ALTER TABLE sessions ADD CONSTRAINT sessions_token_hash_chk
       CHECK ((access_hash IS NULL OR access_hash ~ '^[0-9a-f]{64}$')
@@ -32,7 +32,7 @@ BEGIN
 
   -- 绝对上限不晚于创建 + 12h（用户会话用 30 天刷新窗口，故只对 admin/step_up 生效）
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'sessions_absolute_chk'
+                  WHERE conname = 'sessions_absolute_chk' AND connamespace = current_schema()::regnamespace
                     AND conrelid = 'sessions'::regclass) THEN
     ALTER TABLE sessions ADD CONSTRAINT sessions_absolute_chk
       CHECK (absolute_expires_at IS NULL OR absolute_expires_at > created_at) NOT VALID;
@@ -58,7 +58,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at     TIMESTAMPTZ;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'users_mfa_factor_chk' AND conrelid = 'users'::regclass) THEN
+                  WHERE conname = 'users_mfa_factor_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'users'::regclass) THEN
     -- 因子只以 scrypt 派生值 + salt 存在；none 态必须为空，pending/enabled 必须有
     -- 因子串形如 scrypt$n=..,r=..,p=..$salt$hash（与口令同款派生，盐也在串里）
     ALTER TABLE users ADD CONSTRAINT users_mfa_factor_chk CHECK (
@@ -71,14 +71,14 @@ BEGIN
 
   -- 口令只存 scrypt 派生串（scrypt$n=..,r=..,p=..$salt$hash），明文永不入库
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'users_password_shape_chk' AND conrelid = 'users'::regclass) THEN
+                  WHERE conname = 'users_password_shape_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'users'::regclass) THEN
     ALTER TABLE users ADD CONSTRAINT users_password_shape_chk CHECK (
       password_hash IS NULL OR password_hash ~ '^scrypt\$n=[0-9]+,r=[0-9]+,p=[0-9]+\$[0-9a-f]+\$[0-9a-f]+$'
     ) NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conname = 'users_login_lock_chk' AND conrelid = 'users'::regclass) THEN
+                  WHERE conname = 'users_login_lock_chk' AND connamespace = current_schema()::regnamespace AND conrelid = 'users'::regclass) THEN
     ALTER TABLE users ADD CONSTRAINT users_login_lock_chk
       CHECK (failed_login_count >= 0) NOT VALID;
   END IF;
