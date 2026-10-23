@@ -169,7 +169,8 @@ def dsn() -> str:
 
 
 def connect(schema: str | None = None) -> psycopg.Connection:
-    options = f"-c search_path={schema}" if schema else None
+    options = f"-c search_path={schema}" if schema else ""
+    options = (options + " -c synchronous_commit=off").strip()
     return psycopg.connect(dsn(), autocommit=True, options=options, connect_timeout=15,
                            application_name="m08-treasury-migrate")
 

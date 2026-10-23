@@ -52,9 +52,10 @@ def dsn() -> str:
 
 
 def connect(schema: str, *, autocommit: bool = True) -> psycopg.Connection:
+    # 测试 schema 用完即 DROP：synchronous_commit=off 避免每条 DDL 都等 WAL flush（NAS 上 10x+）
     return psycopg.connect(dsn(), autocommit=autocommit,
-                           options=f"-c search_path={schema}", connect_timeout=15,
-                           application_name="m08-treasury-tests")
+                           options=f"-c search_path={schema} -c synchronous_commit=off",
+                           connect_timeout=15, application_name="m08-treasury-tests")
 
 
 @contextmanager
@@ -368,6 +369,8 @@ def insert_provision_batch(conn: psycopg.Connection, *, pool_id: str = "polygon:
         for wallet_id, address in zip(wallet_ids, addresses)
     ]
     moment = FIXED_NOW
+    expiry = expires_at or (moment + timedelta(hours=24))
+    created_at = expiry - timedelta(hours=24) if expires_at is not None else moment
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -382,9 +385,8 @@ def insert_provision_batch(conn: psycopg.Connection, *, pool_id: str = "polygon:
             (batch_id, pool_id, f"WB-20261024-{uuid.uuid4().hex[:6]}", count,
              hashlib.sha256(json.dumps(descriptors, sort_keys=True).encode()).hexdigest(),
              json.dumps({"wallet_cap_minor": 1_000_000, "descriptors": descriptors}),
-             f"dedupe-{uuid.uuid4().hex[:8]}", status,
-             expires_at or (moment + timedelta(hours=24)), moment,
-             signing_request_id, moment))
+             f"dedupe-{uuid.uuid4().hex[:8]}", status, expiry, created_at,
+             signing_request_id, created_at))
         return dict(cur.fetchone())
 
 

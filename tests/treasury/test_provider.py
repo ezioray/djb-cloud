@@ -45,10 +45,9 @@ def test_check_timestamp_window():
 def test_amount_to_major():
     assert provider.amount_to_major(12345, "USD") == "123.45"
     assert provider.amount_to_major(100, "USD") == "1.00"
-    assert provider.amount_to_major(1000, "JPY") == "10"
+    assert provider.amount_to_major(1000, "JPY") == "1000"
     assert provider.amount_to_major(1234567, "KWD") == "1234.567"
-    with pytest.raises(errors.BadRequest):
-        provider.amount_to_major(105, "JPY")
+    assert provider.amount_to_major(105, "JPY") == "105"      # JPY 精度 0
     with pytest.raises(errors.BadRequest):
         provider.amount_to_major(0, "USD")
     with pytest.raises(errors.BadRequest):

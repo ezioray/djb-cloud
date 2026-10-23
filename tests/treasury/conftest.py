@@ -147,11 +147,11 @@ def build_client(connection, *, user=USER_PRINCIPAL, provider=PROVIDER_PRINCIPAL
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.treasury.provider import MockProvider, build_registry
+    from app.treasury.provider import MockProvider, UpgProvider, build_registry
     from app.treasury.router import create_router
 
     moment = now or FIXED_NOW
-    registry = provider_registry or build_registry([MockProvider()])
+    registry = provider_registry or build_registry([MockProvider(), UpgProvider()])
     app = FastAPI()
     app.include_router(create_router(
         connection_factory=savepoint_factory(connection),
@@ -170,7 +170,9 @@ def build_client(connection, *, user=USER_PRINCIPAL, provider=PROVIDER_PRINCIPAL
         consumed_provider=consumed_provider,
         audit_sink=audit_sink,
     ))
-    return TestClient(app)
+    # 管理面写操作先要求 step-up 头（值由注入的 verifier 判定）；缺头时 424 由专门用例覆盖
+    headers = {"X-Admin-Step-Up": "test-step-up"} if step_up else None
+    return TestClient(app, headers=headers)
 
 
 @pytest.fixture

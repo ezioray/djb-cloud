@@ -142,9 +142,7 @@ def get_order_view(conn: Any, identifier: str, *, account_id: str | None) -> dic
     if row is None:
         raise NotFound("支付订单不存在")
     attempts = store.list_attempts(conn, str(row["order_id"]))
-    payload = models.order_payload(row)
-    payload["attempts"] = [models.attempt_payload(item) for item in attempts]
-    return payload
+    return models.order_detail_payload(row, attempts)
 
 
 def cancel_order(conn: Any, identifier: str, *, account_id: str | None,

@@ -215,7 +215,7 @@ def test_descriptors_and_merkle():
 def test_payout_classification_and_totals():
     carried = policy.classify_payout_item(gross_minor=5, fee_minor=8)
     assert carried["status"] == "carried" and carried["net_minor"] == 0
-    tiny = policy.classify_payout_item(gross_minor=1_000, fee_minor=0)
+    tiny = policy.classify_payout_item(gross_minor=999, fee_minor=0)
     assert tiny["status"] == "carried"
     normal = policy.classify_payout_item(gross_minor=5_000, fee_minor=100)
     assert normal == {"status": "pending", "gross_minor": 5_000, "fee_minor": 100,

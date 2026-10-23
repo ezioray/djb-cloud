@@ -37,13 +37,13 @@ S3 真钱（本模块**不做**真钱，也不接主网；所有通道默认关�
 """
 from __future__ import annotations
 
-from . import (audit, clock, config_source, errors, events, facts, ids, ledger, migrate, models,
+from . import (audit, clock, config_source, errors, events, facts, ids, ledger, models,
                order, payout, policy, provider, refund, signing, store, wallet)
 
 __version__ = "0.1.0-dev-m08"
 
 __all__ = [
-    "audit", "clock", "config_source", "errors", "events", "facts", "ids", "ledger", "migrate",
+    "audit", "clock", "config_source", "errors", "events", "facts", "ids", "ledger",
     "models", "order", "payout", "policy", "provider", "refund", "signing", "store", "wallet",
     "__version__",
 ]

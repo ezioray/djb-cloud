@@ -56,7 +56,8 @@ def test_create_order_validation_and_channel_guards(client):
         ({"amount_minor": 0, "currency": "USD", "method": "card"}, 400),
         ({"amount_minor": 100, "currency": "CHF", "method": "card"}, 400),
         ({"amount_minor": 100, "currency": "USD", "method": "card", "extra": 1}, 400),
-        ({"amount_minor": 100, "currency": "USD", "method": "card", "provider": "upg"}, 500),
+        ({"amount_minor": 100, "currency": "USD", "method": "card", "provider": "upg"}, 500),   # 未注入 KMS → fail-closed
+        ({"amount_minor": 100, "currency": "USD", "method": "card", "provider": "gifpay"}, 403),
     ]
     for body, status in cases:
         response = client.post("/api/v1/pay/orders", json=body)
@@ -64,10 +65,11 @@ def test_create_order_validation_and_channel_guards(client):
     assert client.post("/api/v1/pay/orders", json={
         "amount_minor": 100, "currency": "USD", "method": "card"},
         headers={"X-DJB-Idempotency-Key": "short"}).status_code == 400
-    # 通道未开启：未知 provider 映射 40310
+    # 通道未开启：未注册 provider → 40310
     response = client.post("/api/v1/pay/orders", json={
         "amount_minor": 100, "currency": "USD", "method": "card", "provider": "gifpay"})
-    assert response.status_code == 500      # 未注入 KMS → fail-closed（不是静默成功）
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == 40310
 
 
 def test_order_idempotency_replay_and_conflict(client):
@@ -223,10 +225,10 @@ def test_settlement_e4_two_steps_and_idempotent(poster, savepoint_conn):
     with pytest.raises(errors.BadRequest):
         order.settle_attempt(
             savepoint_conn, identifier="PO-E4-1", provider_txn_id="txn-e4",
-            settled_minor=9_000, fee_minor=1000,  # 9_000+1000 = 10_000 与订单一致；换 9000/500 不平
+            settled_minor=9_000, fee_minor=500,   # 净额 + 手续费 ≠ 订单金额（容差 0）
             provider_registry=provider_mod.build_registry(), ledger_poster=poster,
             config=cfg, now=NOW, trace_id="t")
-    with pytest.raises(errors.Conflict):
+    with pytest.raises(errors.NotFound):
         order.settle_attempt(
             savepoint_conn, identifier="PO-E4-1", provider_txn_id="txn-missing",
             settled_minor=1, fee_minor=0, provider_registry=provider_mod.build_registry(),

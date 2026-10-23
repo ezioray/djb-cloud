@@ -276,7 +276,9 @@ def provider_payouts(conn: Any, *, account_id: str, status: str | None = None,
         conn, status=status, cursor=cursor, limit=int(limit) + 1)
     payloads: list[dict[str, Any]] = []
     for batch in rows:
-        if batch["status"] in ("draft", "prepared"):
+        # 共享方可见性：draft 未定稿不露出；prepared / checked / signed / broadcast / settled
+        # 都属于「已制单」，共享方需要看到应付与滚存状态。
+        if batch["status"] == "draft":
             continue
         created = clock.as_utc(batch["created_at"])
         if from_ts is not None and created < clock.as_utc(from_ts):

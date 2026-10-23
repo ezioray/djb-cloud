@@ -116,9 +116,10 @@ END $$;
 CREATE OR REPLACE FUNCTION m08_batch_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
-  v_allowed TEXT[] := ARRAY['draft->pending_sign', 'draft->cancelled', 'pending_sign->signed',
-                            'pending_sign->expired', 'pending_sign->cancelled',
-                            'pending_sign->failed', 'signed->activated', 'signed->expired'];
+  v_allowed TEXT[] := ARRAY['draft->pending_sign', 'draft->cancelled', 'draft->expired',
+                            'pending_sign->signed', 'pending_sign->expired',
+                            'pending_sign->cancelled', 'pending_sign->failed',
+                            'signed->activated', 'signed->expired'];
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'wallet_provision_batch 只追加：禁止 DELETE' USING ERRCODE = '42501';
