@@ -1,0 +1,19 @@
+{
+  "module": "M04",
+  "case": "error",
+  "description": "同幂等键不同载荷 → 409/40919（00-conventions §6.1）",
+  "input": {
+    "key": "k1",
+    "first": {
+      "price_min": "8.00"
+    },
+    "second": {
+      "price_min": "8.50"
+    }
+  },
+  "expect": {
+    "http": 409,
+    "code": 40919,
+    "reason": "idempotency_conflict"
+  }
+}

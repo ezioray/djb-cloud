@@ -1,0 +1,39 @@
+{
+  "module": "M04",
+  "case": "success",
+  "description": "验收①：供方 [8.00,10.00] × 用方 [6.00,9.50] → mid 8.75，落 chosen + decision_id",
+  "input": {
+    "access": "A1",
+    "model": "m1",
+    "unit": "token",
+    "quote": {
+      "price_min": "8.00",
+      "price_max": "10.00",
+      "ttl_s": 600
+    },
+    "bid": {
+      "min_price": "6.00",
+      "max_price": "9.50"
+    },
+    "request": {
+      "model": "m1",
+      "kind": "realtime",
+      "max_price": "9.50"
+    }
+  },
+  "expect": {
+    "http": 201,
+    "interval": [
+      800,
+      950
+    ],
+    "price_minor": 875,
+    "price": {
+      "amount": "8.75",
+      "unit": "token"
+    },
+    "outcome": "routed",
+    "has_decision_id": true,
+    "has_chosen": true
+  }
+}

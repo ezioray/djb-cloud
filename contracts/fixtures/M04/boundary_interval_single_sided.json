@@ -1,0 +1,19 @@
+{
+  "module": "M04",
+  "case": "boundary",
+  "description": "INV-01 单边退化：上界缺省 = +∞；下界缺省 = 0",
+  "input": {
+    "a_lo": 800,
+    "a_hi": null,
+    "b_lo": 600,
+    "b_hi": null
+  },
+  "expect": {
+    "intersection": [
+      800,
+      null
+    ],
+    "price_floor": 800,
+    "price_mid": 800
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "module": "M04",
+  "case": "success",
+  "description": "验收⑤：同锚点复算 1,000 次一致率 100%（202 + job_id）",
+  "input": {
+    "replays": 1000,
+    "kind": "realtime"
+  },
+  "expect": {
+    "http": 202,
+    "state": "succeeded",
+    "inconsistent": 0,
+    "consistency_pct": 100
+  }
+}
