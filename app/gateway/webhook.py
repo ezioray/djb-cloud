@@ -5,9 +5,11 @@
 
 * **事件**：``batch.queued`` / ``batch.started`` / ``batch.checkpoint_restored`` /
   ``batch.completed`` / ``batch.failed`` / ``batch.eta_updated``（``facts.WEBHOOK_EVENTS``）。
-* **载荷**：``{event, batch_id, status, progress{completed,total}, eta_seconds,
+* **载荷**：``{event, batch_id, account_id, status, progress{completed,total}, eta_seconds,
   checkpoint_resumes, cost{estimated,actual}, occurred_at}``——只含元数据与金额，
-  **不含** prompt / response / 凭据（INV-M03-02）。
+  **不含** prompt / response / 凭据（INV-M03-02）。键集合与 ``contracts/02-events.md``
+  的 M03 行对齐（``cost_estimate/actual`` 落成嵌套 ``cost.estimated`` / ``cost.actual``），
+  由 ``tests/gateway/test_contract_events.py`` 守卫。
 * **签名**：``X-DJB-Signature: hmac-sha256=<hex>``，签名对象是
   ``f"{X-DJB-Timestamp}.{raw_body}"``；客户端必须校验时间窗 ±300s 防重放。
   密钥按账户从注入的 :class:`app.gateway.providers.WebhookSecretProvider` 取**引用**；
@@ -60,10 +62,11 @@ def build_payload(*, event_type: str, batch: models.BatchView, occurred_at: date
     payload: dict[str, Any] = {
         "event": event_type,
         "batch_id": batch.batch_id,
+        "account_id": batch.account_id,          # 02-events §3 登记的必含键（M14 消费侧路由用）
         "status": batch.status,
         "progress": {"completed": int(batch.completed_items),
                      "total": int(batch.total_items)},
-        "eta_seconds": batch.eta_seconds,
+        "eta_seconds": None if batch.eta_seconds is None else int(batch.eta_seconds),
         "checkpoint_resumes": int(batch.checkpoint_resumes),
         "occurred_at": clock.iso(occurred_at),
     }

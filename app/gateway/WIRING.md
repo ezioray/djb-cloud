@@ -136,7 +136,7 @@ X-DJB-Timestamp: <unix 秒>
 X-DJB-Signature: hmac-sha256=<hex(hmac_sha256(secret, f"{timestamp}." + raw_body))>
 Content-Type: application/json
 
-{ "event": "...", "batch_id": "...", "status": "...",
+{ "event": "...", "batch_id": "...", "account_id": "...", "status": "...",
   "progress": {"completed": 0, "total": 3}, "eta_seconds": 42, "checkpoint_resumes": 0,
   "cost": {"estimated": {"amount": "5.00", "unit": "USD"}}, "occurred_at": "...Z" }
 ```
