@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from app.ledger import trial
 from app.ledger.constants import ALL_COA, COA_FUND_CLASS, COA_NAMES
 
-from gatewaykit import e2_draft, e6_draft, post_ok
+from ledger_gatewaykit import e2_draft, e6_draft, post_ok
 from ledgerkit import connect
 
 

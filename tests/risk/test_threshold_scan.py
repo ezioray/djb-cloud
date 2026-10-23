@@ -17,7 +17,7 @@ import re
 from datetime import timedelta
 
 from app.risk import events, facts
-from conftest import ADMIN_PRINCIPAL, build_client
+from riskkit import ADMIN_PRINCIPAL, build_client
 from riskkit import (
     FIXED_NOW,
     FORBIDDEN_KEY_RE,

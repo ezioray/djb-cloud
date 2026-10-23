@@ -10,11 +10,19 @@
 """
 from __future__ import annotations
 
+import pathlib
+import sys
 import uuid
 
 import pytest
 
-from ledgerkit import apply_migrations, create_schema, drop_schema
+_HERE = pathlib.Path(__file__).resolve().parent
+_REPO_ROOT = _HERE.parents[1]
+for _path in (str(_HERE), str(_REPO_ROOT)):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+from ledgerkit import apply_migrations, create_schema, drop_schema   # noqa: E402
 
 
 @pytest.fixture(scope="session")

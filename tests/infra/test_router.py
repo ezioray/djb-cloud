@@ -14,7 +14,7 @@ import pytest
 
 from app.audit import StaticKeyProvider, clock, create_health_handler, create_router, facts
 from infrakit import TEST_KEY
-from conftest import savepoint_factory
+from infrakit import savepoint_factory
 
 FIXED_NOW = datetime(2026, 10, 23, 10, 0, 0, tzinfo=timezone.utc)
 IDEMPOTENCY = "X-DJB-Idempotency-Key"

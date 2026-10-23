@@ -24,7 +24,7 @@ from app.ledger import (
 from app.ledger.balances import version_chain
 from app.ledger.constants import DEFAULT_SUB_ACCOUNT, SUB_ACCOUNT_BY_COA
 
-from gatewaykit import e2_draft, e6_draft, post_ok
+from ledger_gatewaykit import e2_draft, e6_draft, post_ok
 from ledgerkit import connect, tx
 
 

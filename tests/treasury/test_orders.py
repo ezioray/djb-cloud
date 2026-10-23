@@ -11,7 +11,7 @@ from app.treasury import clock, config_source, errors, facts, ledger, models, or
 from app.treasury import provider as provider_mod
 
 import m08kit
-from conftest import OTHER_USER_PRINCIPAL, build_client
+from m08kit import OTHER_USER_PRINCIPAL, build_client
 
 NOW = m08kit.FIXED_NOW
 
@@ -91,7 +91,7 @@ def test_webhook_credits_once_and_e3_is_posted(client, savepoint_conn, poster):
         "amount_minor": 10_000, "currency": "USD", "method": "card"}).json()
     row = {"order_no": created["order_no"], "amount_minor": 10_000, "currency": "USD"}
     raw = m08kit.webhook_body(row, provider_txn_id="txn-e3")
-    from conftest import savepoint_factory
+    from m08kit import savepoint_factory
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.treasury.router import create_router

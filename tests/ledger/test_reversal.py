@@ -28,7 +28,7 @@ from app.ledger import (
     verify_ledger,
 )
 
-from gatewaykit import e2_draft, e6_draft, journal_row, line, outbox_rows, post_ok, reverse_ok
+from ledger_gatewaykit import e2_draft, e6_draft, journal_row, line, outbox_rows, post_ok, reverse_ok
 from ledgerkit import assert_db_error, connect, run_ok, tx
 
 

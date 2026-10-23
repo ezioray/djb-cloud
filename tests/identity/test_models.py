@@ -25,7 +25,7 @@ import pytest
 
 from app.identity import models, state
 
-from conftest import all_events, rows, scalar
+from identitykit import all_events, rows, scalar
 
 CLEAN = {"locked_earnings": True, "open_disputes": True, "negative_balance": True,
          "open_tickets": True}

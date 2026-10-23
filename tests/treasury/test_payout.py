@@ -9,7 +9,7 @@ import pytest
 from app.treasury import config_source, errors, facts, models, payout, signing, store
 
 import m08kit
-from conftest import ADMIN_PRINCIPAL, build_client, savepoint_factory
+from m08kit import ADMIN_PRINCIPAL, build_client, savepoint_factory
 
 NOW = m08kit.FIXED_NOW
 ADDR_A = "0x" + "a1" * 20

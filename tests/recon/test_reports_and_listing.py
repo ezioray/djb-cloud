@@ -194,7 +194,7 @@ def test_deferred_reports_are_not_routed(client, path: str) -> None:
 
 
 def test_cross_tenant_reports_exclude_other_tenants(savepoint_conn) -> None:
-    from conftest import build_client
+    from reconkit import build_client
 
     # INV-04 唯一键不含 tenant（§3.3 原文如此）→ 两个租户共用同一 cutoff 会撞键，
     # 造数时错开 cutoff；隔离性验证不受影响。

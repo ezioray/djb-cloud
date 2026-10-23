@@ -12,7 +12,7 @@ import pytest
 from app.ledger import canonical_bytes, canonical_payload, journal_hash, verify_chain
 from app.ledger.hashchain import GENESIS, hash_hex
 
-from gatewaykit import e2_draft, e6_draft, journal_row, post_ok
+from ledger_gatewaykit import e2_draft, e6_draft, journal_row, post_ok
 from ledgerkit import connect, run_ok, tx
 
 

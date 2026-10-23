@@ -17,7 +17,6 @@ import os
 import pathlib
 import sys
 import uuid
-from contextlib import contextmanager
 
 import pytest
 
@@ -37,6 +36,7 @@ from infrakit import (                              # noqa: E402
     connect,
     create_schema,
     drop_schema,
+    savepoint_factory,
 )
 
 SCHEMA_ENV = "M16_SCHEMA"
@@ -103,17 +103,6 @@ def savepoint_conn(migrated: str):
             connection.rollback()
         finally:
             connection.close()
-
-
-def savepoint_factory(connection):
-    """把一条连接包成 handler 需要的"请求级连接"（内层 SAVEPOINT，不真提交）。"""
-
-    @contextmanager
-    def factory():
-        with connection.transaction():
-            yield connection
-
-    return factory
 
 
 @pytest.fixture

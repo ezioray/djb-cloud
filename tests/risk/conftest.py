@@ -14,7 +14,6 @@ import os
 import pathlib
 import sys
 import uuid
-from contextlib import contextmanager
 
 import pytest
 
@@ -31,6 +30,7 @@ _COVERAGE = maybe_start()
 from riskkit import (                                # noqa: E402
     FIXED_NOW,
     apply_migrations,
+    build_client,
     connect,
     create_schema,
     drop_schema,
@@ -103,15 +103,6 @@ def savepoint_conn(migrated: str):
             connection.close()
 
 
-def savepoint_factory(connection):
-    @contextmanager
-    def factory():
-        with connection.transaction():
-            yield connection
-
-    return factory
-
-
 @pytest.fixture
 def now():
     return FIXED_NOW
@@ -129,35 +120,7 @@ def pytest_sessionfinish(session, exitstatus):       # noqa: ARG001
 
 
 # ─────────────────────────────────────────────────────── M11 HTTP 客户端夹具
-ADMIN_PRINCIPAL = {"admin_id": "disposer", "tenant_id": "tenant-a",
-                   "scopes": ["risk.read", "risk.write"]}
-READONLY_PRINCIPAL = {"admin_id": "auditor", "tenant_id": "tenant-a", "scopes": ["risk.read"]}
-OTHER_TENANT_PRINCIPAL = {"admin_id": "disposer-b", "tenant_id": "tenant-b",
-                          "scopes": ["risk.read", "risk.write"]}
-
-
-def build_client(connection, *, admin=ADMIN_PRINCIPAL, step_up=True, now=None,
-                 config_provider=None, audit_sink=None):
-    """构造带 M11 路由的 ASGI 客户端（请求级 SAVEPOINT，不真提交）。"""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.risk.router import create_router
-    from riskkit import FIXED_NOW
-
-    moment = now or FIXED_NOW
-    app = FastAPI()
-    app.include_router(create_router(
-        connection_factory=savepoint_factory(connection),
-        admin_resolver=(lambda request: dict(admin)) if admin is not None else None,
-        step_up_verifier=(lambda request: step_up) if step_up is not None else None,
-        now_provider=lambda: moment,
-        config_provider=(lambda: config_provider) if config_provider is not None else None,
-        audit_sink=audit_sink,
-    ))
-    return TestClient(app)
-
-
+# 客户端构造器与 principals 在 riskkit.py（测试文件也从那里导入）。
 @pytest.fixture
 def client(savepoint_conn):
     with build_client(savepoint_conn) as test_client:

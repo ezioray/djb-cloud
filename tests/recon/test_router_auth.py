@@ -57,7 +57,7 @@ def test_error_envelope_shape(client) -> None:
 
 
 def test_scope_guard_on_read_endpoints(savepoint_conn) -> None:
-    from conftest import build_client
+    from reconkit import build_client
 
     no_scope = {"admin_id": "admin-x", "tenant_id": None, "scopes": ["other.read"]}
     with build_client(savepoint_conn, admin=no_scope) as client:

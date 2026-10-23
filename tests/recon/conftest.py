@@ -18,7 +18,6 @@ import os
 import pathlib
 import sys
 import uuid
-from contextlib import contextmanager
 
 import pytest
 
@@ -34,6 +33,7 @@ _COVERAGE = maybe_start()
 
 from reconkit import (                               # noqa: E402
     apply_migrations,
+    build_client,
     connect,
     create_schema,
     drop_schema,
@@ -106,17 +106,6 @@ def savepoint_conn(migrated: str):
             connection.close()
 
 
-def savepoint_factory(connection):
-    """把一条连接包成 handler 需要的「请求级连接」（内层 SAVEPOINT，不真提交）。"""
-
-    @contextmanager
-    def factory():
-        with connection.transaction():
-            yield connection
-
-    return factory
-
-
 @pytest.fixture
 def now():
     """固定时钟（分级 / SLA / 报表口径都靠它，避免 now() 抖动）。"""
@@ -138,33 +127,7 @@ def pytest_sessionfinish(session, exitstatus):       # noqa: ARG001
 
 
 # ─────────────────────────────────────────────────────── M09 HTTP 客户端夹具
-ADMIN_PRINCIPAL = {"admin_id": "admin-maker", "tenant_id": "tenant-a",
-                   "scopes": ["recon.read", "recon.write"]}
-SERVICE_PRINCIPAL = {"service_id": "M08-payout", "scopes": ["recon.attestation.validate"]}
-
-
-def build_client(connection, *, admin=ADMIN_PRINCIPAL, service=SERVICE_PRINCIPAL,
-                 step_up=True, now=None, engine_deps=None):
-    """构造带 M09 路由的 ASGI 客户端（请求级 SAVEPOINT，不真提交）。"""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.recon.router import create_router
-    from reconkit import FIXED_NOW
-
-    moment = now or FIXED_NOW
-    app = FastAPI()
-    app.include_router(create_router(
-        connection_factory=savepoint_factory(connection),
-        admin_resolver=(lambda request: dict(admin)) if admin is not None else None,
-        service_resolver=(lambda request: dict(service)) if service is not None else None,
-        step_up_verifier=(lambda request: step_up) if step_up is not None else None,
-        now_provider=lambda: moment,
-        engine_deps=engine_deps,
-    ))
-    return TestClient(app)
-
-
+# 客户端构造器与 principals 在 reconkit.py（测试文件也从那里导入）。
 @pytest.fixture
 def client(savepoint_conn):
     with build_client(savepoint_conn) as test_client:

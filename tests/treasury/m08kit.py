@@ -410,3 +410,60 @@ def count(conn: psycopg.Connection, table: str) -> int:
     with conn.cursor() as cur:
         cur.execute(f"SELECT count(*) FROM {table}")
         return int(cur.fetchone()[0])
+# ─────────────────────────────────────────────────── HTTP 客户端（DEV-TESTINFRA）
+# 由 conftest 移到 kit（原因同 reconkit/riskkit）：测试文件与 conftest 都从这里导入。
+USER_PRINCIPAL = {"account_id": "acct-1", "tenant_id": "tenant-a", "user_id": "u-1"}
+OTHER_USER_PRINCIPAL = {"account_id": "acct-2", "tenant_id": "tenant-a", "user_id": "u-2"}
+PROVIDER_PRINCIPAL = {"account_id": "acct-1", "tenant_id": "tenant-a"}
+ADMIN_PRINCIPAL = {"admin_id": "fin-officer", "tenant_id": "tenant-a",
+                   "scopes": ["*"]}
+READONLY_PRINCIPAL = {"admin_id": "auditor", "tenant_id": "tenant-a",
+                      "scopes": ["treasury.read", "treasury.wallet.read"]}
+
+
+def savepoint_factory(connection):
+    """把一条连接包成 handler 需要的请求级连接（内层 SAVEPOINT，不真提交）。"""
+
+    @contextmanager
+    def factory():
+        with connection.transaction():
+            yield connection
+
+    return factory
+
+
+def build_client(connection, *, user=USER_PRINCIPAL, provider=PROVIDER_PRINCIPAL,
+                 admin=ADMIN_PRINCIPAL, step_up=True, now=None, config_provider=None,
+                 ledger_poster=None, provider_registry=None, attestation_verifier=None,
+                 revenue_verifier=None, risk_check=None, consumed_provider=None,
+                 address_allocator=None, audit_sink=None):
+    """构造带 M08 路由的 ASGI 客户端（请求级 SAVEPOINT，不真提交）。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.treasury.provider import MockProvider, UpgProvider, build_registry
+    from app.treasury.router import create_router
+
+    moment = now or FIXED_NOW
+    registry = provider_registry or build_registry([MockProvider(), UpgProvider()])
+    app = FastAPI()
+    app.include_router(create_router(
+        connection_factory=savepoint_factory(connection),
+        user_resolver=(lambda request: dict(user)) if user is not None else None,
+        provider_resolver=(lambda request: dict(provider)) if provider is not None else None,
+        admin_resolver=(lambda request: dict(admin)) if admin is not None else None,
+        step_up_verifier=(lambda request: step_up) if step_up is not None else None,
+        now_provider=lambda: moment,
+        config_provider=(lambda: config_provider) if config_provider is not None else None,
+        ledger_poster=ledger_poster,
+        provider_registry=registry,
+        address_allocator=address_allocator,
+        attestation_verifier=attestation_verifier,
+        revenue_verifier=revenue_verifier,
+        risk_check=risk_check,
+        consumed_provider=consumed_provider,
+        audit_sink=audit_sink,
+    ))
+    # 管理面写操作先要求 step-up 头（值由注入的 verifier 判定）；缺头时 424 由专门用例覆盖
+    headers = {"X-Admin-Step-Up": "test-step-up"} if step_up else None
+    return TestClient(app, headers=headers)

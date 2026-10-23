@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from app.identity import credentials, errors, mfa, models, router as router_module, scan, tokens
 
-from conftest import bearer, error_of
+from identitykit import bearer, error_of
 
 PASSWORD = "S3cret!"
 PIN = "123456"

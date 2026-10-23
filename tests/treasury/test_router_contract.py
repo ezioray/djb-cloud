@@ -10,7 +10,7 @@ import yaml
 from app.treasury.router import create_router
 
 import m08kit
-from conftest import READONLY_PRINCIPAL, build_client
+from m08kit import READONLY_PRINCIPAL, build_client
 
 _REPO = pathlib.Path(__file__).resolve().parents[2]
 # 契约 1.2.5 先在 workspace（spec 在主仓，尚未合入 integration 的 worktree）；两处都找

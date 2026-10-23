@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from app.recon import engine, facts, models
-from conftest import ADMIN_PRINCIPAL, build_client
+from reconkit import ADMIN_PRINCIPAL, build_client
 from reconkit import (FIXED_NOW, fetch_run, receipt_spec, seed_receipt, seed_usage)
 
 SIGN_OFF = "/api/v1/admin/treasury/recon/runs/{run_id}/sign-off"

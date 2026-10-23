@@ -9,7 +9,7 @@ import uuid
 import pytest
 import yaml
 
-from conftest import ADMIN_PRINCIPAL, build_client
+from riskkit import ADMIN_PRINCIPAL, build_client
 from riskkit import FIXED_NOW, make_case
 
 STEP_UP = {"X-Admin-Step-Up": "step-up-token-123"}
