@@ -56,6 +56,7 @@ __all__ = [
     "normalize_gas_mode", "gas_snapshot",
     # 退款
     "refund_deadline", "check_refund_window", "check_original_route", "remaining_refundable",
+    "attempt_route", "successful_routes", "resolve_original_route", "ROUTE_SCHEME_PSP",
     "refund_transition", "approval_cooldown_ready", "ensure_dual_control",
     # 地址白名单
     "address_cooldown_until", "check_first_transfer", "check_address_change_allowed",
@@ -681,11 +682,49 @@ def check_refund_window(deadline_at: datetime, now: datetime) -> None:
 
 
 def check_original_route(original_route: str, requested_route: str) -> None:
-    """INV-12：只回原路；请求里带不同路由（第三方地址）→ 拒绝。"""
+    """INV-12 / 1.2.7：只回原路；提供时必须**逐字相等**（大小写不同也算不一致）。
+
+    服务端推导路径见 resolve_original_route（省略 original_route 时唯一成功 attempt 即原路）。
+    """
     if not original_route or not requested_route:
         raise BadRequest("退款必须指定原路信息", field="original_route")
-    if str(original_route).strip().lower() != str(requested_route).strip().lower():
+    if str(original_route) != str(requested_route):
         raise Conflict("退款只回原路，不接受第三方地址（INV-12）", reason="original_route_only")
+
+
+#: 成功 attempt 的通道引用 → 原路串（psp:<provider>:<provider_txn_id>）
+ROUTE_SCHEME_PSP = "psp"
+
+
+def attempt_route(attempt: Mapping[str, Any]) -> str | None:
+    """单条 attempt 的原路串；无通道单号 → None（不能作为原路锚点）。"""
+    txn = attempt.get("provider_txn_id")
+    provider = attempt.get("provider")
+    if not txn or not provider:
+        return None
+    return f"{ROUTE_SCHEME_PSP}:{provider}:{txn}"
+
+
+def successful_routes(attempts: Iterable[Mapping[str, Any]]) -> tuple[str, ...]:
+    """订单的**成功** attempt 原路集合（1.2.7：只有 succeeded 才能作为原路依据）。"""
+    routes: list[str] = []
+    for attempt in attempts:
+        if str(attempt.get("status")) != "succeeded":
+            continue
+        route = attempt_route(attempt)
+        if route is not None and route not in routes:
+            routes.append(route)
+    return tuple(routes)
+
+
+def resolve_original_route(attempts: Iterable[Mapping[str, Any]]) -> str:
+    """从订单唯一成功 attempt 推导真实原路；0 条或 >1 条都无法唯一确定 → 409/40919。"""
+    routes = successful_routes(attempts)
+    if len(routes) != 1:
+        raise Conflict(
+            "无法从订单唯一确定原路（成功 attempt 数 != 1）：转人工核对（1.2.7）",
+            reason="original_route_unavailable", successful_attempts=len(routes))
+    return routes[0]
 
 
 def remaining_refundable(*, paid_minor: int, refunded_minor: int, consumed_minor: int) -> int:

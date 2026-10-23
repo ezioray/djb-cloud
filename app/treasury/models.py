@@ -26,7 +26,8 @@ __all__ = [
     "parse_pool", "parse_provision", "parse_activate", "parse_switch", "parse_retire",
     "parse_signing_event", "parse_address", "parse_gas_policy", "parse_deposit_address",
     "parse_payout_approve", "require_idempotency_key", "require_known_keys",
-    "order_payload", "attempt_payload", "order_detail_payload", "webhook_ack_payload",
+    "order_payload", "attempt_payload", "order_detail_payload", "mask_original_route",
+    "webhook_ack_payload",
     "wallet_payload", "pool_payload", "provision_batch_payload", "activate_payload",
     "switch_ack_payload", "payout_batch_payload", "payout_item_payload", "refund_payload",
     "intent_payload", "signing_request_payload", "signing_event_payload", "address_payload",
@@ -161,7 +162,7 @@ class RefundDraft:
     order_no: str
     amount_minor: int
     reason_code: str
-    original_route: str
+    original_route: str | None = None      # 1.2.7：可选；省略时服务端从唯一成功 attempt 推导
     evidence_ref: str | None = None
 
 
@@ -316,12 +317,22 @@ def parse_refund(body: Mapping[str, Any], *, account_id: str) -> RefundDraft:
     amount = policy.validate_amount(body.get("amount_minor"))
     reason = _text(body.get("reason_code"), field_name="reason_code", min_len=1,
                    max_len=facts.MAX_TEXT_LEN)
-    route = _text(body.get("original_route"), field_name="original_route", min_len=1,
-                  max_len=facts.MAX_TEXT_LEN)
+    # 1.2.7：original_route 可选（省略 = 服务端从唯一成功 attempt 推导）；掩码值不接受。
+    # 显式 null = 省略；显式空串违反 minLength=1 → 400（不当作省略，避免静默改变语义）。
+    raw_route = body.get("original_route")
+    if raw_route is None:
+        route = None
+    else:
+        route = _text(raw_route, field_name="original_route", min_len=1,
+                      max_len=facts.MAX_TEXT_LEN, required=True)
+        if "*" in route:
+            raise BadRequest(
+                "original_route 不接受掩码值：省略即由服务端按唯一成功 attempt 推导（1.2.7）",
+                field="original_route")
     evidence = _text(body.get("evidence_ref"), field_name="evidence_ref", min_len=1,
                      max_len=128, required=False)
     return RefundDraft(order_no=order_no or "", amount_minor=amount, reason_code=reason or "",
-                       original_route=route or "", evidence_ref=evidence)
+                       original_route=route, evidence_ref=evidence)
 
 
 def parse_payout_batch(body: Mapping[str, Any]) -> PayoutBatchDraft:
@@ -595,11 +606,28 @@ def attempt_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def order_detail_payload(order: Mapping[str, Any], attempts: Sequence[Mapping[str, Any]]
-                         ) -> dict[str, Any]:
-    """PaymentOrderDetail：{order, attempts}。"""
+def mask_original_route(route: str | None) -> str | None:
+    """原路掩码展示（1.2.7）：psp:<provider>:****<末4>；无法解析时 ****<末4>。
+
+    只用于**展示**，不可回传为退款请求的 original_route（服务端会拒绝含 * 的值）。
+    """
+    if not route:
+        return None
+    text = str(route)
+    parts = text.split(":")
+    if len(parts) >= 3:
+        scheme, provider = parts[0], parts[1]
+        reference = ":".join(parts[2:])
+        return f"{scheme}:{provider}:****{reference[-4:]}"
+    return f"****{text[-4:]}"
+
+
+def order_detail_payload(order: Mapping[str, Any], attempts: Sequence[Mapping[str, Any]],
+                         *, original_route_masked: str | None = None) -> dict[str, Any]:
+    """PaymentOrderDetail：{order, attempts, original_route_masked}（1.2.7）。"""
     return {"order": order_payload(order),
-            "attempts": [attempt_payload(item) for item in attempts]}
+            "attempts": [attempt_payload(item) for item in attempts],
+            "original_route_masked": original_route_masked}
 
 
 def webhook_ack_payload(*, order: Mapping[str, Any] | None, duplicate: bool = False,

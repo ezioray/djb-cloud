@@ -4,7 +4,9 @@
 规则：
 
 * 窗口 **14 天**（payment.refund_window_days，7–30 可配；默认 14）→ 超窗 409 / 40919；
-* **只回原路**：original_route 必须与「原支付引用」等价（PSP 通道单号 / 链上 tx），
+* **只回原路**：1.2.7 起 original_route 可选——省略时从订单**唯一成功 attempt** 推导
+  （psp:<provider>:<txn>）并按它执行；提供时必须逐字相等，掩码串不接受；
+  0 条或多条成功 attempt 无法唯一确定 → 409/40919 reason=original_route_unavailable；
   原路字段落库后不可改（库层触发器兜底），不接受第三方地址；
 * 金额 ≤ 已付未消耗；币种与原单一致；同一订单同一时刻最多 1 条未结退款；
 * 双人 + **24h 冷却**：requested → approved（审批人 ≠ 申请人，且冷却已过）→ executing
@@ -30,19 +32,10 @@ from .errors import (
 __all__ = [
     "create_refund_request", "approve_refund_request", "execute_refund_request",
     "complete_refund_request", "fail_refund_request", "refund_view", "list_refund_requests",
-    "expected_route",
 ]
 
 RiskCheck = Callable[..., Any]
 ConsumedProvider = Callable[[str], int]
-
-
-def expected_route(attempts: list[Mapping[str, Any]]) -> str:
-    """原路指纹：以成功尝试的通道单号为锚（psp:<provider>:<txn>）。"""
-    for attempt in reversed(attempts):
-        if attempt.get("provider_txn_id"):
-            return f"psp:{attempt['provider']}:{attempt['provider_txn_id']}"
-    return ""
 
 
 def _route_hash(route: str) -> str:
@@ -86,11 +79,12 @@ def create_refund_request(conn: Any, draft: models.RefundDraft, *, account_id: s
     if latest_failed == "failed":
         raise RefundFailed("上一条退款失败：转人工核对后再发起（40918）",
                            reason="refund_failed")
+    # 1.2.7：原路以**唯一成功 attempt** 为准；0 条或 >1 条 → 409/40919 original_route_unavailable。
+    # 省略 original_route：服务端推导真实原路并按它执行；提供：必须逐字相等（掩码值在解析层已拒）。
     attempts = store.list_attempts(conn, str(order["order_id"]))
-    route = expected_route(attempts)
-    if not route:
-        raise Conflict("订单没有可用于原路退回的通道单号：转人工", reason="original_route_missing")
-    policy.check_original_route(route, draft.original_route)
+    route = policy.resolve_original_route(attempts)
+    if draft.original_route is not None:
+        policy.check_original_route(route, draft.original_route)
     refunded = store.refunded_total(conn, draft.order_no)
     consumed = int(consumed_provider(draft.order_no)) if consumed_provider else 0
     remaining = policy.remaining_refundable(
