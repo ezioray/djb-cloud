@@ -18,9 +18,8 @@ from app.gateway import router as router_module
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OWNED_PREFIXES = ("/v1/",)
-#: T4 交付的已登记端点（批次 + 协议版本），本任务不实现
-DEFERRED = {("POST", "/v1/batches"), ("GET", "/v1/batches/{id}"),
-            ("POST", "/v1/batches/{id}/cancel")}
+#: T4 已全部实现（提交 / 轮询 / 取消），差集必须为 0
+DEFERRED: set[tuple[str, str]] = set()
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 
 
@@ -71,7 +70,9 @@ def test_every_owned_path_is_either_implemented_or_explicitly_deferred():
 def test_implemented_operation_ids_match_the_spec():
     spec = _spec_paths()
     implemented = _implemented()
-    assert set(implemented) == {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
+    assert set(implemented) == {("POST", "/v1/chat/completions"), ("GET", "/v1/models"),
+                                ("POST", "/v1/batches"), ("GET", "/v1/batches/{id}"),
+                                ("POST", "/v1/batches/{id}/cancel")}
     # 路径必须与 spec 完全一致（含大小写与方法）
     for key in implemented:
         assert key in spec, key

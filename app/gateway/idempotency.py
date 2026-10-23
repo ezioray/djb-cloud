@@ -31,9 +31,9 @@ from typing import Any, Mapping
 
 from . import clock, errors, facts, models
 
-__all__ = ["IdempotencyRecord", "Replay", "canonical_body", "body_hash", "require_key",
-           "scope_of", "fingerprint_scope", "window_for", "replay_or_conflict", "remember",
-           "delete_expired"]
+__all__ = ["IdempotencyRecord", "Replay", "WriteGuard", "canonical_body", "body_hash",
+           "require_key", "scope_of", "fingerprint_scope", "window_for", "replay_or_conflict",
+           "remember", "delete_expired"]
 
 
 @dataclass(frozen=True)
@@ -140,3 +140,73 @@ def delete_expired(c: Any, *, now: datetime, limit: int = 200) -> int:
 
     return store.purge_idempotency(c, now=clock.as_utc(now), limit=limit)
 
+
+
+# --------------------------------------------------------------------------- 幂等中间件（CR-10）
+@dataclass
+class WriteGuard:
+    """**所有写端点的幂等中间件**（CR-10 规则：新写端点必须走这一条路）。
+
+    用法（router / 领域服务共用）::
+
+        guard = WriteGuard(c, principal=principal, method="POST", path="/v1/batches",
+                           key=idempotency_key, body=body, now=now)
+        replay = guard.replay()          # 幂等键 24h → 请求体指纹 300s（流式 60s）
+        if replay is not None:
+            return replay.status_code, replay.payload   # 不重复落账、不重复扣费
+        ...
+        guard.remember(status_code=202, payload=payload)
+
+    口径（M03 §3.1 / §8.2 / INV-M03-03）：
+
+    * ``key`` 非空时按 ``(scope, key)`` 判 24h 幂等：同载荷回放、异载荷 → 409 / 40919；
+    * 无论有没有 ``key``，都再做一次**请求体指纹**去重（非流式 300s / 流式建立 60s）；
+    * ``scope`` 含账户与 Key，两个账户的同形请求互不回放；
+    * 回放**不再**触发路由 / 派发 / 计量（调用方直接返回 ``replay.payload``）。
+    """
+
+    c: Any
+    principal: models.Principal
+    method: str
+    path: str
+    key: str | None
+    body: Mapping[str, Any]
+    now: datetime
+    stream: bool = False
+
+    @property
+    def body_hash(self) -> str:
+        return body_hash(self.body)
+
+    @property
+    def window_s(self) -> int:
+        return window_for(stream=self.stream)
+
+    def replay(self) -> Replay | None:
+        """依次查幂等键（24h）与请求体指纹（300s / 流式 60s）；命中即回放。"""
+        digest = self.body_hash
+        if self.key:
+            found = replay_or_conflict(
+                self.c, scope=scope_of(self.method, self.path, self.principal), key=self.key,
+                request_hash=digest, now=self.now, ttl_s=facts.IDEMPOTENCY_TTL_S)
+            if found is not None:
+                return found
+        return replay_or_conflict(
+            self.c, scope=fingerprint_scope(self.method, self.path, self.principal),
+            key=digest, request_hash=digest, now=self.now, ttl_s=self.window_s,
+            window_s=self.window_s, mode="fingerprint")
+
+    def remember(self, *, status_code: int, payload: Mapping[str, Any],
+                 ttl_s: int | None = None, store_payload: bool = True) -> None:
+        """记住首次结果（与业务同事务）；``store_payload=False`` 时只留标记（流式用）。"""
+        digest = self.body_hash
+        body_payload = dict(payload) if store_payload else {"stream": True}
+        if self.key:
+            remember(self.c, scope=scope_of(self.method, self.path, self.principal),
+                     key=self.key, request_hash=digest, status_code=status_code,
+                     payload=body_payload, now=self.now,
+                     ttl_s=int(ttl_s or facts.IDEMPOTENCY_TTL_S))
+        remember(self.c, scope=fingerprint_scope(self.method, self.path, self.principal),
+                 key=digest, request_hash=digest, status_code=status_code,
+                 payload=body_payload, now=self.now,
+                 ttl_s=int(ttl_s or self.window_s))

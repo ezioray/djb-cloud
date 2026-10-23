@@ -85,6 +85,43 @@ MESSAGE_ROLES: tuple[str, ...] = ("system", "user", "assistant", "tool")
 FINISH_REASONS: tuple[str, ...] = ("stop", "length", "tool_calls", "content_filter",
                                    "upstream_error")
 
+# --------------------------------------------------------------------------- 流式（T3，M03 §4.3 / §6.2）
+SSE_MEDIA_TYPE: str = "text/event-stream"
+SSE_DONE: str = "[DONE]"
+"""SSE 结束标记：``data: [DONE]``（INV-M03-04）。"""
+
+SSE_CHUNK_OBJECT: str = "chat.completion.chunk"
+"""流式分块对象名（OpenAI 兼容）。"""
+
+SSE_HEARTBEAT_S: int = 15
+"""心跳注释帧间隔（``: keepalive``；防止中间层空闲超时，不产生业务帧）。"""
+
+STREAM_MAX_ATTEMPTS: int = 2
+"""流式只在**首字节前**重路由（M03 §6.2/§7），与 ``RETRY_MAX_ATTEMPTS`` 同值但语义独立。"""
+
+# --------------------------------------------------------------------------- 慢任务（T4，M03 §6.3）
+BATCH_BODY_MAX_BYTES: int = 8 * 1_048_576
+"""批量提交体上限（实现参数；spec ``PayloadTooLarge`` 注明「放宽不算破坏性变更」）。"""
+
+BATCH_MAX_ITEMS: int = 10_000
+"""单批次最大条目数（实现参数；超过 → 413 / 40013）。"""
+
+BATCH_COST_CONFIRM_MINOR: int = BATCH_COST_CONFIRM_USD * 100
+"""预估成本超过该值（USD 分）需先确认（M03 §6.3 / §8.2 的 10 USD）。"""
+
+WEBHOOK_EVENTS: tuple[str, ...] = ("batch.queued", "batch.started", "batch.checkpoint_restored",
+                                   "batch.completed", "batch.failed", "batch.eta_updated")
+"""对外 webhook 事件（M03 §4.3；属**外部投递**，不走内部事件总线）。"""
+
+WEBHOOK_SIGNATURE_HEADER: str = "X-DJB-Signature"
+WEBHOOK_TIMESTAMP_HEADER: str = "X-DJB-Timestamp"
+WEBHOOK_EVENT_HEADER: str = "X-DJB-Event"
+WEBHOOK_SIGNATURE_ALGORITHM: str = "hmac-sha256"
+WEBHOOK_MAX_ATTEMPTS: int = 3
+WEBHOOK_BACKOFF_S: tuple[int, ...] = (1, 5, 30)
+WEBHOOK_TOLERANCE_S: int = 300
+"""验签时间窗（±5 分钟）——投递契约的一部分，客户端必须校验。"""
+
 # --------------------------------------------------------------------------- 请求体上限（spec）
 CHAT_BODY_MAX_BYTES: int = 1_048_576
 """请求体上限（spec ``PayloadTooLarge``：chat 建议 ≤1 MiB；超出 → 413 / 40013）。"""

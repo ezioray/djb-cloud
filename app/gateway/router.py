@@ -1,26 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
-"""M03 T1+T2 HTTP 路由（独立模块，**不接 app/api.py** —— 由 Lead 合并时统一 include）。
+"""M03 T1–T4 HTTP 路由（独立模块，**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
-覆盖 spec 1.2.x 里本任务的两个操作::
+覆盖 spec 1.2.x 里本模块的全部五个操作::
 
-    POST /v1/chat/completions   createChatCompletion   200（非流式；stream=true 属 T3）
-    GET  /v1/models             listModels             200
+    POST /v1/chat/completions        createChatCompletion   200（JSON）/ 200（SSE）
+    GET  /v1/models                  listModels             200
+    POST /v1/batches                 createBatch            202
+    GET  /v1/batches/{id}            getBatch               200
+    POST /v1/batches/{id}/cancel     cancelBatch            200
 
 约定（00-conventions §5 / spec ``Error``）：
 
 * 错误信封 ``{"error": {type, code, message, request_id}}``，``code`` 是**整数**，
-  ``type`` 取 spec 枚举；**任何响应**（含错误）都回显 ``X-Request-Id``；
+  ``type`` 取 spec 枚举；**任何响应**（含错误、含 SSE 建立前的失败）都回显 ``X-Request-Id``；
 * 429 / 503 带 ``Retry-After``；429 另带 ``X-DJB-RateLimit-*`` 三件套；
-* 请求体自己校验（不依赖框架 422）：不合法一律 400 / 40001，超上限 413 / 40013。
+* 请求体自己校验（不依赖框架 422）：不合法一律 400 / 40001，超上限 413 / 40013；
+* 幂等：所有写端点走 :class:`app.gateway.idempotency.WriteGuard`（CR-10 规则）；
+* 协议版本：``DJB-Protocol-Version`` 不兼容在严格模式下 426 / 42601（闸门默认关）；
+  ``DJB-Capabilities`` 未知值忽略不报错。
 
 认证与依赖注入（默认 **fail-closed**，合并时由 Lead 接线，见 ``WIRING.md``）::
 
-    providers.set_auth_provider(M01 verify_api_key 的投影)
-    providers.set_route_provider(M04 /api/v1/schedule/route 客户端)
-    providers.set_node_client(上游节点通道)
-    providers.set_usage_provider(M05 用量写入口)
-    providers.set_model_catalog_provider(M04 model_catalog 只读投影)
-    config_source.set_provider(M10 配置只读快照)
+    providers.set_auth_provider / set_route_provider / set_node_client / set_stream_client /
+    set_usage_provider / set_model_catalog_provider / set_webhook_sender /
+    set_webhook_secret_provider / set_result_signer
+    config_source.set_provider
 
 数据库连接经 :func:`_connection`（``app.db`` 既有约定：成功提交、异常回滚）；
 测试用 ``monkeypatch.setattr(router_module, "_connection", ...)`` 指向隔离 schema。
@@ -32,10 +36,10 @@ import uuid
 from typing import Any, Callable
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from . import (auth, chat, clock, config_source, errors, facts, features, models, providers,
-               quota, ratelimit, validation)
+from . import (auth, batches, chat, clock, config_source, errors, facts, features, models,
+               protocol, providers, ratelimit, stream, validation)
 
 log = logging.getLogger("djb.gateway.http")
 
@@ -113,41 +117,59 @@ def _idempotency_key(request: Request) -> str | None:
     return idempotency.require_key(request.headers.get(facts.IDEMPOTENCY_HEADER))
 
 
+# --------------------------------------------------------------------------- 公共前置
+def _protocol_info(request: Request) -> protocol.ProtocolInfo:
+    """协议版本判定（不兼容 + 严格模式 → 426 / 42601）；未知 capability 忽略。"""
+    info = protocol.check(request.headers.get(facts.PROTOCOL_VERSION_HEADER))
+    protocol.enabled_set(request.headers.get(facts.CAPABILITIES_HEADER))
+    return info
+
+
+def _authorize(request: Request, request_id: str, trace_id: str, moment: Any
+               ) -> tuple[models.Principal, dict[str, str]]:
+    """鉴权 + 协议版本；返回 ``(principal, 额外响应头)``。"""
+    principal = auth.principal_from_headers(dict(request.headers), now=moment,
+                                            client_ip=_client_ip(request), trace_id=trace_id)
+    info = _protocol_info(request)
+    return principal, protocol.response_headers(info)
+
+
 def _precheck_limit(principal: models.Principal, *, now: Any,
                     limiter: ratelimit.SlidingWindowLimiter | None = None) -> Any:
-    """鉴权之后的限流 / 每日上限前置检查（``/v1/models`` 也走同一口径）。"""
-    state = quota.from_snapshot(dict(principal.quotas or {}))
-    quota.assert_daily_cap(state)
-    config_values = config_source.snapshot()
-    limit_value = quota.effective_qps(state.qps, config_values.get("rate_limit_qps"))
-    scope = (f"key:{principal.api_key_id}" if principal.api_key_id is not None
-             else f"tenant:{principal.tenant_id}")
-    bucket = limiter or ratelimit.LIMITER
-    decision = bucket.take(scope, limit_value, now=now)
-    ratelimit.enforce([decision], now=now)
+    """鉴权之后的限流 / 每日上限前置检查（``/v1/models`` 与批次读端点用）。"""
+    decision, _state, _limit = ratelimit.precheck(principal, now=now, bucket=limiter)
     return decision
 
 
 # --------------------------------------------------------------------------- 对话
 @router.post("/v1/chat/completions")
-async def create_chat_completion(request: Request) -> JSONResponse:
+async def create_chat_completion(request: Request) -> Any:
     request_id = _request_id(request)
     trace_id = _trace_id(request, request_id)
     moment = clock.utcnow()
     try:
-        principal = auth.principal_from_headers(dict(request.headers), now=moment,
-                                               client_ip=_client_ip(request),
-                                               trace_id=trace_id)
+        principal, extra_headers = _authorize(request, request_id, trace_id, moment)
         raw = await request.body()
         declared = validation.parse_content_length(request.headers.get("content-length"))
-        body = validation.read_body(raw, declared_length=declared)
+        body = validation.read_body(raw, declared_length=declared,
+                                    max_bytes=facts.CHAT_BODY_MAX_BYTES)
         key = _idempotency_key(request)
+        if body.get("stream") is True:
+            with _connection() as c:
+                plan = stream.prepare(c, principal=principal, body=body, request_id=request_id,
+                                      trace_id=trace_id, idempotency_key=key, now=moment,
+                                      connection_factory=_connection)
+            headers = _headers(request_id, {**extra_headers, **plan.limit_headers,
+                                            "Cache-Control": "no-cache",
+                                            "X-Accel-Buffering": "no"})
+            return StreamingResponse(plan.frames(), media_type=facts.SSE_MEDIA_TYPE,
+                                     headers=headers)
         with _connection() as c:
             outcome = chat.complete(c, principal=principal, body=body, request_id=request_id,
                                     trace_id=trace_id, idempotency_key=key,
                                     client_ip=_client_ip(request), now=moment)
         return _ok(outcome.payload, request_id, status_code=outcome.status_code,
-                   extra=outcome.headers)
+                   extra={**extra_headers, **outcome.headers})
     except errors.GatewayError as exc:
         return _fail(exc, request_id)
     except Exception as exc:                                 # pragma: no cover - 防御
@@ -161,13 +183,11 @@ def list_models(request: Request) -> JSONResponse:
     trace_id = _trace_id(request, request_id)
     moment = clock.utcnow()
     try:
-        principal = auth.principal_from_headers(dict(request.headers), now=moment,
-                                               client_ip=_client_ip(request),
-                                               trace_id=trace_id)
+        principal, extra_headers = _authorize(request, request_id, trace_id, moment)
         limit_decision = _precheck_limit(principal, now=moment)
         items = providers.list_models()
         payload = {"object": "list", "data": [_model_payload(item) for item in items]}
-        return _ok(payload, request_id, extra=limit_decision.headers())
+        return _ok(payload, request_id, extra={**extra_headers, **limit_decision.headers()})
     except errors.GatewayError as exc:
         return _fail(exc, request_id)
     except Exception as exc:                                 # pragma: no cover - 防御
@@ -190,6 +210,67 @@ def _model_payload(item: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+# --------------------------------------------------------------------------- 慢任务
+@router.post("/v1/batches")
+async def create_batch(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    trace_id = _trace_id(request, request_id)
+    moment = clock.utcnow()
+    try:
+        principal, extra_headers = _authorize(request, request_id, trace_id, moment)
+        raw = await request.body()
+        declared = validation.parse_content_length(request.headers.get("content-length"))
+        body = validation.read_body(raw, declared_length=declared,
+                                    max_bytes=facts.BATCH_BODY_MAX_BYTES)
+        key = _idempotency_key(request)
+        with _connection() as c:
+            result = batches.submit(c, principal=principal, body=body, request_id=request_id,
+                                    trace_id=trace_id, idempotency_key=key, now=moment)
+        return _ok(result.payload, request_id, status_code=result.status_code,
+                   extra={**extra_headers, **result.headers})
+    except errors.GatewayError as exc:
+        return _fail(exc, request_id)
+    except Exception as exc:                                 # pragma: no cover - 防御
+        return _unexpected(request_id, exc)
+
+
+@router.get("/v1/batches/{id}")
+def get_batch(id: str, request: Request) -> JSONResponse:   # noqa: A002 - 路径参数名必须与 spec 一致
+    request_id = _request_id(request)
+    trace_id = _trace_id(request, request_id)
+    moment = clock.utcnow()
+    try:
+        principal, extra_headers = _authorize(request, request_id, trace_id, moment)
+        _precheck_limit(principal, now=moment)
+        with _connection() as c:
+            payload = batches.get(c, principal=principal, batch_id=id, now=moment)
+        return _ok(payload, request_id, extra=extra_headers)
+    except errors.GatewayError as exc:
+        return _fail(exc, request_id)
+    except Exception as exc:                                 # pragma: no cover - 防御
+        return _unexpected(request_id, exc)
+
+
+@router.post("/v1/batches/{id}/cancel")
+def cancel_batch(id: str, request: Request) -> JSONResponse:   # noqa: A002
+    request_id = _request_id(request)
+    trace_id = _trace_id(request, request_id)
+    moment = clock.utcnow()
+    try:
+        principal, extra_headers = _authorize(request, request_id, trace_id, moment)
+        _precheck_limit(principal, now=moment)
+        key = _idempotency_key(request)
+        with _connection() as c:
+            payload = batches.cancel(c, principal=principal, batch_id=id, now=moment,
+                                     idempotency_key=key)
+        return _ok(payload, request_id, extra=extra_headers)
+    except errors.GatewayError as exc:
+        return _fail(exc, request_id)
+    except Exception as exc:                                 # pragma: no cover - 防御
+        return _unexpected(request_id, exc)
+
+
+# --------------------------------------------------------------------------- 健康 / 接线自检
 def health() -> dict[str, Any]:
     """接线自检（合并时给运维 / 证据用；不暴露 provider 本体）。"""
     return {"module": "M03", "protocol_version": facts.PROTOCOL_VERSION_CURRENT,

@@ -92,6 +92,12 @@ ERROR_SPECS: dict[str, ErrorSpec] = {item.key: item for item in (
           registered=False, note="参数不合法（M03 §4.4；40001 属通用码，spec 正文以 400 响应表达）"),
     _spec("payload_too_large", 413, 40013, "invalid_request_error", None, "不计",
           registered=True, note="spec 1.2.0：HTTP 413 专用码 40013"),
+    # ---- 资源不存在（404；跨模块统一 40401，M01/M04/M05 同码）
+    _spec("not_found", 404, 40401, "not_found_error", None, "不计",
+          registered=False, note="批次不存在 / 跨账户不可见（统一 404，不泄露存在性）"),
+    # ---- 协议版本（426，T4）
+    _spec("protocol_incompatible", 426, 42601, "protocol_error", None, "不计",
+          registered=False, note="DJB-Protocol-Version MAJOR 不受支持（spec 已确认 42601 语义）"),
     # ---- 状态冲突（409）
     _spec("conflict", 409, 40919, "conflict_error", None, "不计",
           registered=True, note="spec 1.2.0：HTTP 409 通用码 40919（幂等键同键不同载荷）"),

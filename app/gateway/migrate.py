@@ -52,10 +52,61 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "303_batch_items.sql": ("table", "batch_items", ""),
     "304_m03_outbox.sql": ("table", "m03_outbox", ""),
     "305_m03_idempotency.sql": ("table", "m03_idempotency", ""),
+    "306_batch_webhook_state.sql": ("column", "batch_jobs", "webhook_state"),
 }
 
 #: 回滚：逆序删本模块新增对象（**不碰**任何前置对象；可重复执行）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("306_batch_webhook_state.sql", """
+        -- 收回 306：删 webhook 台账列，并把状态机护栏恢复为 302 的版本（终态行只允许
+        -- 结果/成本/检查点列变化）
+        ALTER TABLE IF EXISTS batch_jobs DROP CONSTRAINT IF EXISTS batch_jobs_webhook_meta_ck;
+        ALTER TABLE IF EXISTS batch_jobs DROP CONSTRAINT IF EXISTS batch_jobs_webhook_state_ck;
+        ALTER TABLE IF EXISTS batch_jobs DROP COLUMN IF EXISTS webhook_delivered_at;
+        ALTER TABLE IF EXISTS batch_jobs DROP COLUMN IF EXISTS webhook_last_error;
+        ALTER TABLE IF EXISTS batch_jobs DROP COLUMN IF EXISTS webhook_attempts;
+        ALTER TABLE IF EXISTS batch_jobs DROP COLUMN IF EXISTS webhook_state;
+        CREATE OR REPLACE FUNCTION m03_batch_state_guard() RETURNS trigger AS $$
+        DECLARE
+          mutable TEXT[] := ARRAY['updated_at', 'results_ref', 'results_expires_at',
+                                  'cost_actual_minor', 'checkpoint_resumes', 'error_code'];
+        BEGIN
+          IF TG_OP = 'DELETE' THEN
+            IF OLD.created_at > now() - INTERVAL '7 days' THEN
+              RAISE EXCEPTION 'batch_jobs: only rows older than 7 days may be deleted (retention)'
+                USING ERRCODE = '42501';
+            END IF;
+            RETURN OLD;
+          END IF;
+          IF OLD.status IN ('succeeded', 'failed', 'canceled') THEN
+            IF NEW.status IS DISTINCT FROM OLD.status THEN
+              RAISE EXCEPTION 'batch_jobs: terminal status % cannot move to % (INV-M03-06)',
+                OLD.status, NEW.status USING ERRCODE = '42501';
+            END IF;
+            IF (to_jsonb(NEW) - mutable) IS DISTINCT FROM (to_jsonb(OLD) - mutable) THEN
+              RAISE EXCEPTION 'batch_jobs: terminal row is immutable except delivery columns'
+                USING ERRCODE = '42501';
+            END IF;
+            RETURN NEW;
+          END IF;
+          IF NEW.status IS DISTINCT FROM OLD.status THEN
+            IF NOT ((OLD.status = 'queued' AND NEW.status IN ('running', 'canceled', 'failed'))
+                 OR (OLD.status = 'running' AND NEW.status IN ('succeeded', 'failed', 'canceled'))) THEN
+              RAISE EXCEPTION 'batch_jobs: illegal transition % -> % (M03 §3.1)',
+                OLD.status, NEW.status USING ERRCODE = '42501';
+            END IF;
+          END IF;
+          IF NEW.status = 'canceled' AND NEW.canceled_at IS NULL THEN
+            NEW.canceled_at := now();
+          END IF;
+          IF NEW.status IN ('succeeded', 'failed') AND NEW.completed_at IS NULL THEN
+            NEW.completed_at := now();
+          END IF;
+          NEW.updated_at := now();
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """),
     ("305_m03_idempotency.sql", """
         DROP TRIGGER IF EXISTS m03_idempotency_guard ON m03_idempotency;
         DROP FUNCTION IF EXISTS m03_idempotency_guard();
@@ -212,15 +263,19 @@ def apply_down(schema: str, *, verbose: bool = False) -> dict[str, Any]:
     return {"schema": schema, "rolled_back": rolled}
 
 
-def _exists(conn: psycopg.Connection, kind: str, name: str) -> bool:
+def _exists(conn: psycopg.Connection, kind: str, name: str, extra: str = "") -> bool:
     if kind == "table":
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM information_schema.tables"
                         " WHERE table_schema = current_schema() AND table_name = %s", (name,))
             return cur.fetchone() is not None
-    with conn.cursor() as cur:                                  # pragma: no cover - 未用
-        cur.execute("SELECT 1")
-        return False
+    if kind == "column":
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.columns"
+                        " WHERE table_schema = current_schema() AND table_name = %s"
+                        " AND column_name = %s", (name, extra))
+            return cur.fetchone() is not None
+    raise ValueError(f"未知标记类型：{kind!r}")                   # pragma: no cover - 编程错误
 
 
 def status(schema: str) -> dict[str, Any]:
@@ -228,8 +283,11 @@ def status(schema: str) -> dict[str, Any]:
     ensure_schema(schema)
     conn = connect(schema)
     try:
-        rows = [{"name": name, "kind": _MARKERS[name][0], "object": _MARKERS[name][1],
-                 "applied": _exists(conn, _MARKERS[name][0], _MARKERS[name][1])}
+        rows = [{"name": name, "kind": _MARKERS[name][0],
+                 "object": _MARKERS[name][1] + ("." + _MARKERS[name][2]
+                                                if _MARKERS[name][2] else ""),
+                 "applied": _exists(conn, _MARKERS[name][0], _MARKERS[name][1],
+                                    _MARKERS[name][2])}
                 for name in MODULE_MIGRATIONS if name in _MARKERS]
     finally:
         conn.close()

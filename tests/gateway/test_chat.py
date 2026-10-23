@@ -9,8 +9,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.gateway import (chat, errors, facts, features, idempotency, models, providers, ratelimit,
-                         store)
+from app.gateway import (chat, errors, facts, features, models, providers, store)
 from gatewaykit import NOW, FakeAuth, FakeCatalog, FakeNode, FakeRoute, FakeUsage, principal_dict
 
 
@@ -217,7 +216,8 @@ def test_node_layer_limit_is_off_by_default(conn, monkeypatch):
     principal = _principal(qps=100)
     _run(conn, principal)
     _run(conn, principal)                    # 开关关闭 → 不做节点层二次限流
-    assert len(providers.current()) == 5
+    assert all(value is True for key, value in providers.current().items()
+               if key in {"auth", "route", "node", "usage"})
 
 
 def test_node_layer_limit_enforced_when_feature_is_on(conn, monkeypatch):

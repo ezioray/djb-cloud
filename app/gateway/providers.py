@@ -26,9 +26,12 @@ log = logging.getLogger("djb.gateway.providers")
 __all__ = [
     "AuthProvider", "RouteProvider", "NodeClient", "UsageProvider", "ModelCatalogProvider",
     "UpstreamTimeout", "UpstreamFailure", "NoRoute", "AuthUnavailable", "UsageUnavailable",
-    "set_auth_provider", "set_route_provider", "set_node_client", "set_usage_provider",
-    "set_model_catalog_provider", "reset_providers", "current",
-    "authenticate", "route", "send", "record_usage", "list_models", "translate_error",
+    "StreamClient", "WebhookSender", "WebhookSecretProvider", "ResultSigner",
+    "set_auth_provider", "set_route_provider", "set_node_client", "set_stream_client",
+    "set_usage_provider", "set_model_catalog_provider", "set_webhook_sender",
+    "set_webhook_secret_provider", "set_result_signer", "reset_providers", "current",
+    "authenticate", "route", "send", "stream", "record_usage", "list_models",
+    "send_webhook", "webhook_secret", "sign_result", "translate_error",
 ]
 
 
@@ -63,6 +66,34 @@ class UsageProvider(Protocol):
 
 
 @runtime_checkable
+class StreamClient(Protocol):
+    """上游流式通道：``NodeCall`` → 分块迭代器（``StreamChunk`` / Mapping / 字符串增量）。"""
+
+    def stream(self, call: models.NodeCall) -> Any: ...
+
+
+@runtime_checkable
+class WebhookSender(Protocol):
+    """对外 webhook 投递（HTTP）：``(url, body, headers) -> status_code``。"""
+
+    def __call__(self, url: str, body: bytes, headers: Mapping[str, str]) -> int: ...
+
+
+@runtime_checkable
+class WebhookSecretProvider(Protocol):
+    """按账户取 webhook 签名密钥**引用**（真实密钥由 KMS/Secret 管理，不进代码与日志）。"""
+
+    def __call__(self, account_id: str) -> Any: ...
+
+
+@runtime_checkable
+class ResultSigner(Protocol):
+    """批次结果签名 URL 签发（≤15 分钟；``(batch_id, expires_at) -> url``）。"""
+
+    def __call__(self, batch_id: str, expires_at: Any) -> Any: ...
+
+
+@runtime_checkable
 class ModelCatalogProvider(Protocol):
     """M04 ``model_catalog`` 只读投影：``list_models()`` → ``[Model, ...]``。"""
 
@@ -94,8 +125,12 @@ class UsageUnavailable(Exception):
 _auth: AuthProvider | None = None
 _route: RouteProvider | None = None
 _node: NodeClient | None = None
+_stream: StreamClient | None = None
 _usage: UsageProvider | None = None
 _catalog: ModelCatalogProvider | None = None
+_webhook_sender: WebhookSender | None = None
+_webhook_secret: WebhookSecretProvider | None = None
+_result_signer: ResultSigner | None = None
 
 
 def set_auth_provider(provider: AuthProvider | None) -> None:
@@ -113,6 +148,12 @@ def set_node_client(client: NodeClient | None) -> None:
     _node = client
 
 
+def set_stream_client(client: StreamClient | None) -> None:
+    """注入上游**流式**通道（T3）；未接线时 stream=true 一律 503 fail-closed。"""
+    global _stream
+    _stream = client
+
+
 def set_usage_provider(provider: UsageProvider | None) -> None:
     global _usage
     _usage = provider
@@ -123,17 +164,40 @@ def set_model_catalog_provider(provider: ModelCatalogProvider | None) -> None:
     _catalog = provider
 
 
+def set_webhook_sender(sender: WebhookSender | None) -> None:
+    """注入对外 webhook 投递（T4）；未接线时只落库不投递（可重放）。"""
+    global _webhook_sender
+    _webhook_sender = sender
+
+
+def set_webhook_secret_provider(provider: WebhookSecretProvider | None) -> None:
+    """注入「账户 → 签名密钥引用」读取（T4）。**密钥本体不得进日志/事件/响应。**"""
+    global _webhook_secret
+    _webhook_secret = provider
+
+
+def set_result_signer(signer: ResultSigner | None) -> None:
+    """注入批次结果签名 URL 签发（T4；TTL 由网关控制 ≤15 分钟）。"""
+    global _result_signer
+    _result_signer = signer
+
+
 def reset_providers() -> None:
     """测试与合并窗口复位（全部回到 fail-closed）。"""
-    global _auth, _route, _node, _usage, _catalog
-    _auth = _route = _node = _usage = _catalog = None
+    global _auth, _route, _node, _stream, _usage, _catalog
+    global _webhook_sender, _webhook_secret, _result_signer
+    _auth = _route = _node = _stream = _usage = _catalog = None
+    _webhook_sender = _webhook_secret = _result_signer = None
 
 
 def current() -> dict[str, Any]:
     """当前接线状态（**不返回** provider 本体，只返回是否接线；供 /healthz 与证据用）。"""
     return {"auth": _auth is not None, "route": _route is not None,
-            "node": _node is not None, "usage": _usage is not None,
-            "model_catalog": _catalog is not None}
+            "node": _node is not None, "stream": _stream is not None,
+            "usage": _usage is not None, "model_catalog": _catalog is not None,
+            "webhook_sender": _webhook_sender is not None,
+            "webhook_secret": _webhook_secret is not None,
+            "result_signer": _result_signer is not None}
 
 
 def _maybe_await(value: Any) -> Any:
@@ -257,6 +321,58 @@ def send(call: models.NodeCall) -> models.NodeResult:
         first_byte_ms=models.int_or_none(pick(raw, "first_byte_ms")),
         upstream_request_id=models.str_or_none(pick(raw, "upstream_request_id", "id")),
     )
+
+
+def stream(call: models.NodeCall) -> Any:
+    """向上游发起**流式**调用，返回分块迭代器（元素经 :func:`coerce_stream` 规整）。
+
+    未接线 → 503 fail-closed；首字节前的超时 / 失败抛 :class:`UpstreamTimeout` /
+    :class:`UpstreamFailure`（与 ``send`` 同口径，便于 dispatch 复用重路由逻辑）。
+    """
+    if _stream is None:
+        raise errors.GatewayError("service_unavailable",
+                                  "流式通道未接线：网关 fail-closed（合并时由 Lead 注入节点流式通道）",
+                                  reason="unavailable", retry_after_s=5)
+    try:
+        raw = _invoke(_stream, "stream", call)
+    except errors.GatewayError:
+        raise
+    except (UpstreamTimeout, UpstreamFailure):
+        raise
+    except Exception as exc:
+        log.warning("gateway.provider.stream_unexpected",
+                    extra={"event": "provider.stream_unexpected",
+                           "error": type(exc).__name__, "node_id": call.node_id})
+        raise UpstreamFailure(f"{type(exc).__name__}: {exc}") from exc
+    if raw is None or isinstance(raw, (str, bytes)):
+        raise UpstreamFailure("流式通道返回非法迭代器")
+    return raw
+
+
+def send_webhook(url: str, body: bytes, headers: Mapping[str, str]) -> int | None:
+    """投递一次 webhook；未接线 → None（只落库、可重放，不算失败）。"""
+    if _webhook_sender is None:
+        log.info("gateway.webhook.not_wired", extra={"event": "webhook.not_wired"})
+        return None
+    from . import webhook as webhook_module                # 同包；避免顶层循环 import
+
+    status = _invoke(_webhook_sender, "__call__", url, body, headers)
+    return webhook_module.coerce_status(status)
+
+
+def webhook_secret(account_id: str) -> str | None:
+    """取账户的 webhook 签名密钥（**引用**解析后的值；未接线 → None = 不签名，拒绝投递）。"""
+    if _webhook_secret is None:
+        return None
+    raw = _invoke(_webhook_secret, "__call__", account_id)
+    return models.str_or_none(raw)
+
+
+def sign_result(batch_id: str, expires_at: Any) -> str | None:
+    """签发批次结果 URL；未接线 → None（响应里就不给 results_ref）。"""
+    if _result_signer is None:
+        return None
+    return models.str_or_none(_invoke(_result_signer, "__call__", batch_id, expires_at))
 
 
 def record_usage(draft: models.UsageDraft) -> models.UsageReceipt:

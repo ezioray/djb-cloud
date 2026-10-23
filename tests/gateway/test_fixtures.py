@@ -14,7 +14,7 @@ import uuid
 import pytest
 
 from app.gateway import config_source, facts, providers
-from gatewaykit import FakeAuth, FakeCatalog, FakeNode, FakeRoute, FakeUsage, NOW
+from gatewaykit import FakeAuth, FakeCatalog, FakeNode, FakeRoute, FakeUsage
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[2] / "contracts" / "fixtures" / "M03"
 
@@ -53,6 +53,15 @@ def client(api_schema: str):
             yield test_client
     finally:
         router_module._connection = original
+
+
+@pytest.fixture
+def wired_stream(wired_all):
+    """流式用例：额外接上 stream client（首字节即到达）。"""
+    from gatewaykit import FakeStream
+
+    providers.set_stream_client(FakeStream(chunks=["hi"], tokens_in=3, tokens_out=1))
+    return wired_all
 
 
 @pytest.fixture
@@ -113,18 +122,20 @@ def test_error_rate_limited_fixture(client, wired_all):
         assert limited.json()["error"]["code"] == 42901
 
 
-def test_stream_fixture_is_a_documented_t3_deferral(client, wired_all):
-    """T3 交付 SSE；当前必须**显式拒绝**（不是假 200），契约期望保持登记。"""
+def test_stream_fixture_is_satisfied_by_sse(client, wired_stream):
+    """T3 起 ``boundary_stream_first_byte`` 必须真的返回 SSE（不再靠 400 占位）。"""
     fixture = _fixture("boundary_stream_first_byte.json")
     assert fixture["expect"]["http"] == 200
     assert fixture["expect"]["content_type"] == "text/event-stream"
-    response = client.post("/v1/chat/completions", json={"model": "m1", "stream": True,
-                                                         "messages": [
-                                                             {"role": "user", "content": "hi"}]},
-                           headers={facts.AUTH_HEADER: "Bearer djb_live_abcdefgh"})
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == 40001
-    assert response.json()["error"]["field"] == "stream"
+    with client.stream("POST", "/v1/chat/completions",
+                       json={"model": fixture["input"].get("model", "m1"),
+                             "stream": True,
+                             "messages": [{"role": "user", "content": "hi"}]},
+                       headers={facts.AUTH_HEADER: "Bearer djb_live_abcdefgh"}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = "".join(response.iter_text())
+    assert body.rstrip().endswith(f"data: {facts.SSE_DONE}")
 
 
 def test_fixtures_have_no_secrets_or_body_text():

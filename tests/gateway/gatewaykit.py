@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import pathlib
-import re
 import subprocess
 import uuid
 from contextlib import contextmanager
@@ -29,13 +28,14 @@ from app.gateway import models
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = ROOT / "migrations"
 
-#: 本模块的迁移（301–305，数字序）
+#: 本模块的迁移（301–306，数字序）
 M03_MIGRATIONS = (
     "301_api_request_log.sql",
     "302_batch_jobs.sql",
     "303_batch_items.sql",
     "304_m03_outbox.sql",
     "305_m03_idempotency.sql",
+    "306_batch_webhook_state.sql",
 )
 
 #: M03 拥有的表（01-ownership §2 + M03 §5；``m03_outbox`` 按 01-ownership §2「每模块自己的 outbox」；
@@ -250,11 +250,13 @@ class FakeRoute:
     """M04 ``/api/v1/schedule/route`` 的投影：按顺序返回决策，可注入失败。"""
 
     def __init__(self, *, node_id: str = "n_001", node_qps: int | None = None,
-                 price_minor: int = 250, fail_times: int = 0) -> None:
+                 price_minor: int = 250, fail_times: int = 0,
+                 eta_seconds: int = 1) -> None:
         self.node_id = node_id
         self.node_qps = node_qps
         self.price_minor = price_minor
         self.fail_times = fail_times
+        self.eta_seconds = eta_seconds
         self.requests: list[models.RouteRequest] = []
 
     def route(self, request: models.RouteRequest) -> dict[str, Any]:
@@ -266,7 +268,8 @@ class FakeRoute:
         return {"decision_id": str(uuid.uuid4()),
                 "chosen": {"node_id": self.node_id, "upstream_id": "up_001",
                            "access": "A1", "model": request.model},
-                "quote_version": "v1", "policy_version": "pv-1", "eta_seconds": 1,
+                "quote_version": "v1", "policy_version": "pv-1",
+                "eta_seconds": self.eta_seconds,
                 "price": {"amount": f"{self.price_minor / 100:.2f}", "unit": "token"},
                 "node_qps": self.node_qps}
 
@@ -303,6 +306,84 @@ class FakeNode:
                                  model=call.model, tokens_in=self.tokens_in,
                                  tokens_out=self.tokens_out, usage_source=self.usage_source,
                                  latency_ms=self.latency_ms, first_byte_ms=self.first_byte_ms)
+
+
+class FakeStream:
+    """上游**流式**通道：可注入首字节前失败、流中中断、token 上报。"""
+
+    def __init__(self, chunks: Sequence[str] = ("hello", " world"), *,
+                 tokens_in: int | None = 3, tokens_out: int | None = 2,
+                 timeouts: int = 0, failures: int = 0, fail_after: int | None = None,
+                 finish_reason: str = "stop", first_byte_ms: int = 5) -> None:
+        self.chunks = list(chunks)
+        self.tokens_in = tokens_in
+        self.tokens_out = tokens_out
+        self.timeouts = timeouts
+        self.failures = failures
+        self.fail_after = fail_after
+        self.finish_reason = finish_reason
+        self.first_byte_ms = first_byte_ms
+        self.calls: list[models.NodeCall] = []
+
+    def stream(self, call: models.NodeCall):
+        from app.gateway import providers
+
+        self.calls.append(call)
+        if self.timeouts > 0:
+            self.timeouts -= 1
+            raise providers.UpstreamTimeout("上游超时")
+        if self.failures > 0:
+            self.failures -= 1
+            raise providers.UpstreamFailure("上游 502")
+        return self._generate()
+
+    def _generate(self):
+        from app.gateway import models as gateway_models, providers
+
+        total = len(self.chunks)
+        for index, text in enumerate(self.chunks):
+            if self.fail_after is not None and index >= self.fail_after:
+                raise providers.UpstreamFailure("上游中途断开")
+            last = index == total - 1
+            yield gateway_models.StreamChunk(
+                delta=text, role="assistant" if index == 0 else None,
+                finish_reason=self.finish_reason if last else None,
+                model="m1",
+                tokens_in=self.tokens_in if last else None,
+                tokens_out=self.tokens_out if last else None,
+                first_byte_ms=self.first_byte_ms if index == 0 else None)
+
+
+class FakeWebhookSender:
+    """对外 webhook 投递桩：记录请求，可按序列返回状态码 / 抛异常。"""
+
+    def __init__(self, statuses: Sequence[int | None] | None = None, *,
+                 raises: int = 0) -> None:
+        self.statuses = list(statuses or [200])
+        self.raises = raises
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(self, url: str, body: bytes, headers: Mapping[str, str]) -> Any:
+        self.calls.append({"url": url, "body": body, "headers": dict(headers)})
+        if self.raises > 0:
+            self.raises -= 1
+            raise RuntimeError("connection refused")
+        if not self.statuses:
+            return 500
+        return self.statuses.pop(0)
+
+
+class FakeSigner:
+    """批次结果签名 URL 签发桩。"""
+
+    def __init__(self, base: str = "https://files.example") -> None:
+        self.base = base
+        self.calls: list[tuple[str, Any]] = []
+
+    def __call__(self, batch_id: str, expires_at: Any) -> str:
+        self.calls.append((batch_id, expires_at))
+        stamp = int(expires_at.timestamp())
+        return f"{self.base}/{batch_id}?exp={stamp}&sig=deadbeef"
 
 
 class FakeUsage:
@@ -344,6 +425,6 @@ __all__ = [
     "dsn", "connect", "session", "create_schema", "drop_schema", "migration_files",
     "m03_migration_files", "prerequisite_files", "run_migrations", "apply_migrations",
     "table_names", "column_names", "function_names", "index_names",
-    "FakeAuth", "FakeRoute", "FakeNode", "FakeUsage", "FakeCatalog", "principal_dict",
-    "reload_now",
+    "FakeAuth", "FakeRoute", "FakeNode", "FakeStream", "FakeUsage", "FakeCatalog",
+    "FakeWebhookSender", "FakeSigner", "principal_dict", "reload_now",
 ]

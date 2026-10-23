@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import pathlib
 import re
-import subprocess
-
-import pytest
 
 from app.gateway import migrate as gateway_migrate
-from gatewaykit import (BASE_TABLES, M03_FUNCTIONS, M03_MIGRATIONS, M03_TABLES, NOW,
-                        apply_migrations, column_names, connect, function_names, index_names,
+from gatewaykit import (BASE_TABLES, M03_FUNCTIONS, M03_MIGRATIONS, M03_TABLES,
+                        apply_migrations, column_names, function_names, index_names,
                         m03_migration_files, migration_files, migration_number,
                         prerequisite_files, run_migrations, session, table_names)
 
@@ -119,7 +116,8 @@ def test_numeric_order_differs_from_lexicographic_and_we_use_numeric():
     """数字序是本模块的唯一执行序（3xx 段内不会有 30x/31x 混排的歧义）。"""
     numeric = [migration_number(path) for path in m03_migration_files()]
     assert numeric == sorted(numeric)
-    assert [int(name.split("_", 1)[0]) for name in M03_MIGRATIONS] == [301, 302, 303, 304, 305]
+    assert [int(name.split("_", 1)[0]) for name in M03_MIGRATIONS] == [301, 302, 303, 304, 305,
+                                                                      306]
 
 
 def test_migrations_create_only_m03_tables(schema):

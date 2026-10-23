@@ -23,6 +23,9 @@ def test_mapping_matches_m03_section_4_4():
         # 参数 / 请求体超限
         "bad_request": (400, 40001),
         "payload_too_large": (413, 40013),
+        # 资源不存在 / 协议版本（T4）
+        "not_found": (404, 40401),
+        "protocol_incompatible": (426, 42601),
         # 状态冲突
         "conflict": (409, 40919),
         # 无可用节点 / 上游超时 / 上游异常
@@ -59,8 +62,9 @@ def test_spec_registered_codes_cover_the_contract_changes():
 
 def test_pending_spec_codes_are_explicit_and_reported():
     """未进 spec 码段表的码必须显式列出（交付证据里作为 CR 上报 Lead），不得静默返回。"""
-    assert errors.PENDING_SPEC_CODES == (40001, 40302, 40303, 42901, 42902, 44101, 45001,
-                                         45201, 45202, 45203, 50901, 50902, 50903)
+    assert errors.PENDING_SPEC_CODES == (40001, 40302, 40303, 40401, 42601, 42901, 42902,
+                                         44101, 45001, 45201, 45202, 45203, 50901, 50902,
+                                         50903)
     for item in errors.ERROR_SPECS.values():
         assert item.note, f"{item.key}: 未登记码必须写口径备注"
 
