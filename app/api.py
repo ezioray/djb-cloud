@@ -12,14 +12,24 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import db, pricing, receipt as rcpt, upstream
+from .config_center.router import create_router as create_config_center_router
 from .identity.router import router as identity_router
 from .ledger.router import router as ledger_router
+from .metering.router import router as metering_router
 from .nodes import router as node_router
+from .scheduling.router import router as scheduling_router
+from .supply.router import router as supply_router
 
 app = FastAPI(title="djb-cloud", version="0.1.0")
 app.include_router(node_router)
 app.include_router(identity_router)
 app.include_router(ledger_router)
+# W1 模块接线（Lead 合并窗口）：M02 / M04 / M05 / M10 的路由由各模块自带，
+# 鉴权/连接默认 fail-closed；生产部署再注入 provider（见各模块 router 头部说明）。
+app.include_router(supply_router)
+app.include_router(scheduling_router)
+app.include_router(metering_router)
+app.include_router(create_config_center_router())
 
 
 # ── 鉴权：用方 Bearer（库里只存 sha256）───────────────────────────────────────
@@ -117,18 +127,6 @@ async def create_chat_completion(
             yield "data: [DONE]\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
     return JSONResponse(payload, headers=headers)
-
-
-@app.get("/api/v1/user/usage/summary")
-def usage_summary(authorization: str | None = Header(default=None),
-                  x_client_key: str | None = Header(default=None, alias="X-Client-Key")):
-    consumer = x_client_key or (_auth(authorization) if authorization else None)
-    if not consumer:
-        raise HTTPException(status_code=401, detail={"code": "unauthenticated", "message": "missing key"})
-    with db.conn() as c, c.cursor() as cur:
-        cur.execute("SELECT coalesce(sum(amount_micro),0), count(*) FROM receipts WHERE consumer_id=%s", (consumer,))
-        total, n = cur.fetchone()
-    return {"object": "usage_summary", "consumer": consumer, "receipts": n, "amount_micro": total}
 
 
 @app.get("/api/v1/admin/ledger/entries")

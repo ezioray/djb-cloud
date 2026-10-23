@@ -147,7 +147,8 @@ def _error_response(exc: Exception, request_id: str) -> JSONResponse:
     elif isinstance(exc, GrayPlanInvalid):
         status, code, kind = 400, 47007, "validation_error"
     elif isinstance(exc, _Unauthorized):
-        status, code, kind = 401, 0, "authentication_error"
+        # spec 1.2.x：Error.code 必须是已登记数字码；40101 = 未认证 / 会话缺失
+        status, code, kind = 401, 40101, "authentication_error"
     elif isinstance(exc, ValidationFailed):
         status, code, kind = 400, exc.code, "validation_error"
     else:                                              # pragma: no cover - 兜底
