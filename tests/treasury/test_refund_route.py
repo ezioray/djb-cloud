@@ -17,7 +17,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.treasury import errors, models, policy, refund
+from app.treasury import config_source, errors, models, policy, refund
 
 import m08kit
 from conftest import OTHER_USER_PRINCIPAL, build_client
@@ -210,3 +210,55 @@ def test_models_mask_and_policy_resolution_units():
     assert policy.resolve_original_route(attempts) == "psp:mock:t1"
     with pytest.raises(errors.Conflict):
         policy.resolve_original_route([])
+
+# ───────────────────────────────────────────── CR-11：内部构造覆盖推导失败分支
+def test_internal_construction_unavailable_details(savepoint_conn):
+    """CR-11：公开 API 顺序下（未支付先报 order_not_payable）不易直达推导失败分支，
+    这里用 tests/treasury 内部 fixture 直接造 0 / 2 个成功 attempt 的订单，
+    调 refund.create_refund_request（服务端推导路径，不走 HTTP），断言错误码/原因/条数。"""
+    config = config_source.load(None)
+
+    def draft(order_no: str) -> models.RefundDraft:
+        return models.RefundDraft(order_no=order_no, amount_minor=1_000,
+                                  reason_code="unused_balance")
+
+    # ① 0 个成功 attempt（已入账订单，能过 order_payable；但尝试表为空）
+    m08kit.make_order(savepoint_conn, order_no="PO-CR11-0", status="credited",
+                      credited_minor=5_000, paid_at=NOW, now=NOW)
+    with pytest.raises(errors.Conflict) as zero_error:
+        refund.create_refund_request(savepoint_conn, draft("PO-CR11-0"),
+                                     account_id="acct-1", requested_by="acct-1",
+                                     idempotency_key=None, config=config,
+                                     consumed_provider=None, risk_check=None, now=NOW)
+    zero = zero_error.value
+    assert zero.status_code == 409 and zero.code == 40919
+    assert zero.reason == "original_route_unavailable"
+    assert zero.details["successful_attempts"] == 0
+
+    # ② 2 个成功 attempt → 无法唯一确定原路
+    order = m08kit.make_order(savepoint_conn, order_no="PO-CR11-2", status="credited",
+                              credited_minor=5_000, paid_at=NOW, now=NOW)
+    m08kit.make_attempt(savepoint_conn, order, provider_txn_id="txn-cr11-a",
+                        status="succeeded")
+    m08kit.make_attempt(savepoint_conn, order, provider_txn_id="txn-cr11-b",
+                        status="succeeded")
+    with pytest.raises(errors.Conflict) as two_error:
+        refund.create_refund_request(savepoint_conn, draft("PO-CR11-2"),
+                                     account_id="acct-1", requested_by="acct-1",
+                                     idempotency_key=None, config=config,
+                                     consumed_provider=None, risk_check=None, now=NOW)
+    two = two_error.value
+    assert two.status_code == 409 and two.code == 40919
+    assert two.reason == "original_route_unavailable"
+    assert two.details["successful_attempts"] == 2
+
+    # ③ 对照：未支付订单在公开顺序里先命中 order_not_payable（说明为何用内部构造）
+    m08kit.make_order(savepoint_conn, order_no="PO-CR11-U", status="created")
+    with pytest.raises(errors.Conflict) as unpaid_error:
+        refund.create_refund_request(savepoint_conn, draft("PO-CR11-U"),
+                                     account_id="acct-1", requested_by="acct-1",
+                                     idempotency_key=None, config=config,
+                                     consumed_provider=None, risk_check=None, now=NOW)
+    assert unpaid_error.value.reason == "order_not_payable"
+    assert "successful_attempts" not in unpaid_error.value.details
+
