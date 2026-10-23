@@ -51,7 +51,14 @@ def test_empty_db_applies_every_migration(db, schema_name):
 
 
 def test_module_migrations_are_in_the_1xx_segment():
-    files = sorted(p.name for p in MIGRATIONS_DIR.glob("1*.sql"))
+    # 00-conventions §7.1：一个迁移只属于一个模块。M01 段 = 100–199；
+    # 文件名以 "1" 开头不等于 1xx（1000_config_* / 1100_risk_* / 13xx / 14xx 都是别的模块）。
+    def _segment(name: str) -> int:
+        head = name.split("_", 1)[0]
+        return int(head) if head.isdigit() else -1
+
+    files = sorted(p.name for p in MIGRATIONS_DIR.glob("*.sql")
+                   if 100 <= _segment(p.name) <= 199)
     assert files == list(migrate.MODULE_MIGRATIONS)
     for name in files:
         assert name[:3].isdigit() and name[0] == "1", f"{name} 不在 M01 的 1xx 段"

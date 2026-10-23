@@ -276,3 +276,16 @@ def test_scan_for_mfa_enabled_account_is_rejected(api, f):
     response = _scan_login(api, ticket)
     assert response.status_code == 401
     assert error_of(response)["code"] == 40110
+
+
+def test_scan_expired_created_ticket_is_40905(api, f, timeline):
+    """未扫码就过期的票据：``/auth/login`` 必须 409/40905（实现曾落到 404）。
+
+    回归点：``_scan_login`` 对 ``expired`` / ``consumed`` 必须先判状态再查账户——
+    否则 ``account_id=None`` 会让 ``get_account`` 抛 NotFound（404），与 spec 冲突。
+    """
+    _row, ticket = scan.create(f.conn, now=timeline.moment)
+    timeline.advance(seconds=models.SCAN_TICKET_TTL_SECONDS + 1)
+    response = _scan_login(api, ticket)
+    assert response.status_code == 409
+    assert error_of(response)["code"] == 40905

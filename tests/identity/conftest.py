@@ -90,15 +90,27 @@ def f(conn, now) -> Factory:
     return Factory(conn, now)
 
 
+@pytest.fixture(autouse=True)
+def clock_now(monkeypatch, now):
+    """固定时钟，避免墙钟漂移（00-conventions §10：测试必须确定性）。
+
+    把 app.identity.clock.utcnow 钉到测试时刻 NOW：HTTP 用例与断言（f.moment）共用同一时钟。
+    历史上 api 用例走真实墙钟，跨日后扫码 120s TTL / revoke 立即失效 / rotate 的
+    revoked_at <= NOW 全部变红；timeline 依赖本 fixture，并在其后用可推进时钟覆盖。
+    """
+    monkeypatch.setattr(clock, "utcnow", lambda: now)
+    return now
+
+
 @pytest.fixture()
-def timeline(monkeypatch, now) -> Timeline:
+def timeline(monkeypatch, now, clock_now) -> Timeline:
     line = Timeline(now)
     monkeypatch.setattr(clock, "utcnow", line)
     return line
 
 
 @pytest.fixture()
-def api(conn, monkeypatch):
+def api(conn, monkeypatch, clock_now):
     """FastAPI TestClient：把 router 的 ``_connection`` 指向本用例事务连接。
 
     这样路由里的写操作都落在**同一测试事务**里，teardown 回滚即清空；
