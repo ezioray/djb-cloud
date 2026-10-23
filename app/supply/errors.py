@@ -117,6 +117,14 @@ class NodeNotFound(SupplyError):
     reason = "node_not_found"
 
 
+class UpstreamNotFound(SupplyError):
+    """上游申报不存在 / 不属于该节点（40401；不泄露他人节点存在性）。"""
+
+    status_code = 404
+    code = "40401"
+    reason = "upstream_not_found"
+
+
 class AccountNotFound(SupplyError):
     """绑定目标的账户在 M01 只读视图里不存在（40401；不泄露存在性细节）。"""
 
@@ -230,7 +238,7 @@ def error_type_for(status_code: int) -> str:
 __all__ = [
     "SupplyError", "InvalidArgument", "CredentialFieldRejected",
     "NodeKeyMissing", "NodeKeyInvalid", "NodeKeyRevoked", "AdminAuthUnavailable",
-    "NodeStateForbidden", "NodeNotFound", "AccountNotFound",
+    "NodeStateForbidden", "NodeNotFound", "AccountNotFound", "UpstreamNotFound",
     "FingerprintConflict", "BindingConflict", "KeyStateConflict", "RetireIrreversible",
     "BindingCodeInvalid", "IdempotencyConflict", "PolicyVersionRegression",
     "StepUpRequired", "ProtocolIncompatible", "HeartbeatTooFast",

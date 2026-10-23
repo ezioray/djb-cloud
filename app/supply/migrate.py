@@ -37,6 +37,14 @@ MODULE_MIGRATIONS: tuple[str, ...] = tuple(
 
 #: 回滚：逆序删本模块新增对象；**存量对象只删新增列**（00-conventions §7.2）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("208_supply_heartbeat.sql", """
+        DROP VIEW IF EXISTS v_supply_capacity_latest;
+        DROP VIEW IF EXISTS v_supply_node_snapshot;
+        DROP INDEX IF EXISTS nodes_offline_scan_idx;
+        ALTER TABLE IF EXISTS nodes DROP CONSTRAINT IF EXISTS nodes_heartbeat_seq_chk;
+        ALTER TABLE IF EXISTS nodes DROP COLUMN IF EXISTS offline_announced_at;
+        ALTER TABLE IF EXISTS nodes DROP COLUMN IF EXISTS heartbeat_seq;
+    """),
     ("207_supply_binding_codes.sql", """
         DROP INDEX IF EXISTS node_binding_codes_expiry_idx;
         DROP INDEX IF EXISTS node_binding_codes_node_idx;
@@ -124,6 +132,7 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "205_supply_outbox.sql": ("table", "supply_outbox", ""),
     "206_supply_idempotency.sql": ("table", "supply_idempotency", ""),
     "207_supply_binding_codes.sql": ("table", "node_binding_codes", ""),
+    "208_supply_heartbeat.sql": ("column", "nodes", "heartbeat_seq"),
 }
 
 

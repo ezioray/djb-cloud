@@ -40,8 +40,8 @@ LEGACY_NODE_COLUMNS = (
 def test_empty_database_applies_001_to_299_in_numeric_order(schema: str) -> None:
     outputs = apply_migrations(schema)
     assert [item["name"] for item in outputs] == [path.name for path in migration_files()]
-    assert [item["name"] for item in outputs if item["name"].startswith("2")][:8] == \
-        list(M02_MIGRATIONS)
+    assert [item["name"] for item in outputs
+            if item["name"].startswith("2")][:len(M02_MIGRATIONS)] == list(M02_MIGRATIONS)
     assert all(item["rc"] == 0 for item in outputs)
 
     tables = table_names(schema)
@@ -66,7 +66,7 @@ def test_empty_database_applies_in_glob_order_too(schema: str) -> None:
     assert set(M02_TABLES) <= table_names(schema)
 
 
-def test_module_migrations_are_the_eight_expected_files() -> None:
+def test_module_migrations_are_the_expected_files() -> None:
     assert migrate.MODULE_MIGRATIONS == M02_MIGRATIONS
     assert list(M02_MIGRATIONS) == sorted(M02_MIGRATIONS, key=lambda n: int(n.split("_")[0]))
 

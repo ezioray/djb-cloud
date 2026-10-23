@@ -66,8 +66,9 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
         name="supply.capacity_snapshot_view",
         owner="supply-seat",
         expire_at=date(2027, 6, 30),
-        rollback_rule="关闭后 M04 回退到直接读公告表的最新 seq；已生成的快照视图保留只读",
-        description="容量公告快照视图（T3，供 M04 候选集）；关闭不影响公告落库",
+        rollback_rule="关闭后 M04 回退到直接读 capacity_announcements 按 seq 取最新；视图保留只读",
+        description=("容量公告快照视图（T3）的**消费端上线开关**：视图已建，但 M04 在开关打开前"
+                     "不得据此路由（避免两侧同时切换期口径不一致）；关闭不影响公告落库"),
     ),
     FeatureSwitch(
         name="supply.policy_etag_304",

@@ -26,6 +26,10 @@ ALLOWED_APP_PREFIXES = ("app.supply", "app.db")
 
 #: 允许读的**只读视图**（00-conventions §7.4：v_<module>_<object>）
 ALLOWED_FOREIGN_OBJECTS = {"v_identity_accounts"}
+#: M02 自己建的只读视图（供 M04 读；属于本模块对象）
+OWN_VIEWS = {"v_supply_capacity_latest", "v_supply_node_snapshot"}
+#: 形如 "UPDATE SKIP LOCKED" / "INTO ..." 的 SQL 关键字组合不是表名
+SQL_NON_TABLE_TOKENS = {"skip", "set", "only", "where", "select"}
 
 SQL_TABLE_RE = re.compile(
     r"\b(?:FROM|INTO|UPDATE|JOIN)\s+([a-z_][a-z0-9_]*)", re.IGNORECASE)
@@ -39,7 +43,8 @@ def test_module_has_the_expected_layers():
     names = {path.name for path in _module_files()}
     assert {"__init__.py", "facts.py", "state.py", "protocol.py", "security.py", "events.py",
             "models.py", "idempotency.py", "features.py", "migrate.py", "router.py",
-            "errors.py", "clock.py"} <= names
+            "errors.py", "clock.py", "config_source.py", "capacity.py", "heartbeat.py",
+            "upstream.py", "policy.py", "jobs.py", "audit.py"} <= names
 
 
 def test_no_cross_module_imports():
@@ -87,15 +92,15 @@ def _string_literals(path: pathlib.Path) -> list[str]:
 
 
 def test_sql_only_touches_own_tables_and_allowed_views():
-    allowed = set(M02_TABLES) | ALLOWED_FOREIGN_OBJECTS | {"information_schema", "pg_constraint",
-                                                           "pg_proc", "pg_namespace",
-                                                           "pg_class", "pg_trigger"}
+    allowed = (set(M02_TABLES) | ALLOWED_FOREIGN_OBJECTS | OWN_VIEWS
+               | {"information_schema", "pg_constraint", "pg_proc", "pg_namespace",
+                  "pg_class", "pg_trigger"})
     offenders: list[str] = []
     for path in _module_files():
         for literal in _string_literals(path):
             for match in SQL_TABLE_RE.finditer(literal):
                 table = match.group(1).lower()
-                if table in allowed:
+                if table in allowed or table in SQL_NON_TABLE_TOKENS:
                     continue
                 offenders.append(f"{path.name}: {table}")
     assert offenders == [], f"读了非本模块对象：{offenders}"

@@ -35,6 +35,7 @@ M02_MIGRATIONS = (
     "205_supply_outbox.sql",
     "206_supply_idempotency.sql",
     "207_supply_binding_codes.sql",
+    "208_supply_heartbeat.sql",
 )
 
 #: M02 拥有的表（01-ownership §2 + 本模块 outbox / 幂等 / 绑定码）
