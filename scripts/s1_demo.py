@@ -22,9 +22,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.gateway import chat, models as gateway_models, providers
+from app.ledger.balances import check_negative_liabilities
 from app.ledger.verify import verify_ledger
 from app.metering import signing
 from app.wiring import Database, install, provision_account, seed_market
+from app.wiring.ledger import post_topup
 
 EVENT_TYPES = ("receipt.signed", "usage.recorded", "usage.settled")
 
@@ -60,6 +62,13 @@ def run(*, keep_schema: bool = False) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         request_id = f"req_s1_{uuid.uuid4().hex}"
         trace_id = f"trace_s1_{uuid.uuid4().hex}"
+        topup = post_topup(
+            db,
+            account_id=str(account.account_id),
+            amount_minor=1000,
+            policy_version=account.policy_version or "s1-demo",
+            trace_id=trace_id,
+        )
         raw_key = account.raw_key
         principal = providers.authenticate(
             raw_key,
@@ -186,10 +195,26 @@ def run(*, keep_schema: bool = False) -> dict[str, Any]:
                 """SELECT count(*) AS n FROM usage_records WHERE request_id = %s""",
                 (request_id,),
             )
+            balance_2101 = _query_one(
+                conn,
+                """SELECT COALESCE(sum(CASE WHEN dc = 'C' THEN amount_minor ELSE -amount_minor END), 0)
+                          AS normal_balance_micro
+                     FROM journal_line
+                    WHERE account_id = %s AND coa_code = '2101'""",
+                (str(account.account_id),),
+            )
+            i4_violations = check_negative_liabilities(
+                conn, account_ids=[str(account.account_id)]
+            )
 
         missing = [name for name in EVENT_TYPES if events.get(name, 0) < 1]
         if missing:
             raise AssertionError(f"M05 outbox 缺事件：{missing}（实际 {events}）")
+        if int(balance_2101["normal_balance_micro"]) < 0 or i4_violations:
+            raise AssertionError(
+                f"I-4 失败：2101 正常方向余额为负 {balance_2101['normal_balance_micro']}，"
+                f"violations={i4_violations}（充值 {topup['amount_minor']} 分未覆盖）"
+            )
         if int(balance["debit"]) != int(balance["credit"]):
             raise AssertionError(f"凭证借贷不平：{balance}")
         if amount_micro != int(usage["amount_minor"]) * 10_000:
@@ -216,6 +241,11 @@ def run(*, keep_schema: bool = False) -> dict[str, Any]:
             "idempotent_replay": True,
             "amount_minor": int(usage["amount_minor"]),
             "amount_micro": amount_micro,
+            "topup_amount_minor": int(topup["amount_minor"]),
+            "topup_journal_id": str(topup["journal_id"]),
+            "balance_2101_normal_minor": int(balance_2101["normal_balance_micro"]) // 10_000,
+            "balance_2101_normal_micro": int(balance_2101["normal_balance_micro"]),
+            "i4_violations": len(i4_violations),
             "journal_id": journal_id,
             "journal_event_type": journal["event_type"],
             "journal_balanced": {

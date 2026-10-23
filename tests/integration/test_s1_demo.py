@@ -33,6 +33,10 @@ def test_s1_end_to_end_request_receipt_ledger() -> None:
     assert summary["recompute_diff"] == 0
     assert summary["chain"]["diff"] == 0
     assert summary["balances"]["diff"] == 0
+    assert summary["topup_amount_minor"] == 1000
+    assert summary["balance_2101_normal_minor"] == 100
+    assert summary["balance_2101_normal_minor"] >= 0
+    assert summary["i4_violations"] == 0
     for event_type in ("receipt.signed", "usage.recorded", "usage.settled"):
         assert summary["events"].get(event_type, 0) >= 1
     assert set(summary["published"]) >= {"receipt.signed", "usage.recorded", "usage.settled"}

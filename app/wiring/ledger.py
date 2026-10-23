@@ -11,6 +11,37 @@ from app.ledger.validate import JournalDraft, JournalLine
 from .db import Database
 
 
+def post_topup(db: Database, *, account_id: str, amount_minor: int,
+               policy_version: str, trace_id: str) -> dict[str, Any]:
+    """E3 法币在线收款：借 1120 / 贷 2101，给 demo 预置正余额（I-4 前置）。"""
+    if amount_minor <= 0:
+        raise ValueError("topup amount_minor 必须 > 0")
+    amount_micro = int(amount_minor) * 10_000
+    draft = JournalDraft(
+        event_type="E3",
+        unit_type="USD",
+        source_type="payment_attempt",
+        source_id="seed_topup_s1_demo",
+        event_seq=1,
+        policy_version=policy_version,
+        lines=[
+            JournalLine(account_id=account_id, coa_code="1120", dc="D",
+                        amount_minor=amount_micro, entry_type="deposit", unit_scale=6),
+            JournalLine(account_id=account_id, coa_code="2101", dc="C",
+                        amount_minor=amount_micro, entry_type="deposit", unit_scale=6),
+        ],
+        ts=datetime.now(timezone.utc),
+        idempotency_key="payment_attempt:seed_topup_s1_demo:1",
+        trace_id=trace_id,
+        ref_id="seed_topup_s1_demo",
+    )
+    with db.connect(autocommit=False) as conn:
+        result = ledger_gateway.post_journal(conn, draft)
+        conn.commit()
+    return {"journal_id": result.journal_id, "amount_minor": int(amount_minor),
+            "amount_micro": amount_micro}
+
+
 def post_e6(db: Database, request: Mapping[str, Any]) -> dict[str, Any]:
     """在**显式事务**里落 E6；金额单位是 micro-USD（M06 口径）。"""
     lines = [
