@@ -22,10 +22,11 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, Mapping
 
 from . import clock, errors, facts
 
-__all__ = ["LimitDecision", "SlidingWindowLimiter", "LIMITER", "enforce"]
+__all__ = ["LimitDecision", "SlidingWindowLimiter", "LIMITER", "enforce", "precheck"]
 
 WINDOW_S: int = 1
 """窗口长度（秒）：QPS 语义即「每 1 秒」；配置键 ``gateway.rate_limit_qps`` 同口径。"""
@@ -111,3 +112,28 @@ def enforce(decisions: list[LimitDecision], *, now: datetime | None = None) -> L
         return LimitDecision(allowed=True, limit=0, remaining=0, reset_s=0)
     # 成功时回「最紧的那个作用域」，让客户端看到当前生效上限
     return min(allowed, key=lambda item: item.remaining)
+
+
+def precheck(principal: Any, *, now: datetime | None = None,
+             bucket: "SlidingWindowLimiter | None" = None,
+             config_values: Mapping[str, int | None] | None = None
+             ) -> tuple[LimitDecision, Any, int | None]:
+    """写端点统一的前置检查：每日上限（42902）→ min(M01 qps, M10 基线) 限流（42901）。
+
+    返回 ``(本次判定, QuotaState, 生效 qps)``；三处调用方（chat / stream / batches）
+    共用同一口径，避免各写一份阈值逻辑。``config_values`` 允许调用方传入**同一次请求内**
+    已读到的配置快照（不重复读配置中心）。
+    """
+    from . import config_source, quota                            # 同包；避免顶层循环 import
+
+    moment = clock.as_utc(now or clock.utcnow())
+    state = quota.from_snapshot(dict(getattr(principal, "quotas", {}) or {}))
+    quota.assert_daily_cap(state)
+    values = config_values if config_values is not None else config_source.snapshot()
+    limit_value = quota.effective_qps(state.qps, values.get("rate_limit_qps"))
+    scope = (f"key:{principal.api_key_id}" if getattr(principal, "api_key_id", None) is not None
+             else f"tenant:{principal.tenant_id}")
+    pool = bucket or LIMITER
+    decision = pool.take(scope, limit_value, now=moment)
+    enforce([decision], now=moment)
+    return decision, state, limit_value

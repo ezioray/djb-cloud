@@ -29,6 +29,7 @@ __all__ = [
     "ip_allowed", "Principal", "coerce_principal", "ChosenNode", "RouteRequest", "RouteDecision",
     "coerce_route_decision", "NodeCall", "NodeResult", "UsageDraft", "UsageReceipt",
     "RequestRecord", "pick_value", "str_or_none", "int_or_none",
+    "StreamChunk", "BatchDraft", "BatchItemDraft", "BatchView",
 ]
 
 AMOUNT_PATTERN = re.compile(r"^-?[0-9]+(\.[0-9]+)?$")
@@ -393,3 +394,109 @@ class RequestRecord:
             raise ValueError(f"service_tier 必须是 {facts.SERVICE_TIERS}：{self.service_tier!r}")
         if self.usage_source is not None and self.usage_source not in facts.USAGE_SOURCES:
             raise ValueError(f"usage_source 必须是 {facts.USAGE_SOURCES}：{self.usage_source!r}")
+
+
+# --------------------------------------------------------------------------- 流式（T3）
+@dataclass(frozen=True)
+class StreamChunk:
+    """上游流式分块（**只在内存里过一手**；正文不落库、不进事件）。
+
+    ``delta`` 是本次增量文本；``finish_reason`` 非空表示上游收尾；``tokens_*`` 只在最后一帧
+    或上游主动上报时存在（缺省由网关按内容估算并标 ``estimated``）。
+    """
+
+    delta: str = ""
+    role: str | None = None
+    finish_reason: str | None = None
+    model: str | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    usage_source: str | None = None
+    upstream_request_id: str | None = None
+    first_byte_ms: int | None = None
+
+
+def coerce_stream_chunk(value: Any) -> StreamChunk:
+    """把 provider 返回的分块（dataclass / Mapping / 对象）规整成 :class:`StreamChunk`。"""
+    if isinstance(value, StreamChunk):
+        return value
+    if value is None:
+        return StreamChunk()
+    delta = pick_value(value, "delta", "content", default="")
+    if delta is None:
+        delta = ""
+    usage = pick_value(value, "usage", default=None)
+    tokens_in = int_or_none(pick_value(value, "tokens_in", "prompt_tokens"))
+    tokens_out = int_or_none(pick_value(value, "tokens_out", "completion_tokens"))
+    if isinstance(usage, Mapping):
+        tokens_in = tokens_in if tokens_in is not None else int_or_none(usage.get("prompt_tokens"))
+        tokens_out = tokens_out if tokens_out is not None else int_or_none(
+            usage.get("completion_tokens"))
+    return StreamChunk(
+        delta=str(delta),
+        role=str_or_none(pick_value(value, "role")),
+        finish_reason=str_or_none(pick_value(value, "finish_reason")),
+        model=str_or_none(pick_value(value, "model")),
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        usage_source=str_or_none(pick_value(value, "usage_source")),
+        upstream_request_id=str_or_none(pick_value(value, "upstream_request_id", "id")),
+        first_byte_ms=int_or_none(pick_value(value, "first_byte_ms")),
+    )
+
+
+# --------------------------------------------------------------------------- 慢任务（T4）
+@dataclass(frozen=True)
+class BatchItemDraft:
+    """一条批次条目的提交形态（``custom_id`` + 可选 ``input``；正文**不落库**）。"""
+
+    custom_id: str
+    body: Mapping[str, Any] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"custom_id": self.custom_id,
+                **({"body": dict(self.body)} if self.body is not None else {})}
+
+
+@dataclass(frozen=True)
+class BatchDraft:
+    """校验后的批次提交（spec ``BatchCreateRequest`` 的网关侧投影）。"""
+
+    kind: str
+    model: str
+    items: tuple[BatchItemDraft, ...]
+    deadline_seconds: int | None = None
+    webhook_url: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    confirm_cost: bool = False
+
+
+@dataclass(frozen=True)
+class BatchView:
+    """``batch_jobs`` 的一行（读侧）；``results_ref`` 只在未过期时给出。"""
+
+    batch_id: str
+    account_id: str
+    tenant_id: str | None
+    kind: str
+    model: str
+    status: str
+    total_items: int = 0
+    completed_items: int = 0
+    failed_items: int = 0
+    eta_seconds: int | None = None
+    checkpoint_resumes: int = 0
+    results_ref: str | None = None
+    results_expires_at: datetime | None = None
+    cost_estimate_minor: int | None = None
+    cost_actual_minor: int | None = None
+    error_code: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+    canceled_at: datetime | None = None
+    webhook_url: str | None = None
+
+    @property
+    def terminal(self) -> bool:
+        return self.status in facts.BATCH_TERMINAL_STATUSES

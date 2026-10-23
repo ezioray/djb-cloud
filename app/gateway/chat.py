@@ -136,53 +136,32 @@ def complete(c: Any, *args: Any, principal: models.Principal, body: Mapping[str,
 
     try:
         # ---- 2) 配额 / 限流（M01 快照 → min(租户, Key) + M10 全局基线）
-        state = quota.from_snapshot(dict(principal.quotas or {}))
-        quota.assert_daily_cap(state)
         config_values = config_source.snapshot()
-        limit_value = quota.effective_qps(state.qps, config_values.get("rate_limit_qps"))
-        scope = (f"key:{principal.api_key_id}" if principal.api_key_id is not None
-                 else f"tenant:{principal.tenant_id}")
-        limit_decision = bucket.take(scope, limit_value, now=moment)
-        ratelimit.enforce([limit_decision], now=moment)
+        limit_decision, state, limit_value = ratelimit.precheck(
+            principal, now=moment, bucket=bucket, config_values=config_values)
 
         # ---- 3) 参数校验（413 / 40001）
         validated = validation.validate_chat(body)
         record.model = validated.model
 
         if validated.stream:
-            # T3 的 SSE 闸门（features.gateway.stream_sse 默认关闭 → 显式 400）
+            # 流式由 app.gateway.stream 处理；走到这里说明接线错了（内部守卫，不是对外契约）
             raise errors.GatewayError(
-                "bad_request", "stream=true 暂不支持：本版本只提供非流式（T3 交付 SSE）",
+                "bad_request", "stream=true 必须走流式通道（router 分流）",
                 details={"field": "stream"})
 
-        # ---- 4) 幂等 / 指纹
-        body_hash = idempotency.body_hash(dict(body))
-        if idempotency_key:
-            idem_scope = idempotency.scope_of("POST", "/v1/chat/completions", principal)
-            replay = idempotency.replay_or_conflict(c, scope=idem_scope, key=idempotency_key,
-                                                    request_hash=body_hash, now=moment)
-            if replay is not None:
-                # 回放：只留一条元数据日志，**不发** request.completed、不写用量
-                record.status, record.http_status = "completed", replay.status_code
-                record.latency_ms = clock.elapsed_ms(started)
-                record.usage_source = None
-                _record(c, record, now=moment)
-                return ChatOutcome(payload=dict(replay.payload),
-                                   status_code=replay.status_code,
-                                   headers={facts.IDEMPOTENT_REPLAY_HEADER: "true",
-                                            **_limit_headers(limit_decision)},
-                                   replayed=True)
-        fp_scope = idempotency.fingerprint_scope("POST", "/v1/chat/completions", principal)
-        window = idempotency.window_for(stream=False)
-        fingerprint = idempotency.replay_or_conflict(
-            c, scope=fp_scope, key=body_hash, request_hash=body_hash, now=moment,
-            ttl_s=window, window_s=window, mode="fingerprint")
-        if fingerprint is not None:
-            record.status, record.http_status = "completed", fingerprint.status_code
+        # ---- 4) 幂等 / 指纹（统一走 CR-10 的幂等中间件）
+        guard = idempotency.WriteGuard(c, principal=principal, method="POST",
+                                       path="/v1/chat/completions", key=idempotency_key,
+                                       body=dict(body), now=moment)
+        replay = guard.replay()
+        if replay is not None:
+            # 回放：只留一条元数据日志，**不发** request.completed、不写用量
+            record.status, record.http_status = "completed", replay.status_code
             record.latency_ms = clock.elapsed_ms(started)
+            record.usage_source = None
             _record(c, record, now=moment)
-            return ChatOutcome(payload=dict(fingerprint.payload),
-                               status_code=fingerprint.status_code,
+            return ChatOutcome(payload=dict(replay.payload), status_code=replay.status_code,
                                headers={facts.IDEMPOTENT_REPLAY_HEADER: "true",
                                         **_limit_headers(limit_decision)},
                                replayed=True)
@@ -264,9 +243,12 @@ def complete(c: Any, *args: Any, principal: models.Principal, body: Mapping[str,
         except Exception:                                   # pragma: no cover - 防御
             log.warning("gateway.chat.outbox_failed",
                         extra={"event": "outbox.failed", "request_id": request_id})
-        _remember(c, principal=principal, request_id=request_id, idempotency_key=idempotency_key,
-                  fp_key=body_hash, body_hash=body_hash, payload=payload, now=moment,
-                  fp_ttl=window)
+        try:
+            guard.remember(status_code=200, payload=payload)
+        except Exception:                                   # pragma: no cover - 防御
+            log.warning("gateway.chat.idempotency_failed",
+                        extra={"event": "idempotency.remember_failed",
+                               "request_id": request_id})
         # 顺带清理过期指纹（小批量、不阻塞）
         try:
             idempotency.delete_expired(c, now=moment)
@@ -298,20 +280,4 @@ def complete(c: Any, *args: Any, principal: models.Principal, body: Mapping[str,
         raise
 
 
-def _remember(c: Any, *, principal: models.Principal, request_id: str,
-              idempotency_key: str | None, fp_key: str, body_hash: str,
-              payload: Mapping[str, Any], now: datetime, fp_ttl: int) -> None:
-    """记住首次结果：幂等键 24h + 请求体指纹 300s（同事务）。"""
-    try:
-        if idempotency_key:
-            idempotency.remember(
-                c, scope=idempotency.scope_of("POST", "/v1/chat/completions", principal),
-                key=idempotency_key, request_hash=body_hash, status_code=200,
-                payload=payload, now=now, ttl_s=facts.IDEMPOTENCY_TTL_S)
-        idempotency.remember(
-            c, scope=idempotency.fingerprint_scope("POST", "/v1/chat/completions", principal),
-            key=fp_key, request_hash=body_hash, status_code=200, payload=payload,
-            now=now, ttl_s=int(fp_ttl))
-    except Exception:                                       # pragma: no cover - 防御
-        log.warning("gateway.chat.idempotency_failed",
-                    extra={"event": "idempotency.remember_failed", "request_id": request_id})
+

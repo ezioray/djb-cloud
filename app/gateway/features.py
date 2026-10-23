@@ -9,8 +9,11 @@ M05 ``app/metering/features.py`` 同款理由：发布节奏不属于业务配�
 2. **默认关闭**：``default`` 只能是 ``False``；只提供 :func:`enabled` 只读判定，
    **没有任何写入函数 / 表 / API**（``WRITE_SURFACE = ()``）。
 
-三个开关都是 T2→T3/T4 新口径的闸门：关着时保持 T1/T2 已验证的保守行为，
+四个开关都是 T2→T3/T4 新口径的闸门：关着时保持已验证的保守行为，
 打开必须改代码 + 过评审，并同时更新三字段。
+
+**不是开关**：SSE 流式本身是 spec 的核心行为（/v1/chat/completions 的 stream=true），
+不做运行时开关——T1/T2 时曾用 ``gateway.stream_sse`` 作为「未实现」占位，T3 交付后已移除。
 """
 from __future__ import annotations
 
@@ -74,13 +77,23 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
                      "网关侧滑动窗口限流（429/42901），关闭时节点层只依赖 M04 的配额判定"),
     ),
     FeatureSwitch(
-        name="gateway.stream_sse",
+        name="gateway.stream_estimated_usage_sync",
         owner="gateway-seat",
         expire_at=date(2027, 6, 30),
-        rollback_rule=("关闭后 stream=true 一律 400/40001（T2 行为，明确不支持流式），"
-                       "不产生半截 SSE；已建立的连接按 stream_timeout_s 自然结束"),
-        description=("T3 的流式闸门：打开后 stream=true 走 text/event-stream 与 "
-                     "data: [DONE] 收尾、中断计 44101；关闭时显式拒绝流式请求"),
+        rollback_rule=("关闭后流式中断只在网关侧标记 interrupted + usage_source=estimated 并"
+                       "发 request.failed，不主动向 M05 写估算用量（由 M05 用收据/上游账单校正）；"
+                       "已写入的估算用量不回滚，按 M05 校正流程处理"),
+        description=("T3 的估算用量闸门：打开后中断的流式请求由网关立即向 M05 写一条"
+                     " usage_source=estimated 的用量；关闭时保持「只记事实、计费等校正」的保守行为"),
+    ),
+    FeatureSwitch(
+        name="gateway.batch_webhook_delivery",
+        owner="gateway-seat",
+        expire_at=date(2027, 6, 30),
+        rollback_rule=("关闭后批次状态变化只落库、不投递 webhook（batch_jobs.webhook_state 保持 "
+                       "pending），接线后可重放；已投递成功的记录不受影响"),
+        description=("T4 的 webhook 闸门：打开后批次状态迁移会向 batch_jobs.webhook_url 投递"
+                     "签名回调（batch.queued/started/completed/failed/…）；关闭时只落库"),
     ),
 )
 

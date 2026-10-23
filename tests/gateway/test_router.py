@@ -2,13 +2,12 @@
 """HTTP 层（M03 §4.1 / 00-conventions §5 / INV-M03-05 / INV-M03-08）：信封、头、状态码。"""
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
 
 from app.gateway import config_source, errors, facts, providers
-from gatewaykit import FakeAuth, FakeCatalog, FakeNode, FakeRoute, FakeUsage, NOW
+from gatewaykit import FakeAuth, FakeCatalog, FakeRoute
 
 
 @pytest.fixture(scope="module")
@@ -194,10 +193,27 @@ def test_no_route_is_503_50901_with_retry_after(client, api):
     assert facts.RETRY_AFTER_HEADER in response.headers
 
 
-def test_stream_is_400_until_t3(client, api):
-    error = _assert_error(client.post("/v1/chat/completions", json=_body(stream=True),
-                                      headers=_auth()), http=400, code=40001)
-    assert error["field"] == "stream"
+def test_stream_without_stream_client_is_fail_closed(client, api):
+    """流式通道未接线 → 503（不再用 400 占位）；接上后见 test_stream_sse_end_to_end。"""
+    providers.set_stream_client(None)
+    _assert_error(client.post("/v1/chat/completions", json=_body(stream=True),
+                              headers=_auth()), http=503, code=45001)
+
+
+def test_stream_sse_end_to_end(client, api):
+    """SSE 全链路：text/event-stream + data: [DONE] + 回显 X-Request-Id。"""
+    from gatewaykit import FakeStream
+
+    providers.set_stream_client(FakeStream(chunks=["he", "llo"]))
+    request_id = str(uuid.uuid4())
+    with client.stream("POST", "/v1/chat/completions", json=_body(stream=True),
+                       headers={**_auth(), facts.REQUEST_ID_HEADER: request_id}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers[facts.REQUEST_ID_HEADER] == request_id
+        body = "".join(response.iter_text())
+    assert body.rstrip().endswith(f"data: {facts.SSE_DONE}")
+    assert '"object":"chat.completion.chunk"' in body.replace(" ", "")
 
 
 def test_auth_provider_missing_is_503_fail_closed(client):
@@ -240,8 +256,11 @@ def test_health_reports_wiring_without_leaking_providers():
 
     info = router_module.health()
     assert info["module"] == "M03"
-    assert set(info["providers"]) == {"auth", "route", "node", "usage", "model_catalog"}
+    assert set(info["providers"]) == {"auth", "route", "node", "stream", "usage",
+                                     "model_catalog", "webhook_sender", "webhook_secret",
+                                     "result_signer"}
     assert all(value is False for value in info["providers"].values())
     assert info["features"] == {"gateway.protocol_version_strict": False,
                                "gateway.node_layer_rate_limit": False,
-                               "gateway.stream_sse": False}
+                               "gateway.stream_estimated_usage_sync": False,
+                               "gateway.batch_webhook_delivery": False}

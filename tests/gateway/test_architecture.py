@@ -25,7 +25,8 @@ ALLOWED_THIRD_PARTY = {"psycopg", "fastapi", "pydantic", "starlette"}
 ALLOWED_APP_PREFIXES = ("app.gateway", "app.db")
 
 SQL_TABLE_RE = re.compile(r"\b(?:FROM|INTO|UPDATE|JOIN)\s+([a-z_][a-z0-9_]*)", re.IGNORECASE)
-SQL_NON_TABLE_TOKENS = {"skip", "set", "only", "where", "select", "lateral"}
+#: SQL 关键字 / plpgsql 行变量（不是表名）
+SQL_NON_TABLE_TOKENS = {"skip", "set", "only", "where", "select", "lateral", "old", "new"}
 #: 允许在 SQL 里读的系统视图（结构与排障查询）
 SYSTEM_OBJECTS = {"information_schema", "pg_constraint", "pg_proc", "pg_namespace", "pg_class",
                   "pg_indexes", "pg_tables", "pg_trigger"}
@@ -123,7 +124,9 @@ def test_router_paths_are_only_v1_gateway_owned():
 def test_providers_default_to_fail_closed():
     providers.reset_providers()
     assert providers.current() == {"auth": False, "route": False, "node": False,
-                                   "usage": False, "model_catalog": False}
+                                   "stream": False, "usage": False, "model_catalog": False,
+                                   "webhook_sender": False, "webhook_secret": False,
+                                   "result_signer": False}
 
 
 def test_feature_switches_have_three_fields_and_off_default():

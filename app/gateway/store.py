@@ -14,13 +14,16 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from . import models
 
-__all__ = ["LOG_COLUMNS", "log_request", "fetch_request_log", "get_idempotency",
-           "save_idempotency", "purge_idempotency", "insert_outbox", "pending_outbox",
-           "mark_outbox_published", "mark_outbox_failed"]
+__all__ = ["LOG_COLUMNS", "BATCH_COLUMNS", "log_request", "fetch_request_log",
+           "get_idempotency", "save_idempotency", "purge_idempotency", "insert_outbox",
+           "pending_outbox", "mark_outbox_published", "mark_outbox_failed",
+           "insert_batch", "insert_batch_items", "get_batch", "find_batch_by_idempotency",
+           "update_batch", "cancel_batch", "set_batch_progress", "count_batch_items",
+           "update_batch_webhook", "list_batch_items"]
 
 LOG_COLUMNS: tuple[str, ...] = (
     "request_id", "trace_id", "account_id", "tenant_id", "api_key_id", "model",
@@ -195,3 +198,172 @@ def mark_outbox_failed(c: Any, *, event_id: str, attempts: int, next_attempt_at:
                     " WHERE event_id = %s",
                     (int(attempts), next_attempt_at, error[:200], event_id))
 
+
+
+# --------------------------------------------------------------------------- 慢任务（T4）
+BATCH_COLUMNS: tuple[str, ...] = (
+    "batch_id", "account_id", "tenant_id", "api_key_id", "kind", "model", "status",
+    "request_id", "idempotency_key", "total_items", "completed_items", "failed_items",
+    "eta_seconds", "checkpoint_resumes", "results_ref", "results_expires_at",
+    "cost_estimate_minor", "cost_actual_minor", "cost_confirmed_at", "deadline_seconds",
+    "webhook_url", "metadata", "error_code", "created_at", "updated_at", "completed_at",
+    "canceled_at", "webhook_state", "webhook_attempts", "webhook_last_error",
+    "webhook_delivered_at",
+)
+"""``batch_jobs`` 列清单（301–306 的并集；与迁移文件对齐）。"""
+
+_BATCH_SELECT = (
+    "SELECT batch_id, account_id, tenant_id, api_key_id, kind, model, status, request_id,"
+    " idempotency_key, total_items, completed_items, failed_items, eta_seconds,"
+    " checkpoint_resumes, results_ref, results_expires_at, cost_estimate_minor,"
+    " cost_actual_minor, cost_confirmed_at, deadline_seconds, webhook_url, metadata,"
+    " error_code, created_at, updated_at, completed_at, canceled_at, webhook_state,"
+    " webhook_attempts, webhook_last_error, webhook_delivered_at"
+    " FROM batch_jobs")
+
+
+def _batch_row(row: Any, keys: list[str]) -> models.BatchView:
+    data = dict(zip(keys, row))
+    return models.BatchView(
+        batch_id=str(data["batch_id"]), account_id=str(data["account_id"]),
+        tenant_id=None if data["tenant_id"] is None else str(data["tenant_id"]),
+        kind=str(data["kind"]), model=str(data["model"]), status=str(data["status"]),
+        total_items=int(data["total_items"] or 0),
+        completed_items=int(data["completed_items"] or 0),
+        failed_items=int(data["failed_items"] or 0),
+        eta_seconds=None if data["eta_seconds"] is None else int(data["eta_seconds"]),
+        checkpoint_resumes=int(data["checkpoint_resumes"] or 0),
+        results_ref=data["results_ref"],
+        results_expires_at=data["results_expires_at"],
+        cost_estimate_minor=(None if data["cost_estimate_minor"] is None
+                             else int(data["cost_estimate_minor"])),
+        cost_actual_minor=(None if data["cost_actual_minor"] is None
+                           else int(data["cost_actual_minor"])),
+        error_code=None if data["error_code"] is None else int(data["error_code"]),
+        created_at=data["created_at"], updated_at=data["updated_at"],
+        completed_at=data["completed_at"], canceled_at=data["canceled_at"],
+        webhook_url=data["webhook_url"],
+    )
+
+
+def insert_batch(c: Any, *, batch_id: str, account_id: str, tenant_id: str | None,
+                 api_key_id: int | None, kind: str, model: str, status: str,
+                 request_id: str | None, idempotency_key: str | None, total_items: int,
+                 eta_seconds: int | None, cost_estimate_minor: int | None,
+                 deadline_seconds: int | None, webhook_url: str | None,
+                 metadata: Mapping[str, Any], now: datetime) -> None:
+    with c.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO batch_jobs (
+                batch_id, account_id, tenant_id, api_key_id, kind, model, status, request_id,
+                idempotency_key, total_items, eta_seconds, cost_estimate_minor,
+                deadline_seconds, webhook_url, metadata, created_at, updated_at, webhook_state
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s,
+                      %s)
+            """,
+            (batch_id, account_id, tenant_id, api_key_id, kind, model, status, request_id,
+             idempotency_key, int(total_items), eta_seconds, cost_estimate_minor,
+             deadline_seconds, webhook_url, json.dumps(dict(metadata), ensure_ascii=False),
+             now, now, "pending" if webhook_url else None),
+        )
+
+
+def insert_batch_items(c: Any, *, batch_id: str, custom_ids: Sequence[str],
+                       now: datetime) -> int:
+    """批量插入条目（只存 ``custom_id`` + 序号；正文不落库）。返回插入条数。"""
+    from . import models as gateway_models
+
+    inserted = 0
+    with c.cursor() as cur:
+        for index, custom_id in enumerate(custom_ids, start=1):
+            cur.execute(
+                """INSERT INTO batch_items (item_id, batch_id, seq, custom_id, status,
+                                            created_at, updated_at)
+                   VALUES (%s, %s, %s, %s, 'queued', %s, %s)
+                   ON CONFLICT (batch_id, custom_id) DO NOTHING""",
+                (str(gateway_models.uuid7(int(now.timestamp() * 1_000_000))), batch_id, index,
+                 custom_id, now, now))
+            inserted += max(int(cur.rowcount or 0), 0)
+    return inserted
+
+
+def get_batch(c: Any, *, batch_id: str) -> models.BatchView | None:
+    with c.cursor() as cur:
+        cur.execute(_BATCH_SELECT + " WHERE batch_id = %s", (batch_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        keys = [desc[0] for desc in cur.description]
+    return _batch_row(row, keys)
+
+
+def find_batch_by_idempotency(c: Any, *, account_id: str,
+                              idempotency_key: str) -> models.BatchView | None:
+    with c.cursor() as cur:
+        cur.execute(_BATCH_SELECT + " WHERE account_id = %s AND idempotency_key = %s",
+                    (account_id, idempotency_key))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        keys = [desc[0] for desc in cur.description]
+    return _batch_row(row, keys)
+
+
+def update_batch(c: Any, *, batch_id: str, values: Mapping[str, Any]) -> None:
+    """受控更新（列名白名单来自 :data:`BATCH_COLUMNS`，杜绝拼接注入）。"""
+    columns = [name for name in values if name in BATCH_COLUMNS]
+    if not columns:
+        return
+    assignments = ", ".join(f"{name} = %s" for name in columns)
+    params = [values[name] for name in columns] + [batch_id]
+    with c.cursor() as cur:
+        cur.execute(f"UPDATE batch_jobs SET {assignments} WHERE batch_id = %s", params)
+
+
+def cancel_batch(c: Any, *, batch_id: str, now: datetime) -> models.BatchView | None:
+    """取消（幂等）：终态不动；非终态 → canceled（DB 触发器补 ``canceled_at``）。"""
+    with c.cursor() as cur:
+        cur.execute(
+            "UPDATE batch_jobs SET status = 'canceled'"
+            " WHERE batch_id = %s AND status IN ('queued', 'running')", (batch_id,))
+        cur.execute("UPDATE batch_items SET status = 'canceled'"
+                    " WHERE batch_id = %s AND status IN ('queued', 'running')", (batch_id,))
+    return get_batch(c, batch_id=batch_id)
+
+
+def set_batch_progress(c: Any, *, batch_id: str, completed: int, failed: int,
+                       eta_seconds: int | None = None) -> None:
+    values: dict[str, Any] = {"completed_items": int(completed), "failed_items": int(failed)}
+    if eta_seconds is not None:
+        values["eta_seconds"] = int(eta_seconds)
+    update_batch(c, batch_id=batch_id, values=values)
+
+
+def count_batch_items(c: Any, *, batch_id: str) -> dict[str, int]:
+    with c.cursor() as cur:
+        cur.execute("SELECT status, count(*) FROM batch_items WHERE batch_id = %s"
+                    " GROUP BY status", (batch_id,))
+        rows = cur.fetchall()
+    return {str(row[0]): int(row[1]) for row in rows}
+
+
+def list_batch_items(c: Any, *, batch_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    with c.cursor() as cur:
+        cur.execute(
+            "SELECT item_id, seq, custom_id, status, usage_id, tokens_in, tokens_out,"
+            " amount_minor, error_code FROM batch_items WHERE batch_id = %s"
+            " ORDER BY seq LIMIT %s", (batch_id, int(limit)))
+        rows = cur.fetchall()
+        keys = [desc[0] for desc in cur.description]
+    return [dict(zip(keys, row)) for row in rows]
+
+
+def update_batch_webhook(c: Any, *, batch_id: str, state: str, attempts: int,
+                         last_error: str | None, delivered_at: datetime | None) -> None:
+    with c.cursor() as cur:
+        cur.execute(
+            "UPDATE batch_jobs SET webhook_state = %s, webhook_attempts = %s,"
+            " webhook_last_error = %s, webhook_delivered_at = %s WHERE batch_id = %s",
+            (state, int(attempts), None if last_error is None else last_error[:200],
+             delivered_at, batch_id))
