@@ -23,6 +23,7 @@ from .metering.router import router as metering_router
 from .nodes import router as node_router
 from .notify.router import create_router as create_notify_router
 from .recon.router import create_router as create_recon_router
+from .reputation.router import create_router as create_reputation_router
 from .scheduling.router import router as scheduling_router
 from .supply.router import router as supply_router
 
@@ -122,6 +123,15 @@ app.include_router(create_recon_router(
 app.include_router(create_notify_router(
     connection_factory=db.conn,
     principal_resolver=_user_principal,
+))
+
+
+# ── M07 信誉与 COP 接线（spec 1.2.4）──────────────────────────────────────
+# 用方主体同 M12（Bearer→account_id）；管理面 grants 走本地/测试头（生产注入 M01 会话）。
+app.include_router(create_reputation_router(
+    connection_factory=db.conn,
+    principal_resolver=_user_principal,
+    admin_resolver=_admin_dev_principal,
 ))
 
 

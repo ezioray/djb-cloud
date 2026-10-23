@@ -165,3 +165,39 @@ def test_notify_routes_are_wired():
     for method, path in paths:
         response = client.request(method, path, json={})
         assert response.status_code != 404, (method, path, response.status_code)
+
+
+# ── M07 信誉与 COP 接线（spec 1.2.4）────────────────────────────────────────
+
+def test_reputation_user_endpoints_require_bearer():
+    for path in ("/api/v1/user/reputation", "/api/v1/user/cop",
+                 "/api/v1/user/cop/ledger", "/api/v1/user/cop/invites"):
+        response = client.get(path)
+        assert response.status_code == 401, (path, response.status_code, response.text[:160])
+        assert response.json()["error"]["code"] == 40101
+
+
+def test_reputation_grant_requires_step_up():
+    """管理主体齐备但缺 step-up → 424 + 42401。"""
+    response = client.post("/api/v1/admin/reputation/grants", json={},
+                           headers={"X-Admin-Actor": "u1", "X-Admin-Roles": "ADMIN"})
+    assert response.status_code == 424, response.text[:200]
+    assert response.json()["error"]["code"] == 42401
+
+
+def test_reputation_routes_are_wired():
+    paths = [
+        ("GET", "/api/v1/user/reputation"),
+        ("GET", "/api/v1/user/reputation/events"),
+        ("GET", "/api/v1/user/cop"),
+        ("GET", "/api/v1/user/cop/ledger"),
+        ("POST", "/api/v1/user/cop/redemptions"),
+        ("GET", "/api/v1/user/cop/redemptions/x"),
+        ("POST", "/api/v1/user/cop/transfers"),
+        ("GET", "/api/v1/user/cop/invites"),
+        ("GET", "/api/v1/admin/reputation/scores"),
+        ("POST", "/api/v1/admin/reputation/grants"),
+    ]
+    for method, path in paths:
+        response = client.request(method, path, json={})
+        assert response.status_code != 404, (method, path, response.status_code)

@@ -115,7 +115,8 @@ def create_router(*, connection_factory: ConnectionFactory | None = None,
             roles = (roles,)
         if not actor:
             raise errors.Unauthorized("管理主体缺少 actor")
-        if not set(map(str, roles)) & set(ADMIN_ROLES):
+        # 角色大小写不敏感（M01 会话可能给 "ADMIN"，本模块常量是小写）
+        if not {str(r).lower() for r in roles} & set(ADMIN_ROLES):
             raise errors.NotFound("资源不存在")               # 越权统一 404（M07 §4.1）
         return {"actor": str(actor), "roles": tuple(map(str, roles)),
                 "approved_by": resolved.get("approved_by")}
