@@ -318,12 +318,12 @@ class TestCompatMatrix:
         assert "CLI" in rows[0]["surface"]
         assert "托盘" in rows[1]["surface"]
 
-    @pytest.mark.parametrize("client_version,expect", [
-        ("1.1.0", "supported"),
-        ("9.9.9", "unknown"),
-    ])
-    def test_version_gate(self, client_version, expect):
-        assert up.require_version_supported(client_version)["stage"] == expect
+    def test_version_gate(self):
+        # 支持面是滚动的 N / N-1 / N-2：用当前最新版本断言 supported，
+        # 不再硬编码旧版本号（否则每发一个 MINOR 就会误报）。
+        supported_version = up.load_changelog()[0].version
+        assert up.require_version_supported(supported_version)["stage"] == "supported"
+        assert up.require_version_supported("9.9.9")["stage"] == "unknown"
 
     def test_version_below_floor_is_rejected_with_42601(self):
         with pytest.raises(up.VersionIncompatible) as excinfo:

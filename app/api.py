@@ -17,6 +17,7 @@ from .audit import keys as audit_keys
 from .audit.health import create_health_router
 from .audit.router import create_router as create_audit_router
 from .config_center.router import create_router as create_config_center_router
+from .data_gov.router import create_router as create_data_gov_router
 from .identity.router import router as identity_router
 from .ledger.router import router as ledger_router
 from .metering.router import router as metering_router
@@ -139,6 +140,15 @@ app.include_router(create_reputation_router(
 # ── M11 风控接线（spec 1.2.4）─────────────────────────────────────────────
 # 管理面主体同 M07/M09；阈值不入库/响应/事件，限额执行由 M03/M04/M08 读 v_risk_limits。
 app.include_router(create_risk_router(
+    connection_factory=db.conn,
+    admin_resolver=_admin_dev_principal,
+))
+
+
+# ── M14 数据治理与 Ops 接线（spec 1.2.6）──────────────────────────────────
+# 管理面主体同 M07/M09/M11；导出台账/保留任务/批量五步/操作回放十条端点。
+# audit_sink 未注入（与 M11 同口径）：S2 统一注入 M16 审计适配器，当前默认 fail-closed。
+app.include_router(create_data_gov_router(
     connection_factory=db.conn,
     admin_resolver=_admin_dev_principal,
 ))
