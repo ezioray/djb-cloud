@@ -18,7 +18,7 @@ import pytest
 
 from app.identity import migrate
 
-from conftest import (
+from identitykit import (
     IDENTITY_TABLES,
     MIGRATIONS_DIR,
     apply_files,

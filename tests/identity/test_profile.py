@@ -15,7 +15,7 @@ import pytest
 
 from app.identity import models, state
 
-from conftest import bearer, error_of, rows, scalar
+from identitykit import bearer, error_of, rows, scalar
 
 PASSWORD = "S3cret!"
 

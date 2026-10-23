@@ -32,7 +32,7 @@ from app.ledger import (
 from app.ledger.constants import JOURNAL_MAX_LINES
 from app.ledger.errors import LedgerError
 
-from gatewaykit import count_by_source, e2_draft, e6_draft, journal_row, line, outbox_rows, post_ok, totals
+from ledger_gatewaykit import count_by_source, e2_draft, e6_draft, journal_row, line, outbox_rows, post_ok, totals
 from ledgerkit import assert_db_error, connect, run_ok, tx
 
 

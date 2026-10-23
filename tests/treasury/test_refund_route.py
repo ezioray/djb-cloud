@@ -20,7 +20,7 @@ import pytest
 from app.treasury import config_source, errors, models, policy, refund
 
 import m08kit
-from conftest import OTHER_USER_PRINCIPAL, build_client
+from m08kit import OTHER_USER_PRINCIPAL, build_client
 
 NOW = m08kit.FIXED_NOW
 MASK_RE = re.compile(r"^psp:mock:\*{4}.{1,4}$")

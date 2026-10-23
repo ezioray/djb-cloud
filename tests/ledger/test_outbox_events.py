@@ -26,7 +26,7 @@ from app.ledger.outbox import (
     validate_event,
 )
 
-from gatewaykit import e6_draft, outbox_rows, post_ok
+from ledger_gatewaykit import e6_draft, outbox_rows, post_ok
 from ledgerkit import connect, run_ok, tx
 
 NOW = datetime(2026, 10, 23, 3, 0, tzinfo=timezone.utc)

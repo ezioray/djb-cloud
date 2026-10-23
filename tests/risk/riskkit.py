@@ -275,3 +275,43 @@ def risk_values(conn: psycopg.Connection, table: str) -> list[str]:
                 else:
                     values.append(str(value))
     return values
+
+# ─────────────────────────────────────────────────────── M11 HTTP 客户端（DEV-TESTINFRA）
+# 由 conftest 移到 kit（原因同 reconkit）：测试文件与 conftest 都从这里导入。
+ADMIN_PRINCIPAL = {"admin_id": "disposer", "tenant_id": "tenant-a",
+                   "scopes": ["risk.read", "risk.write"]}
+READONLY_PRINCIPAL = {"admin_id": "auditor", "tenant_id": "tenant-a", "scopes": ["risk.read"]}
+OTHER_TENANT_PRINCIPAL = {"admin_id": "disposer-b", "tenant_id": "tenant-b",
+                          "scopes": ["risk.read", "risk.write"]}
+
+
+def savepoint_factory(connection):
+    """把一条连接包成 handler 需要的请求级连接（内层 SAVEPOINT，不真提交）。"""
+
+    @contextmanager
+    def factory():
+        with connection.transaction():
+            yield connection
+
+    return factory
+
+
+def build_client(connection, *, admin=ADMIN_PRINCIPAL, step_up=True, now=None,
+                 config_provider=None, audit_sink=None):
+    """构造带 M11 路由的 ASGI 客户端（请求级 SAVEPOINT，不真提交）。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.risk.router import create_router
+
+    moment = now or FIXED_NOW
+    app = FastAPI()
+    app.include_router(create_router(
+        connection_factory=savepoint_factory(connection),
+        admin_resolver=(lambda request: dict(admin)) if admin is not None else None,
+        step_up_verifier=(lambda request: step_up) if step_up is not None else None,
+        now_provider=lambda: moment,
+        config_provider=(lambda: config_provider) if config_provider is not None else None,
+        audit_sink=audit_sink,
+    ))
+    return TestClient(app)

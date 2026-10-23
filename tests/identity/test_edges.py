@@ -15,7 +15,7 @@ from psycopg.rows import dict_row
 
 from app.identity import models, state
 
-from conftest import rows, scalar
+from identitykit import rows, scalar
 
 CLEAN = {"locked_earnings": True, "open_disputes": True, "negative_balance": True,
          "open_tickets": True}

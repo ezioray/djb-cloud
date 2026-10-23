@@ -12,7 +12,7 @@ import pytest
 from app.ledger import merkle
 from app.ledger.constants import MERKLE_KINDS_OWNED
 
-from gatewaykit import e2_draft, e6_draft, outbox_rows, post_ok
+from ledger_gatewaykit import e2_draft, e6_draft, outbox_rows, post_ok
 from ledgerkit import connect
 
 EMPTY_ROOT = hashlib.sha256(b"M06:MERKLE:EMPTY").hexdigest()
@@ -129,7 +129,7 @@ def test_empty_period_can_be_anchored(migrated: str) -> None:
 
 def test_merkle_period_column_overrides_ts_bucket(migrated: str) -> None:
     """凭证可显式声明 merkle_period（T1 的列）：优先于按 ts 落桶。"""
-    from gatewaykit import e6_draft as draft
+    from ledger_gatewaykit import e6_draft as draft
     post_ok(migrated, draft(amount_minor=11, source_id="explicit-1", merkle_period="2030-05"))
     with connect(migrated) as c:
         by_column = merkle.compute(c, kind="journal", period="2030-05")

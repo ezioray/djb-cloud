@@ -23,7 +23,7 @@ import pytest
 
 from app.identity import admin, clock, errors, mfa, models, state, tokens
 
-from conftest import bearer, error_of, rows, scalar
+from identitykit import bearer, error_of, rows, scalar
 
 PASSWORD = "S3cret!"
 PIN = "123456"

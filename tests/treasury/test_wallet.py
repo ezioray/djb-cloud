@@ -9,7 +9,7 @@ import pytest
 from app.treasury import config_source, errors, facts, models, signing, store, wallet
 
 import m08kit
-from conftest import READONLY_PRINCIPAL, build_client
+from m08kit import READONLY_PRINCIPAL, build_client
 
 NOW = m08kit.FIXED_NOW
 
@@ -140,7 +140,7 @@ def test_provision_activate_switch_retire_flow(client, savepoint_conn):
 
 
 def test_retire_requires_attestation(savepoint_conn):
-    from conftest import savepoint_factory
+    from m08kit import savepoint_factory
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.treasury.router import create_router

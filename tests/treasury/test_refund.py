@@ -9,7 +9,7 @@ import pytest
 from app.treasury import config_source, errors, models, refund, store
 
 import m08kit
-from conftest import OTHER_USER_PRINCIPAL, build_client
+from m08kit import OTHER_USER_PRINCIPAL, build_client
 
 NOW = m08kit.FIXED_NOW
 

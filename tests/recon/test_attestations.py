@@ -6,7 +6,7 @@ import uuid
 from datetime import timedelta
 
 from app.recon import engine, facts, models
-from conftest import ADMIN_PRINCIPAL, build_client
+from reconkit import ADMIN_PRINCIPAL, build_client
 from reconkit import FIXED_NOW, receipt_spec, seed_receipt, seed_usage
 
 SUBMIT = "/api/v1/admin/treasury/recon/attestations"

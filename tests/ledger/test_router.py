@@ -19,7 +19,7 @@ from app.ledger.constants import RECOMPUTE_LOCK_ID
 from app.ledger.router import OPERATIONS, router
 from app.ledger.trial import decimal_str
 
-from gatewaykit import e6_draft, post_ok
+from ledger_gatewaykit import e6_draft, post_ok
 from ledgerkit import apply_migrations, connect, create_schema, drop_schema
 
 STEP_UP = {"X-Admin-Step-Up": str(int(time.time())), "X-Admin-Roles": "fin",

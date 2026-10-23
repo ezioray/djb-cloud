@@ -18,7 +18,7 @@ import pytest
 
 from app.identity import models, state
 
-from conftest import (
+from identitykit import (
     account_state,
     all_events,
     backdate_account,

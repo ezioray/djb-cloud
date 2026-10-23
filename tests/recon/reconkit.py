@@ -600,3 +600,42 @@ def daily_close_spec(*, cutoff: datetime = FIXED_NOW, days: int = 1,
     return models.RunSpec(scope="daily_close", subject_ref=subject_ref,
                           period_start=cutoff - timedelta(days=days), period_end=cutoff,
                           cutoff_at=cutoff)
+
+# ─────────────────────────────────────────────────────── M09 HTTP 客户端（DEV-TESTINFRA）
+# 由 conftest 移到 kit：单进程全量 pytest 时多个目录的 conftest 会互相覆盖，
+# 测试文件统一从本模块导入 helper / 客户端构造器（conftest 只留 pytest fixture）。
+ADMIN_PRINCIPAL = {"admin_id": "admin-maker", "tenant_id": "tenant-a",
+                   "scopes": ["recon.read", "recon.write"]}
+SERVICE_PRINCIPAL = {"service_id": "M08-payout", "scopes": ["recon.attestation.validate"]}
+
+
+def savepoint_factory(connection):
+    """把一条连接包成 handler 需要的请求级连接（内层 SAVEPOINT，不真提交）。"""
+
+    @contextmanager
+    def factory():
+        with connection.transaction():
+            yield connection
+
+    return factory
+
+
+def build_client(connection, *, admin=ADMIN_PRINCIPAL, service=SERVICE_PRINCIPAL,
+                 step_up=True, now=None, engine_deps=None):
+    """构造带 M09 路由的 ASGI 客户端（请求级 SAVEPOINT，不真提交）。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.recon.router import create_router
+
+    moment = now or FIXED_NOW
+    app = FastAPI()
+    app.include_router(create_router(
+        connection_factory=savepoint_factory(connection),
+        admin_resolver=(lambda request: dict(admin)) if admin is not None else None,
+        service_resolver=(lambda request: dict(service)) if service is not None else None,
+        step_up_verifier=(lambda request: step_up) if step_up is not None else None,
+        now_provider=lambda: moment,
+        engine_deps=engine_deps,
+    ))
+    return TestClient(app)

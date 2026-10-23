@@ -8,7 +8,7 @@ from datetime import timedelta
 import pytest
 
 from app.risk import cases, errors, models, store
-from conftest import ADMIN_PRINCIPAL, OTHER_TENANT_PRINCIPAL, build_client
+from riskkit import ADMIN_PRINCIPAL, OTHER_TENANT_PRINCIPAL, build_client
 from riskkit import FIXED_NOW, make_appeal, make_case, outbox_events
 
 STEP_UP = {"X-Admin-Step-Up": "step-up-token-123"}

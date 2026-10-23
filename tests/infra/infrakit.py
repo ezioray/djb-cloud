@@ -272,6 +272,17 @@ def new_idempotency_key() -> str:
 HASH_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
+def savepoint_factory(connection):
+    """把一条连接包成 handler 需要的「请求级连接」（内层 SAVEPOINT，不真提交）。"""
+
+    @contextmanager
+    def factory():
+        with connection.transaction():
+            yield connection
+
+    return factory
+
+
 __all__ = [
     "ROOT", "MIGRATIONS_DIR", "TEST_KEY", "OTHER_KEY",
     "migration_number", "migration_files", "m16_migration_files", "prerequisite_files",
@@ -279,5 +290,5 @@ __all__ = [
     "run_migration", "run_migrations", "apply_migrations",
     "table_names", "index_names", "function_names", "trigger_names", "column_names",
     "fingerprint", "tx", "assert_db_error", "scalar", "rows", "new_idempotency_key",
-    "HASH_PATTERN",
+    "savepoint_factory", "HASH_PATTERN",
 ]

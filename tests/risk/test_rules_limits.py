@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pytest
 
-from conftest import ADMIN_PRINCIPAL, OTHER_TENANT_PRINCIPAL, READONLY_PRINCIPAL, build_client
+from riskkit import ADMIN_PRINCIPAL, OTHER_TENANT_PRINCIPAL, READONLY_PRINCIPAL, build_client
 from riskkit import FIXED_NOW
 
 STEP_UP = {"X-Admin-Step-Up": "step-up-token-123"}
