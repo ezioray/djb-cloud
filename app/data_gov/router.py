@@ -290,7 +290,7 @@ def create_router(*, connection_factory: Callable[[], Any],
                   link_secret: bytes | str | None = None,
                   link_base_url: str | None = None) -> APIRouter:
     """构造 M14 管理面路由（十条端点，默认 fail-closed）。"""
-    router = APIRouter(tags=["admin-data"])
+    router = APIRouter(tags=["admin"])          # 1.2.6 tag 归一：/api/v1/admin/** → admin
     now_source = now_provider or clock.utcnow
     store_handle = batch_store or batch_service.InMemoryBatchStore()
     secret = (link_secret.encode("utf-8") if isinstance(link_secret, str) else link_secret)

@@ -264,12 +264,21 @@ def test_cancel_only_before_execution(savepoint_conn, client) -> None:
                            headers=write_headers("cancel-a2"))
     assert response.status_code == 200
     cancelled = response.json()
+    # 1.2.6 裁决：state→failed + failure_reason=cancelled_by_requester + cancelled_at/by；
+    # 不新增 cancelled 枚举值（ExportRequest.state 仍六值）；重复取消幂等。
     assert cancelled["state"] == "failed"
     assert cancelled["failure_reason"] == "cancelled_by_requester"
     assert cancelled["cancelled_by"] == "ops-admin"
+    assert cancelled["cancelled_at"] is not None
+    stored = store.get_export(savepoint_conn, row["export_id"])
+    assert stored["state"] == "failed"
+    assert stored["failure_reason"] == "cancelled_by_requester"
+    assert stored["cancelled_at"] is not None and stored["cancelled_by"] == "ops-admin"
     replay = client.post(f"{BASE}/{row['export_id']}/cancel",
                          headers=write_headers("cancel-a3"))
-    assert replay.status_code == 200                            # 幂等
+    assert replay.status_code == 200                            # 幂等（不同幂等键也不重复生效）
+    assert replay.json()["state"] == "failed"
+    assert replay.json()["cancelled_at"] == cancelled["cancelled_at"]
     running = make_export(savepoint_conn, state="running")
     refused = client.post(f"{BASE}/{running['export_id']}/cancel",
                           headers=write_headers("cancel-running"))
