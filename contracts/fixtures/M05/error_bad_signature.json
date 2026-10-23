@@ -7,7 +7,8 @@
     "sig_provider": "bad"
   },
   "expect": {
-    "http": 422,
-    "error": "42220"
+    "http": 200,
+    "error": "46001",
+    "rejected": true
   }
 }

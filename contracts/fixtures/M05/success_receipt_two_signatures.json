@@ -8,7 +8,7 @@
     "sig_consumer": "..."
   },
   "expect": {
-    "http": 201,
+    "http": 200,
     "settled": true
   }
 }
