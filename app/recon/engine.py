@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""对账引擎（M09 §6.1 / §6.3）：本轮实现 ``scope=receipt`` 与 ``scope=daily_close``。
+"""对账引擎（M09 §6.1 / §6.3）：五个 scope 全部实现。
 
     receipt      M05 逐条核对（usage_records ↔ metering_receipts），四类差异 + 重复入账。
                  only_platform（平台有、节点未上报；宽限期内算在途）/ only_node（节点有、平台无）
                  / amount_mismatch（金额不一致）/ signature_bad（签名不可验，P0）
                  / duplicate_receipt（同一 task_id 多张收据，重复入账，P0）
     daily_close  M06 试算平衡（Σ借 = Σ贷）+ 科目余额漂移（派生缓存 vs 分录），按单位各一 run。
+    chain        M08 wallet.balance_minor ↔ journal_line(wallet_id, 1101/1102) 累计净额。
+    psp          M08 payment_attempts ↔ E3/E4（payment_attempt / provider_txn_id / seq 1/2/3）。
+    bank         M08 payout / refund ↔ E8/E11 + 银行流水夹具。
 
-**未实现**（依赖 M08，见 ``DEFERRED_SCOPE_OWNER``）：``chain`` / ``psp`` / ``bank``。
-扩展点：往 ``SCOPE_PLANNERS`` 注册一个 ``planner(conn, spec, deps, now) -> list[Plan]`` 即可，
+三方 scope 的 planner 在 :mod:`app.recon.threeway`（懒加载注册，避免循环 import）；
+扩展点：往 ``SCOPE_PLANNERS`` 注册一个 ``planner(conn, spec, deps, now)`` 即可，
 ``run()`` 的落库 / 幂等 / INV-04 / 差异入库 / 状态机逻辑全部复用，不需要改其它文件。
 
 金额纪律（INV-08）：全部整数最小单位；``diff_minor`` 有符号（book − external），
@@ -53,6 +56,12 @@ class EngineDeps:
     signature_verifier: Callable[[Mapping[str, Any]], bool] | None = None
     default_owner: str | None = "treasury-ops"
     grace_seconds: int | None = None
+    #: scope=psp 的 PSP 结算文件夹具（provider_txn_id / settled_minor / fee_minor / currency）。
+    #: None = 该维度无数据源（metrics 如实标 settlement_source=absent）；正文不落库，只存哈希。
+    psp_settlement: Sequence[Mapping[str, Any]] | None = None
+    #: scope=bank 的银行流水夹具（txid / amount / currency / posted_at）。
+    #: None = 该维度无数据源（metrics 标 bank_statement_source=absent）；正文不落库，只存哈希。
+    bank_statement: Sequence[Mapping[str, Any]] | None = None
 
 
 @dataclass
@@ -290,14 +299,26 @@ def scan_daily_close(conn: psycopg.Connection, spec: models.RunSpec, *,
 
 
 # ───────────────────────────────────────────────────────────── 扩展点注册表
-#: scope → planner。chain / psp / bank 缺 M08，注册即抛 ``ScopeNotImplemented``。
+def _threeway_planner(scope: str) -> Callable[..., Any]:
+    """三方 scope 的懒加载入口（threeway 依赖本模块的 Observation，避免循环 import）。"""
+
+    def planner(conn: psycopg.Connection, spec: models.RunSpec, deps: EngineDeps,
+                now: datetime) -> list[tuple[models.RunSpec, Observation]]:
+        from . import threeway
+
+        return threeway.plan(conn, spec, deps=deps, now=now)
+
+    planner.__name__ = f"plan_{scope}"
+    return planner
+
+
+#: scope → planner（五个 scope 全部实现；接口固定，run() 不区分 scope）。
 SCOPE_PLANNERS: dict[str, Callable[..., Any]] = {
     "receipt": lambda conn, spec, deps, now: [(spec, scan_receipt(conn, spec, deps=deps, now=now))],
     "daily_close": lambda conn, spec, deps, now: scan_daily_close(conn, spec, deps=deps, now=now),
-    # ── T4 / M08 合并后在这里注册（接口已固定，不需要改 run()）：
-    # "chain": lambda conn, spec, deps, now: [...]   # 依赖 M08 钱包 / chain_tx 只读视图
-    # "psp":   lambda conn, spec, deps, now: [...]   # 依赖 M08 payment_orders / payment_attempts
-    # "bank":  lambda conn, spec, deps, now: [...]   # 依赖 M08 payout_batches / payout_items
+    "chain": _threeway_planner("chain"),
+    "psp": _threeway_planner("psp"),
+    "bank": _threeway_planner("bank"),
 }
 
 

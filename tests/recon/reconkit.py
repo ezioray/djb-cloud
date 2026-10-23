@@ -303,11 +303,12 @@ def new_hash(seed: str | None = None) -> bytes:
 
 def journal_line_fixture(coa_code: str, dc: str, amount_minor: int, *,
                          account_id: str | None = None, qty_minor: int | None = None,
-                         entry_type: str = "consume") -> dict[str, Any]:
+                         entry_type: str = "consume",
+                         wallet_id: str | None = None) -> dict[str, Any]:
     return {"coa_code": coa_code, "dc": dc, "amount_minor": amount_minor,
             "account_id": account_id or f"coa:{coa_code}", "qty_minor": qty_minor,
             "entry_type": entry_type, "fund_class": COA_FUND_CLASS[coa_code],
-            "unit_scale": 6, "wallet_id": None, "reverse_of": None}
+            "unit_scale": 6, "wallet_id": wallet_id, "reverse_of": None}
 
 
 def simple_journal_lines(amount_minor: int = 100_000_000, *, debit_coa: str = "1101",
@@ -320,8 +321,11 @@ def simple_journal_lines(amount_minor: int = 100_000_000, *, debit_coa: str = "1
 def post_journal(connection: psycopg.Connection, lines: Iterable[dict[str, Any]], *,
                  unit_type: str = "USD", event_type: str = "E6",
                  source_type: str = "usage_settle", source_id: str | None = None,
-                 ts: datetime | None = None) -> str:
-    """按写入顺序落一张凭证：journal_entry → ledger_entry → journal_line（M06 契约顺序）。"""
+                 ts: datetime | None = None, event_seq: int = 0) -> str:
+    """按写入顺序落一张凭证：journal_entry → ledger_entry → journal_line（M06 契约顺序）。
+
+    event_seq 用于三方对账的 E3/E4（1/2/3）与 E8/E11 幂等键；默认 0 保持旧用例不变。
+    """
     journal_id = str(uuid.uuid4())
     moment = ts or datetime.now(timezone.utc)
     with connection.cursor() as cur:
@@ -329,9 +333,9 @@ def post_journal(connection: psycopg.Connection, lines: Iterable[dict[str, Any]]
             """INSERT INTO journal_entry
                  (journal_id, ts, event_type, unit_type, source_type, source_id, event_seq,
                   policy_version, fx_rate_id, hash)
-               VALUES (%s,%s,%s,%s,%s,%s,0,'m09-test',1,%s)""",
+               VALUES (%s,%s,%s,%s,%s,%s,%s,'m09-test',1,%s)""",
             (journal_id, moment, event_type, unit_type, source_type,
-             source_id or f"src-{uuid.uuid4().hex[:12]}", new_hash(journal_id)))
+             source_id or f"src-{uuid.uuid4().hex[:12]}", int(event_seq), new_hash(journal_id)))
         for line_no, item in enumerate(lines, start=1):
             entry_id = str(uuid.uuid4())
             cur.execute(
@@ -389,6 +393,152 @@ def snapshot_balances(connection: psycopg.Connection, *, as_of: datetime | None 
                 (account_id, unit_type, sub_account,
                  versions.get((account_id, unit_type, sub_account), 0) + 1, amount, created_at))
     return len(derived)
+
+
+# ────────────────────────────────────────── M08 / 三方对账夹具（只写存量表）
+def seed_payment_attempt(connection: psycopg.Connection, *, provider_txn_id: str,
+                         amount_minor: int, created_at: datetime, status: str = "succeeded",
+                         currency: str = "USD", fee_minor: int = 0,
+                         settled_minor: int | None = None,
+                         settlement_fee_minor: int | None = None,
+                         account_id: str = "acct-subject", provider: str = "mock") -> dict[str, Any]:
+    """写一条 payment_orders + payment_attempts（M08 事实；金额单位分）。
+
+    settled_minor / settlement_fee_minor 必须成对出现（800 的 settlement CHECK）。
+    """
+    order_id = str(uuid.uuid4())
+    order_no = "PO-" + uuid.uuid4().hex[:18].upper()
+    attempt_id = str(uuid.uuid4())
+    net_minor = max(amount_minor - fee_minor, 0)
+    with connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO payment_orders
+                 (order_id, order_no, account_id, amount_minor, currency, method, provider,
+                  status, credited_minor, policy_version, trace_id, created_by, paid_at,
+                  created_at, updated_at)
+               VALUES (%s,%s,%s,%s,%s,'card',%s,'paid',0,'m09-test',%s,'m09-test',
+                       %s,%s,%s)""",
+            (order_id, order_no, account_id, amount_minor, currency, provider,
+             f"trace-{uuid.uuid4().hex[:12]}", created_at, created_at, created_at))
+        cur.execute(
+            """INSERT INTO payment_attempts
+                 (attempt_id, order_id, provider, provider_txn_id, provider_status, status,
+                  amount_minor, fee_minor, net_minor, currency, signature_verified,
+                  settled_minor, settlement_fee_minor, created_at, updated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s,%s,%s,%s)""",
+            (attempt_id, order_id, provider, provider_txn_id, status, status,
+             amount_minor, fee_minor, net_minor, currency, settled_minor,
+             settlement_fee_minor, created_at, created_at))
+    return {"order_id": order_id, "order_no": order_no, "attempt_id": attempt_id}
+
+
+def seed_wallet(connection: psycopg.Connection, *, wallet_id: str,
+                balance_minor: int = 0, chain_id: str = "polygon", role: str = "hot",
+                fund_class: str = "customer", address: str | None = None,
+                status: str = "active", switch_state: str = "in_service",
+                gas_ok: bool = True) -> str:
+    """写 wallet_pool + wallet（M08 只读依赖；金额单位分）。"""
+    pool_id = f"{chain_id}:{role}:{fund_class}"
+    address = address or ("0x" + hashlib.sha256(wallet_id.encode()).hexdigest()[:40])
+    with connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO wallet_pool (pool_id, chain_id, role, fund_class, status,
+                                        policy_version)
+               VALUES (%s,%s,%s,%s,'active','m09-test')
+               ON CONFLICT (pool_id) DO NOTHING""",
+            (pool_id, chain_id, role, fund_class))
+        cur.execute(
+            """INSERT INTO wallet
+                 (wallet_id, chain_id, address, pool_id, pool_role, fund_class, custody_kind,
+                  status, switch_state, balance_minor, gas_ok, activated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,'self_custody_hot',%s,%s,%s,%s,%s)""",
+            (wallet_id, chain_id, address, pool_id, role, fund_class, status, switch_state,
+             balance_minor, gas_ok, FIXED_NOW))
+    return wallet_id
+
+
+def seed_payout_item(connection: psycopg.Connection, *, net_minor: int, created_at: datetime,
+                     gross_minor: int | None = None, fee_minor: int = 0,
+                     status: str = "sent", chain_tx_id: str | None = None,
+                     journal_id: str | None = None, batch_status: str = "settled",
+                     item_id: str | None = None, batch_id: str | None = None,
+                     batch_no: str | None = None, total_gross_minor: int | None = None,
+                     total_fee_minor: int | None = None,
+                     total_net_minor: int | None = None) -> dict[str, Any]:
+    """写 payout_batches + payout_items（M08 分润批次；金额单位分）。"""
+    item_id = item_id or str(uuid.uuid4())
+    batch_id = batch_id or str(uuid.uuid4())
+    batch_no = batch_no or ("PB-" + uuid.uuid4().hex[:18].upper())
+    gross = net_minor + fee_minor if gross_minor is None else gross_minor
+    batch_gross = gross if total_gross_minor is None else total_gross_minor
+    batch_fee = fee_minor if total_fee_minor is None else total_fee_minor
+    total_net = (batch_gross - batch_fee if total_net_minor is None else total_net_minor)
+    payee_address = "0x" + hashlib.sha256(item_id.encode()).hexdigest()[:40]
+    with connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO payout_batches
+                 (batch_id, batch_no, status, total_gross_minor, total_fee_minor,
+                  total_net_minor, item_count, attestation_ref, gas_mode, policy_version,
+                  maker_id, checker_id, checked_at, created_at, updated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,1,'att:test','INTERNAL','m09-test','maker','checker',
+                       %s,%s,%s)""",
+            (batch_id, batch_no, batch_status, batch_gross, batch_fee, total_net,
+             created_at, created_at, created_at))
+        cur.execute(
+            """INSERT INTO payout_items
+                 (item_id, batch_id, payee_account_id, payee_address, gross_minor, fee_minor,
+                  net_minor, status, gas_mode, policy_version, chain_tx_id, journal_id,
+                  created_at, updated_at)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'INTERNAL','m09-test',%s,%s,%s,%s)""",
+            (item_id, batch_id, f"acct-{item_id[:8]}", payee_address, gross, fee_minor,
+             net_minor, status, chain_tx_id, journal_id, created_at, created_at))
+    return {"item_id": item_id, "batch_id": batch_id, "batch_no": batch_no}
+
+
+def seed_refund_request(connection: psycopg.Connection, *, amount_minor: int,
+                        created_at: datetime, status: str = "succeeded",
+                        journal_id: str | None = None, currency: str = "USD",
+                        payment_ref: str | None = None, refund_no: str | None = None,
+                        order_no: str | None = None,
+                        refund_request_id: str | None = None) -> dict[str, Any]:
+    """写 refund_requests（M08 退款；金额单位分，原路信息不可变）。"""
+    refund_request_id = refund_request_id or str(uuid.uuid4())
+    refund_no = refund_no or ("RF-" + uuid.uuid4().hex[:18].upper())
+    order_no = order_no or ("PO-" + uuid.uuid4().hex[:18].upper())
+    payment_ref = payment_ref or ("psp-" + uuid.uuid4().hex[:16])
+    approved = status in ("approved", "executing", "succeeded")
+    succeeded = status == "succeeded"
+    approved_at = created_at + timedelta(hours=25) if approved else None
+    succeeded_at = created_at + timedelta(hours=26) if succeeded else None
+    with connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO refund_requests
+                 (refund_request_id, refund_no, account_id, order_no, payment_ref,
+                  amount_minor, currency, reason_code, original_route,
+                  original_route_hash, status, deadline_at, requested_by, approved_by,
+                  approved_at, cooldown_until, succeeded_at, journal_id, created_at,
+                  updated_at)
+               VALUES (%s,%s,'acct-subject',%s,%s,%s,%s,'customer_request',
+                       'card:tok-test',%s,%s,%s,'maker',%s,%s,%s,%s,%s,%s,%s)""",
+            (refund_request_id, refund_no, order_no, payment_ref, amount_minor, currency,
+             "a" * 32, status, created_at + timedelta(days=14),
+             "checker" if approved else None, approved_at,
+             created_at + timedelta(hours=24), succeeded_at, journal_id, created_at,
+             created_at))
+    return {"refund_request_id": refund_request_id, "refund_no": refund_no,
+            "payment_ref": payment_ref, "order_no": order_no}
+
+
+def recon_spec(scope: str, *, cutoff: datetime | None = None, days: int = 1,
+               subject_ref: str | None = None,
+               trigger_event_id: str | None = None) -> Any:
+    """三方 scope 的 RunSpec（期间 = [cutoff-days, cutoff)）；cutoff 缺省 = 固定时钟。"""
+    from app.recon import models
+
+    moment = cutoff or FIXED_NOW
+    return models.RunSpec(scope=scope, subject_ref=subject_ref,
+                          period_start=moment - timedelta(days=days), period_end=moment,
+                          cutoff_at=moment, trigger_event_id=trigger_event_id)
 
 
 # ─────────────────────────────────────────────────────── 时间夹具
