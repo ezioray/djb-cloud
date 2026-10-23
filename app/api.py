@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import db, pricing, receipt as rcpt, upstream
 from .audit import keys as audit_keys
-from .audit.errors import Unauthorized as AuditUnauthorized
 from .audit.health import create_health_router
 from .audit.router import create_router as create_audit_router
 from .config_center.router import create_router as create_config_center_router
