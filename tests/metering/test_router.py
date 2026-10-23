@@ -35,6 +35,7 @@ def test_router_exposes_exactly_the_spec_paths():
         ("GET", "/api/v1/node/receipts/{receipt_id}"),
         ("GET", "/api/v1/user/usage/summary"),
         ("GET", "/api/v1/user/usage/records"),
+        ("GET", "/api/v1/user/billing/export"),
         ("POST", "/api/v1/admin/usage/upstream-bills"),
         ("POST", "/api/v1/admin/usage/corrections"),
     }

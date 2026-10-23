@@ -53,6 +53,8 @@ providers.set_webhook_sender(http_sender)
 providers.set_webhook_secret_provider(secret_lookup)   # 密钥本体不得进日志
 
 # ⑤ M04 模型目录：/v1/models
+#    行里可带 ``price_version``（M04 ``model_catalog.price_version``，spec 1.2.6 可选）：
+#    有则原样下发，无则缺省（公开侧允许 null；不得据此推断结算价）
 providers.set_model_catalog_provider(catalog_provider)
 
 # ⑥ M10 配置（可选）：gateway.rate_limit_qps / gateway.stream_timeout_s
@@ -67,7 +69,7 @@ config_source.set_provider(lambda: m10_snapshot(namespace="gateway."))
 | `set_route_provider` | `.route(RouteRequest)` | Mapping / M04 `Decision` | 无路由抛 `providers.NoRoute` → 503/50901 |
 | `set_node_client` | `.complete(NodeCall)` | `NodeResult` / Mapping | 超时抛 `UpstreamTimeout`（→504/50902）、其它抛 `UpstreamFailure`（→502/50903）；未分类异常自动归为上游异常 |
 | `set_usage_provider` | `.record(UsageDraft)` | `UsageReceipt` / Mapping | 异常不阻塞 2xx（`request.completed` 由 outbox 至少一次补偿） |
-| `set_model_catalog_provider` | `.list_models()` | `[Model, ...]` | 异常 → 503/45001 |
+| `set_model_catalog_provider` | `.list_models()` | `[Model, ...]`（可选 `price_version`） | 异常 → 503/45001 |
 | `set_stream_client` | `.stream(NodeCall)` | 分块迭代器 | 首字节前 `UpstreamTimeout` → 504/50902、`UpstreamFailure` → 502/50903（≤2 次重路由）；首字节后异常 → interrupted + 44101 |
 | `set_result_signer` | `(batch_id, expires_at)` | URL 字符串 / None | 未接线 → 响应里不给 `results_ref` |
 | `set_webhook_sender` | `(url, body, headers)` | HTTP 状态码 | 抛异常 → 计一次失败并退避重试（≤3 次） |

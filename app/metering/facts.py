@@ -85,6 +85,17 @@ DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 MAX_CURSOR_LEN = 512
 
+# ─────────────────────────────────────────────────────────── 账单导出（spec 1.2.6 / M05 §4.1）
+EXPORT_FORMATS: tuple[str, ...] = ("csv", "json")
+#: 导出响应的媒体类型（Content-Type；spec text/csv / application/json）
+EXPORT_MEDIA_TYPES: dict[str, str] = {"csv": "text/csv", "json": "application/json"}
+#: 下载凭据有效期 ≤15 分钟（spec ``X-DJB-Export-Expires-At``，本模块取 900 s）
+EXPORT_TTL_S = 900
+#: 单次导出的时间窗上限（超限 → 400/40001，客户端拆分；不做静默截断）
+EXPORT_MAX_WINDOW_DAYS = 366
+#: 流式导出的 keyset 批大小（只限制单批内存，不限制导出总量）
+EXPORT_BATCH_SIZE = 1000
+
 # ─────────────────────────────────────────────────────────── 配置键（M05 §8.1；M10 管理）
 CONFIG_NAMESPACE = "metering"
 CONFIG_KEYS: tuple[str, ...] = (

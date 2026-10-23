@@ -110,6 +110,16 @@ EVENT_TYPES: tuple[str, ...] = (
 )
 """M02 生产的 4 个事件（02-events §3 / M02 §4.2）。**未登记的事件不得上线**。"""
 
+# --------------------------------------------------------------------------- 用户态节点面（spec 1.2.6）
+USER_NODE_VIEW_STATES: tuple[str, ...] = ("unbound", "pending_receipt", "bound", "revoked")
+"""绑定视图状态（spec ``UserNode.state``；由 ``nodes`` 列派生的只读视图，不落库）。"""
+USER_NODE_DEFAULT_PAGE_SIZE = 50       # spec Limit default 50（04-api-contracts §2 约定 2）
+USER_NODE_MAX_PAGE_SIZE = 200          # spec Limit maximum 200
+USER_NODE_MAX_CURSOR_LEN = 512         # spec Cursor maxLength 512
+USER_UNBIND_REASON_MAX_LEN = 512       # spec UserNodeUnbindRequest.reason maxLength 512
+NODE_EVENT_REASON_MAX_LEN = 500        # migrations/203 node_events.reason CHECK ≤500
+MAX_NODE_ID_LEN = 128                  # nodes.id TEXT 的实用上限（与 M05 MAX_ID_LEN 同量级）
+
 # 审核决策（spec NodeReviewRequest.decision）
 REVIEW_DECISIONS: tuple[str, ...] = ("approve", "reject")
 REVIEW_REASON_MAX_LEN = 500
