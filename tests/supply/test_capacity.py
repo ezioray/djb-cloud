@@ -2,7 +2,7 @@
 """容量公告（M02 §3 / §6.2 / INV-07 / §8.2）：校验、seq 单调、过期与 0 容量过滤、快照视图。"""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -114,11 +114,13 @@ def test_next_seq_unknown_node(conn):
 
 def test_snapshot_keeps_latest_seq_per_kind_model(conn, factory):
     node = factory.active_node()[0]
+    # 视图按库内 now() 过滤过期公告；用例时钟是固定值，必须用墙上时间记公告，否则时间推进会过期。
+    wall = datetime.now(timezone.utc)
     capacity.record(conn, node_id=node.id,
                     entries=[_entry(max_qps=1), _entry(kind="gpu", model="gpt-4o", max_qps=2)],
-                    ttl_seconds=60, now=factory.moment)
-    capacity.record(conn, node_id=node.id, entries=[_entry(max_qps=7)], ttl_seconds=60,
-                    now=factory.moment)
+                    ttl_seconds=600, now=wall)
+    capacity.record(conn, node_id=node.id, entries=[_entry(max_qps=7)], ttl_seconds=600,
+                    now=wall)
 
     rows = capacity.snapshot(conn)
     by_key = {(row["kind"], row["model"]): row for row in rows}
@@ -145,7 +147,7 @@ def test_expired_announcement_leaves_candidates_but_keeps_history(conn, factory)
 def test_frozen_node_drops_out_of_candidates(conn, factory):
     node = factory.active_node()[0]
     capacity.record(conn, node_id=node.id, entries=[_entry()], ttl_seconds=600,
-                    now=factory.moment)
+                    now=datetime.now(timezone.utc))
     assert len(capacity.snapshot(conn)) == 1
     with conn.cursor() as cur:
         cur.execute("UPDATE nodes SET state = 'frozen' WHERE id = %s", (node.id,))
