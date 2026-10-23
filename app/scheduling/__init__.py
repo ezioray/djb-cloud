@@ -35,14 +35,15 @@
 """
 from __future__ import annotations
 
-from . import (bids, candidates, clock, config_source, decisions, errors, events, facts,
-               features, matching, migrate, models, pipeline, preempt, quota, quotes, replay,
-               router, scoring, snapshot)
+from . import (backpressure, bids, candidates, circuit, cli, clock, config_source, decisions,
+               errors, events, facts, fairness, features, idempotency, matching, migrate, models,
+               outbox, pipeline, preempt, quota, quotes, replay, router, scoring, snapshot)
 
-__version__ = "0.2.0-dev-m04t2"
+__version__ = "0.5.0-dev-m04t5"
 
 __all__ = [
     "facts", "errors", "clock", "config_source", "features", "models", "quotes", "bids",
-    "matching", "events", "candidates", "scoring", "quota", "preempt", "pipeline", "decisions",
-    "replay", "snapshot", "migrate", "router",
+    "matching", "events", "outbox", "idempotency", "candidates", "scoring", "quota", "fairness",
+    "preempt", "backpressure", "circuit", "pipeline", "decisions", "replay", "snapshot",
+    "migrate", "router", "cli",
 ]

@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -55,6 +55,13 @@ class RouteContext:
     checkpoint_age_s: int | None = None
     queue_level_pct: int | None = None
     queue_eta_s: int | None = None
+    # T3：占比由 M04 自有计数得出（INV-08），软停状态同源
+    observed_share_bps: int | None = None
+    frozen: bool = False
+    soft_stop_enabled: bool = False
+    # T4：抢占开关（None = 取特性开关默认值，即关闭）与每节点本小时已用预算
+    preempt_enabled: bool | None = None
+    preempt_budget: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -92,6 +99,7 @@ def solve(route: candidates.RouteInput, snapshot: candidates.SnapshotResult,
     feasible: list[models.Score] = []
     blocked: list[str] = []
     visible: list[str] = []          # P3 的可见标记（降权 / 夹取 / 占比），赢家生效
+    total_slots = sum(candidate.max_qps or 0 for candidate in snapshot.candidates) or None
     for scored in ranked:
         candidate = _candidate_by_node(snapshot, scored.node_id)
         if candidate is None:                              # pragma: no cover - 防御
@@ -101,7 +109,8 @@ def solve(route: candidates.RouteInput, snapshot: candidates.SnapshotResult,
             platform_concurrency=ctx.platform_concurrency,
             terminal_concurrency=ctx.terminal_concurrency,
             limit_pct=config_source.max_tenant_share_pct(ctx.policy),
-            required_units=1)
+            required_units=1, observed_share_bps=ctx.observed_share_bps,
+            total_slots=total_slots, frozen=ctx.frozen)
         if not verdict.allowed:
             blocked.extend(verdict.reason_codes or ("quota_exhausted",))
             continue
@@ -113,7 +122,7 @@ def solve(route: candidates.RouteInput, snapshot: candidates.SnapshotResult,
         feasible.append(scored)
 
     if not feasible:
-        return _no_feasible_outcome(route, ctx, base, snapshot, ranked, blocked, stale)
+        return _no_feasible_outcome(route, ctx, base, snapshot, ranked, blocked, stale, moment)
 
     prices = _price_candidates(route, snapshot, feasible, ctx, moment)
     if not prices:
@@ -253,15 +262,17 @@ def _no_candidate_outcome(route: candidates.RouteInput, ctx: RouteContext, base:
     outcome = preempt.evaluate(tier=route.kind, victims=ctx.victims,
                                budget_used=ctx.preempt_used,
                                budget_limit=config_source.preempt_budget_per_h(ctx.policy),
+                               budget_map=ctx.preempt_budget,
                                checkpoint_age_s=ctx.checkpoint_age_s,
                                queue_level_pct=ctx.queue_level_pct,
-                               eta_seconds=ctx.queue_eta_s)
+                               eta_seconds=ctx.queue_eta_s,
+                               preempt_enabled=ctx.preempt_enabled)
     reason_codes = list(dict.fromkeys((base_reason,) + tuple(outcome.reason_codes)))
     if stale:
         reason_codes.append("stale_snapshot")
 
     if outcome.outcome == "preempt":
-        # 抢占成功等价于「换节点失败但抢到了位置」：仍按排队处理（T4 才真正执行让路）
+        # P1 就没有候选（无报价）：即便抢到位置也报不出价，只能排队等供给恢复（有 ETA）
         decision = models.Decision(**base, score_breakdown=[], chosen=None,
                                    preempt_plan=list(outcome.plan), outcome="queued",
                                    eta_seconds=outcome.eta_seconds or facts.PREEMPT_GRACEFUL_S,
@@ -276,18 +287,27 @@ def _no_candidate_outcome(route: candidates.RouteInput, ctx: RouteContext, base:
 
 def _no_feasible_outcome(route: candidates.RouteInput, ctx: RouteContext, base: dict[str, Any],
                          snapshot: candidates.SnapshotResult, ranked: list[models.Score],
-                         blocked: list[str], stale: bool) -> SolveResult:
+                         blocked: list[str], stale: bool, moment: datetime) -> SolveResult:
     """P3 全部违反：走 P4（§4.7.3 P3 失败动作：冻结建议 / 等待 / 转慢任务）。"""
     outcome = preempt.evaluate(tier=route.kind, victims=ctx.victims,
                                budget_used=ctx.preempt_used,
                                budget_limit=config_source.preempt_budget_per_h(ctx.policy),
+                               budget_map=ctx.preempt_budget,
                                checkpoint_age_s=ctx.checkpoint_age_s,
                                queue_level_pct=ctx.queue_level_pct,
-                               eta_seconds=ctx.queue_eta_s)
+                               eta_seconds=ctx.queue_eta_s,
+                               preempt_enabled=ctx.preempt_enabled)
     reason_codes = list(dict.fromkeys(tuple(blocked) + ("quota_exhausted",)
                                       + tuple(outcome.reason_codes)))
     if stale:
         reason_codes.append("stale_snapshot")
+
+    if outcome.outcome == "preempt":
+        routed = _route_with_preemption(route, snapshot, ranked, outcome, reason_codes, base,
+                                        ctx, moment)
+        if routed is not None:
+            return routed
+
     decision = models.Decision(
         **base, score_breakdown=[item.as_breakdown() for item in ranked], chosen=None,
         preempt_plan=list(outcome.plan), outcome=outcome.outcome,
@@ -304,8 +324,10 @@ def build_context(c, route: candidates.RouteInput, *, policy: Mapping[str, Any] 
                   queue_eta_s: int | None = None) -> RouteContext:
     """把 P3/P4 需要的只读状态收齐（DB 读 + 注入 provider），``solve`` 之后不再碰 DB。"""
     values = dict(policy) if policy is not None else config_source.load(c, route.tenant_id)
+    tenant_id = _as_uuid(route.tenant_id)
+    share, _mine = quota.observed_share(c, tenant_id=tenant_id, model=route.model)
     return RouteContext(policy=values,
-                        quota_snapshot=quota.snapshot(c, _as_uuid(route.tenant_id), route.model),
+                        quota_snapshot=quota.snapshot(c, tenant_id, route.model),
                         platform_concurrency=platform_concurrency,
                         terminal_concurrency=terminal_concurrency,
                         busy_hosts=frozenset(),
@@ -313,7 +335,10 @@ def build_context(c, route: candidates.RouteInput, *, policy: Mapping[str, Any] 
                         preempt_used=0,
                         checkpoint_age_s=checkpoint_age_s,
                         queue_level_pct=queue_level_pct,
-                        queue_eta_s=queue_eta_s)
+                        queue_eta_s=queue_eta_s,
+                        observed_share_bps=share,
+                        frozen=quota.is_frozen(c, tenant_id=tenant_id, model=route.model),
+                        soft_stop_enabled=features.enabled("scheduling.quota_soft_stop"))
 
 
 # --------------------------------------------------------------------------- execute（带事务）
@@ -340,11 +365,19 @@ def execute(c, route: candidates.RouteInput, *, now: datetime | None = None,
                                    checkpoint_age_s=checkpoint_age_s,
                                    queue_level_pct=queue_level_pct,
                                    queue_eta_s=queue_eta_s)
+    if not ctx.policy:                     # 调用方给了裸上下文 → 补 §8.1 默认值，别让 P2 炸
+        ctx = replace(ctx, policy=values)
 
     snapshot = candidates.collect(
         c, route, now=moment,
         freshness_s=config_source.candidate_freshness_s(values),
         quotebook_refresh_s=config_source.quotebook_refresh_s(values))
+    if not ctx.preempt_budget:
+        # INV-10：每节点每小时的抢占次数从**决策日志**数（日志只追加 → 可复算）
+        budget = {candidate.node_id: preempt.used_budget(c, node_id=candidate.node_id,
+                                                        now=moment)
+                  for candidate in snapshot.candidates}
+        ctx = replace(ctx, preempt_budget=budget)
     result = solve(route, snapshot, ctx, now=moment)
     decision = result.decision
 
@@ -360,9 +393,11 @@ def execute(c, route: candidates.RouteInput, *, now: datetime | None = None,
     stored, created = decisions.record(c, decision)
     if created and result.match is not None and stored.chosen is not None:
         _commit_p5(c, route, snapshot, result, stored, moment, request_id)
+    elif created:
+        _note_rejection(c, route, ctx, stored, moment)
     from . import events
 
-    events.routing_decided(stored, trace_id=route.trace_id or stored.trace_id,
+    events.routing_decided(c, stored, trace_id=route.trace_id or stored.trace_id,
                            occurred_at=moment)
     return stored, created
 
@@ -374,15 +409,65 @@ def _commit_p5(c, route: candidates.RouteInput, snapshot: candidates.SnapshotRes
     match = result.match
     if match is None:                                        # pragma: no cover - 防御
         return
-    booking = matching.create_booking(c, match, tenant_id=_as_uuid(route.tenant_id),
+    tenant_id = _as_uuid(route.tenant_id)
+    booking = matching.create_booking(c, match, tenant_id=tenant_id,
                                       request_id=request_id or route.trace_id, now=moment,
                                       trace_id=route.trace_id)
-    quota.reserve(c, tenant_id=_as_uuid(route.tenant_id), model=route.model, now=moment,
+    quota.reserve(c, tenant_id=tenant_id, model=route.model, now=moment,
                   units=1, spend_minor=int(stored.price_minor or 0))
+    # T3：占比按自有计数刷新（INV-08 的可见性来源），并清掉「被拒等待」起点
+    quota.refresh_share(c, tenant_id=tenant_id, model=route.model, now=moment)
+    quota.clear_wait(c, tenant_id=tenant_id, model=route.model, now=moment)
     log.info("scheduling.p5.committed", extra={"event": "p5.committed",
                                                "decision_id": str(stored.decision_id),
                                                "booking_id": booking.booking_id,
                                                "node_id": booking.node_id})
+
+
+def _note_rejection(c, route: candidates.RouteInput, ctx: RouteContext,
+                    stored: models.Decision, moment: datetime) -> None:
+    """被拒/排队时的公平记账（T3）：记等待起点；开关打开时按 §4.7.3 P3 软停 60 s。"""
+    tenant_id = _as_uuid(route.tenant_id)
+    quota.note_rejection(c, tenant_id=tenant_id, model=route.model, now=moment)
+    if "quota_exhausted" not in stored.reason_codes or not ctx.soft_stop_enabled:
+        return
+    quota.freeze(c, tenant_id=tenant_id, model=route.model, now=moment,
+                 seconds=facts.QUOTA_FREEZE_S, reason="quota_exhausted")
+    log.warning("scheduling.quota.soft_stop", extra={"event": "quota.soft_stop",
+                                                    "tenant_id": str(tenant_id),
+                                                    "model": route.model})
+
+
+def _route_with_preemption(route: candidates.RouteInput, snapshot: candidates.SnapshotResult,
+                           ranked: list[models.Score], outcome: preempt.PreemptOutcome,
+                           reason_codes: list[str], base: dict[str, Any], ctx: RouteContext,
+                           moment: datetime) -> SolveResult | None:
+    """P4 抢占成立 → 真的把请求放到「被让路那个节点的位置」（T4）。
+
+    只有 realtime 抢 batch 且检查点可用时 ``evaluate`` 才会给出计划；这里把计划的第一个
+    可用节点当作落点，成交价仍按 P1/P2 的输入与 INV-02 取价（不凭空造价）。
+    """
+    for victim in outcome.plan:
+        node_id = victim.get("node_id")
+        target = [scored for scored in ranked if scored.node_id == node_id]
+        if not target:
+            continue
+        prices = _price_candidates(route, snapshot, target, ctx, moment)
+        if not prices:
+            continue
+        scored, match = prices[0]
+        candidate = _candidate_by_node(snapshot, scored.node_id)
+        decision = models.Decision(
+            **base, score_breakdown=[item.as_breakdown() for item in ranked],
+            chosen=_chosen_payload(route, candidate), tie_break="cost",
+            price_minor=match.price_minor, preempt_plan=list(outcome.plan),
+            outcome="routed", fallback_used=False,
+            eta_seconds=outcome.eta_seconds or facts.PREEMPT_GRACEFUL_S,
+            reason_codes=reason_codes)
+        log.info("scheduling.p4.routed_by_preemption",
+                 extra={"event": "p4.routed_by_preemption", "node_id": scored.node_id})
+        return SolveResult(decision=decision, match=match)
+    return None
 
 
 __all__ = ["RouteContext", "SolveResult", "solve", "build_context", "execute"]

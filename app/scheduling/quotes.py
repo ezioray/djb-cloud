@@ -151,7 +151,7 @@ def register(c, *, node_id: str, access: str, model: str, unit: str,
                                                 "quote_version": version})
     from . import events                                    # 延迟导入：events 依赖 models
 
-    events.quote_created(quote, trace_id=trace_id or identifier.hex, occurred_at=moment)
+    events.quote_created(c, quote, trace_id=trace_id or identifier.hex, occurred_at=moment)
     return QuoteResult(quote=quote, created=True)
 
 
@@ -215,7 +215,7 @@ def expire_due(c, *, now: datetime | None = None, trace_id: str = "") -> list[mo
         from . import events
 
         for quote in expired:
-            events.quote_expired(quote, trace_id=trace_id or quote.quote_id,
+            events.quote_expired(c, quote, trace_id=trace_id or quote.quote_id,
                                  occurred_at=moment)
     return expired
 

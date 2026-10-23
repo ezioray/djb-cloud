@@ -63,25 +63,33 @@ def test_route_respects_max_price(conn, now, tenant, market):
     assert decision.price_minor == 825            # mid(800, 850)
 
 
-def test_route_emits_routing_decided_event(conn, now, tenant, market):
-    seen: list[tuple[str, dict]] = []
-    from app.scheduling import events
+def test_route_queues_routing_decided_into_the_outbox(conn, now, tenant, market):
+    """T4：事件与决策同事务写进 scheduling_outbox，再由 dispatch 至少一次投递。"""
+    from app.scheduling import outbox
 
-    events.set_publisher(lambda event_type, envelope: seen.append((event_type, envelope)))
-    try:
-        route = candidates.RouteInput(model="m1", kind="realtime", tenant_id=tenant,
-                                      trace_id="trace-evt")
-        decision, _ = pipeline.execute(conn, route, now=now)
-    finally:
-        events.set_publisher(None)
+    route = candidates.RouteInput(model="m1", kind="realtime", tenant_id=tenant,
+                                  trace_id="trace-evt")
+    decision, _ = pipeline.execute(conn, route, now=now)
 
-    decided = [item for item in seen if item[0] == "routing.decided"]
+    rows = conn.execute(
+        "SELECT type, aggregate_id, payload FROM scheduling_outbox").fetchall()
+    decided = [row for row in rows if row[0] == "routing.decided"]
     assert len(decided) == 1
-    payload = decided[0][1]["payload"]
+    assert decided[0][1] == str(decision.decision_id)
+    payload = decided[0][2]
     assert payload["request_id"] == "trace-evt"
     assert payload["node_id"] == "n_aaa"
     assert payload["snapshot_id"] == str(decision.decision_id)
     assert set(payload) >= {"request_id", "node_id", "reason_codes", "snapshot_id"}
+
+    seen: list[tuple[str, dict]] = []
+    outbox.set_publisher(lambda event_type, envelope: seen.append((event_type, envelope)))
+    try:
+        result = outbox.dispatch(conn, now=now)
+    finally:
+        outbox.set_publisher(None)
+    assert result == {"sent": len(rows), "failed": 0}
+    assert {item[0] for item in seen} >= {"routing.decided", "booking.created"}
 
 
 # --------------------------------------------------------------------------- INV-03

@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Iterable, Mapping, Sequence
 
-from . import facts, features
+from . import backpressure, clock, facts, features
 
 log = logging.getLogger("djb.scheduling.preempt")
 
@@ -57,6 +58,7 @@ def pick_victims(victims: Iterable[Mapping[str, Any]], *, limit: int) -> list[di
 def evaluate(*, tier: str, required_units: int = 1,
              victims: Sequence[Mapping[str, Any]] = (),
              budget_used: int = 0, budget_limit: int = facts.PREEMPT_BUDGET_PER_H,
+             budget_map: Mapping[str, int] | None = None,
              checkpoint_age_s: int | None = None,
              queue_level_pct: int | None = None,
              eta_seconds: int | None = None,
@@ -69,18 +71,18 @@ def evaluate(*, tier: str, required_units: int = 1,
         else bool(preempt_enabled)
     eta = int(eta_seconds) if eta_seconds is not None else facts.BOOKING_TTL_S
 
-    # 队列水位 95%：只保实时（§8.2）
-    if queue_level_pct is not None and queue_level_pct >= facts.QUEUE_WATERMARK_PCT[2] \
-            and tier != "realtime":
+    # 背压：水位 95% 只保实时（§8.2）；85% 起 batch 排队并收紧
+    pressure = backpressure.classify(queue_level_pct)
+    if not pressure.allows(tier):
         return PreemptOutcome(outcome="rejected", reason_codes=("queue_full",))
 
     # batch 互不抢占（INV-09）：只能排队或拒绝
     if tier != "realtime":
         if not checkpoint_usable(checkpoint_age_s):
             return PreemptOutcome(outcome="rejected", reason_codes=("no_checkpoint",))
-        tight = queue_level_pct is not None and queue_level_pct >= facts.QUEUE_WATERMARK_PCT[1]
         return PreemptOutcome(outcome="queued", eta_seconds=eta,
-                              reason_codes=("queue_tight",) if tight else ())
+                              reason_codes=("queue_tight",)
+                              if pressure.level == "tight" else ())
 
     # realtime：不能排队等（token 档 P99 预算 20 ms），抢不到就**明确拒绝**（§4.7.7 降级链）
     if not enabled:
@@ -91,7 +93,15 @@ def evaluate(*, tier: str, required_units: int = 1,
         return PreemptOutcome(outcome="rejected",
                               reason_codes=("preempt_budget_exhausted",))
 
-    plan = pick_victims(victims, limit=min(remaining_budget, max(1, int(required_units))))
+    pool = victims
+    if budget_map:
+        pool = [item for item in victims
+                if int(budget_map.get(str(item.get("node_id")), 0)) < int(budget_limit)]
+        if not pool:
+            return PreemptOutcome(outcome="rejected",
+                                  reason_codes=("preempt_budget_exhausted",))
+
+    plan = pick_victims(pool, limit=min(remaining_budget, max(1, int(required_units))))
     if not plan:
         return PreemptOutcome(outcome="rejected")
 
@@ -104,10 +114,30 @@ def evaluate(*, tier: str, required_units: int = 1,
                           eta_seconds=facts.PREEMPT_GRACEFUL_S)
 
 
+def used_budget(c, *, node_id: str, now: datetime | None = None,
+                window_s: int = 3_600) -> int:
+    """该节点本小时已发生的抢占次数（INV-10：≤6 次·h⁻¹）。
+
+    计数来源是**决策日志本身**（``preempt_plan`` 里出现该节点），不另建计数表：
+    日志只追加，所以这个数是可复算的。
+    """
+    moment = now or clock.utcnow()
+    with c.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) FROM routing_decisions
+                WHERE decided_at >= %s
+                  AND jsonb_array_length(preempt_plan) > 0
+                  AND preempt_plan @> jsonb_build_array(
+                        jsonb_build_object('node_id', %s::text))""",
+            (moment - timedelta(seconds=int(window_s)), node_id))
+        row = cur.fetchone()
+    return int(row[0]) if row else 0
+
+
 def budget_exhausted(budget_used: int, budget_limit: int = facts.PREEMPT_BUDGET_PER_H) -> bool:
     """节点本小时是否已用完抢占预算（INV-10：≤6 次·h⁻¹）。"""
     return int(budget_used) >= int(budget_limit)
 
 
-__all__ = ["PreemptOutcome", "checkpoint_usable", "pick_victims", "evaluate",
+__all__ = ["PreemptOutcome", "checkpoint_usable", "pick_victims", "evaluate", "used_budget",
            "budget_exhausted"]

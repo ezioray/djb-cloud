@@ -1,0 +1,23 @@
+{
+  "module": "M04",
+  "case": "boundary",
+  "description": "§8.2 队列水位 70/85/95：提示 / 收紧 / 只保实时",
+  "input": {
+    "watermarks": [
+      69,
+      70,
+      85,
+      95,
+      100
+    ]
+  },
+  "expect": {
+    "levels": [
+      "ok",
+      "notice",
+      "tight",
+      "realtime_only",
+      "realtime_only"
+    ]
+  }
+}

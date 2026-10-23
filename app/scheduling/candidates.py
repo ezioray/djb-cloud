@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from . import clock, facts, models
+from . import circuit, clock, facts, models
 
 log = logging.getLogger("djb.scheduling.candidates")
 
@@ -214,12 +214,15 @@ def collect(c, route: RouteInput, *, now: datetime | None = None,
             eliminated.append(_drop(node_id, "F2", detail=f"presence_{presence}"))
             continue
 
-        # F3 准入 · 地域 · 档位
+        # F3 准入 · 地域 · 档位 · 熔断（§7：熔断期只服务在途，不接新）
         if lifecycle != "active":
             eliminated.append(_drop(node_id, "F3", detail=f"lifecycle_{lifecycle}"))
             continue
         if route.kind not in facts.TIERS:
             eliminated.append(_drop(node_id, "F3", detail="tier_unknown"))
+            continue
+        if circuit.is_open(c, node_id, now=moment).open:
+            eliminated.append(_drop(node_id, "F3", detail="circuit_open"))
             continue
 
         # F4 租户隔离（白黑名单 / 同账户自成交）：S1 只经注入 provider

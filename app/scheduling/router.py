@@ -41,8 +41,8 @@ from typing import Any, Awaitable, Callable
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import (bids, candidates, clock, decisions, errors, facts, models, pipeline, quotes,
-               replay, snapshot)
+from . import (bids, candidates, clock, decisions, errors, facts, idempotency, models,
+               pipeline, quotes, replay, snapshot)
 
 log = logging.getLogger("djb.scheduling.http")
 
@@ -153,14 +153,31 @@ async def _body(request: Request) -> dict[str, Any]:
 
 
 def _idem_key(request: Request) -> str | None:
-    value = (request.headers.get(IDEMPOTENCY_HEADER) or "").strip()
-    if not value:
+    """读幂等键（缺省 → None：不做字节级回放，业务幂等仍然生效）。"""
+    return idempotency.require_key(request.headers.get(IDEMPOTENCY_HEADER))
+
+
+def _replay_if_recorded(c, request: Request, *, body: dict[str, Any], key: str | None,
+                        request_id: str) -> JSONResponse | None:
+    """同键同载荷 → 回放首次响应（字节级，00-conventions §6.1）。"""
+    if not key:
         return None
-    if len(value) > facts.IDEMPOTENCY_KEY_MAX_LEN:
-        raise errors.InvalidArgument(
-            f"{IDEMPOTENCY_HEADER} 最多 {facts.IDEMPOTENCY_KEY_MAX_LEN} 字符",
-            field=IDEMPOTENCY_HEADER)
-    return value
+    record = idempotency.lookup(c, scope=idempotency.scope_of("POST", request.url.path),
+                               key=key, request_hash=idempotency.body_hash(body))
+    if record is None:
+        return None
+    return JSONResponse(record.response, status_code=record.status_code,
+                        headers=_headers(request_id, **{"X-DJB-Idempotent-Replay": "true"}))
+
+
+def _remember(c, request: Request, *, body: dict[str, Any], key: str | None,
+              status_code: int, payload: dict[str, Any]) -> None:
+    """记住首次响应（同事务；下一次同键请求直接回放）。"""
+    if not key:
+        return
+    idempotency.save(c, scope=idempotency.scope_of("POST", request.url.path), key=key,
+                     request_hash=idempotency.body_hash(body), status_code=status_code,
+                     response=payload)
 
 
 # --------------------------------------------------------------------------- 公开快照
@@ -187,7 +204,7 @@ async def create_quote(request: Request) -> JSONResponse:
     try:
         principal = await _principal(_node_authenticator, request, what="节点侧")
         body = await _body(request)
-        _idem_key(request)
+        idem = _idem_key(request)
         node_id = (body.get("node_id") or principal.get("node_id") or "").strip()
         if not node_id:
             raise errors.InvalidArgument("缺 node_id（或未接线节点身份）", field="node_id")
@@ -206,14 +223,20 @@ async def create_quote(request: Request) -> JSONResponse:
             raise errors.InvalidArgument("ttl_s 必须是整数秒（spec QuoteRequest 必填）",
                                          field="ttl_s")
         with _connection() as c:
+            replayed = _replay_if_recorded(c, request, body=body, key=idem,
+                                           request_id=request_id)
+            if replayed is not None:
+                return replayed
             result = quotes.register(c, node_id=node_id, access=access, model=model, unit=unit,
                                      ask_price_minor=ask_minor, price_max_minor=max_minor,
                                      ttl_s=ttl_s, now=clock.utcnow(), trace_id=request_id)
-        quote = result.quote
-        return _ok({"quote_id": quote.quote_id, "state": quote.state,
-                    "quote_version": quote.quote_version,
-                    "expires_at": quote.expires_at.isoformat(),
-                    "created": result.created}, request_id, status_code=201)
+            quote = result.quote
+            payload = {"quote_id": quote.quote_id, "state": quote.state,
+                       "quote_version": quote.quote_version,
+                       "expires_at": quote.expires_at.isoformat(),
+                       "created": result.created}
+            _remember(c, request, body=body, key=idem, status_code=201, payload=payload)
+        return _ok(payload, request_id, status_code=201)
     except errors.SchedulingError as exc:
         return _fail(exc, request_id)
     except ValueError as exc:
@@ -230,7 +253,7 @@ async def create_bid(request: Request) -> JSONResponse:
     try:
         principal = await _principal(_user_authenticator, request, what="用方")
         body = await _body(request)
-        _idem_key(request)
+        idem = _idem_key(request)
         tenant_id = parse_tenant_id(principal.get("tenant_id"), "tenant_id")
         model = models.normalize_model(body.get("model") or "")
         models.check_currency(body)
@@ -240,15 +263,20 @@ async def create_bid(request: Request) -> JSONResponse:
         if window is not None and (not isinstance(window, int) or isinstance(window, bool)):
             raise errors.InvalidArgument("window_seconds 必须是整数秒", field="window_seconds")
         with _connection() as c:
+            replayed = _replay_if_recorded(c, request, body=body, key=idem,
+                                           request_id=request_id)
+            if replayed is not None:
+                return replayed
             result = bids.register(c, tenant_id=tenant_id, model=model,
                                    min_price_minor=min_minor, max_price_minor=max_minor,
                                    strategy=body.get("strategy"), window_seconds=window,
                                    now=clock.utcnow(), trace_id=request_id)
-        bid = result.bid
-        return _ok({"bid_id": bid.bid_id, "state": bid.state,
-                    "expires_at": bid.expires_at.isoformat(),
-                    "strategy": bid.strategy, "created": result.created},
-                   request_id, status_code=201)
+            bid = result.bid
+            payload = {"bid_id": bid.bid_id, "state": bid.state,
+                       "expires_at": bid.expires_at.isoformat(),
+                       "strategy": bid.strategy, "created": result.created}
+            _remember(c, request, body=body, key=idem, status_code=201, payload=payload)
+        return _ok(payload, request_id, status_code=201)
     except errors.SchedulingError as exc:
         return _fail(exc, request_id)
     except ValueError as exc:
@@ -265,22 +293,29 @@ async def create_route_decision(request: Request) -> JSONResponse:
     try:
         principal = await _principal(_internal_authenticator, request, what="内部调用")
         body = await _body(request)
-        _idem_key(request)
+        idem = _idem_key(request)
         route = _route_input(body, principal, request_id)
         concurrency = _concurrency(principal, body)
         with _connection() as c:
+            replayed = _replay_if_recorded(c, request, body=body, key=idem,
+                                           request_id=request_id)
+            if replayed is not None:
+                return replayed
             decision, created = pipeline.execute(
                 c, route, now=clock.utcnow(),
                 platform_concurrency=concurrency[0], terminal_concurrency=concurrency[1],
                 request_id=request_id)
-        if decision.outcome in ("rejected",):
+            payload = decision.as_dict()
+            payload["created"] = created
+            if decision.outcome != "rejected":
+                _remember(c, request, body=body, key=idem, status_code=201, payload=payload)
+        # 拒绝要先提交决策日志（只追加、丢弃率 0），再返回 45001（INV-06）
+        if decision.outcome == "rejected":
             raise errors.NoRoute("无可用节点（45001）", reason="no_route",
                                  reason_codes=list(decision.reason_codes),
                                  actions=list(facts.REJECT_ACTIONS),
                                  eliminated=list(decision.eliminated),
                                  decision_id=str(decision.decision_id))
-        payload = decision.as_dict()
-        payload["created"] = created
         return _ok(payload, request_id, status_code=201)
     except errors.SchedulingError as exc:
         return _fail(exc, request_id)
@@ -366,7 +401,7 @@ async def create_schedule_replay(request: Request) -> JSONResponse:
     try:
         await _principal(_admin_authenticator, request, what="管理面", require_step_up=True)
         body = await _body(request)
-        _idem_key(request)
+        idem = _idem_key(request)
         from_ts = _parse_ts(body.get("from"), "from")
         to_ts = _parse_ts(body.get("to"), "to")
         decision_ids = body.get("decision_ids")
@@ -374,14 +409,19 @@ async def create_schedule_replay(request: Request) -> JSONResponse:
                                          or any(not isinstance(item, str) for item in decision_ids)):
             raise errors.InvalidArgument("decision_ids 必须是字符串数组", field="decision_ids")
         with _connection() as c:
+            replayed = _replay_if_recorded(c, request, body=body, key=idem,
+                                           request_id=request_id)
+            if replayed is not None:
+                return replayed
             job = replay.start(c, from_ts=from_ts, to_ts=to_ts,
                                decision_ids=decision_ids, now=clock.utcnow())
-        return _ok({"job_id": job.as_dict()["job_id"], "state": job.state,
-                    "requested_at": job.requested_at.isoformat(),
-                    "decisions_total": job.decisions_total,
-                    "consistent": job.consistent,
-                    "inconsistent": job.report.get("inconsistent")},
-                   request_id, status_code=202)
+            payload = {"job_id": job.as_dict()["job_id"], "state": job.state,
+                       "requested_at": job.requested_at.isoformat(),
+                       "decisions_total": job.decisions_total,
+                       "consistent": job.consistent,
+                       "inconsistent": job.report.get("inconsistent")}
+            _remember(c, request, body=body, key=idem, status_code=202, payload=payload)
+        return _ok(payload, request_id, status_code=202)
     except errors.SchedulingError as exc:
         return _fail(exc, request_id)
     except ValueError as exc:

@@ -30,7 +30,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = ROOT / "migrations"
 
-#: 本任务新增的迁移（401–406）
+#: 本模块的迁移（401–409）
 M04_MIGRATIONS = (
     "401_quotes.sql",
     "402_bids.sql",
@@ -38,14 +38,19 @@ M04_MIGRATIONS = (
     "404_routing_decisions.sql",
     "405_quota_usage.sql",
     "406_model_catalog.sql",
+    "407_scheduling_outbox.sql",
+    "408_scheduling_idempotency.sql",
+    "409_quota_fairness.sql",
 )
 
-#: M04 拥有的表（01-ownership §2 + M04 §5）
-M04_TABLES = ("quotes", "bids", "bookings", "routing_decisions", "quota_usage", "model_catalog")
+#: M04 拥有的表（01-ownership §2 + M04 §5 + CR-4/CR-5 登记的辅助表）
+M04_TABLES = ("quotes", "bids", "bookings", "routing_decisions", "quota_usage",
+              "model_catalog", "scheduling_outbox", "scheduling_idempotency")
 
 #: 本模块新增的函数（触发器函数）
 M04_FUNCTIONS = ("m04_quotes_guard", "m04_bids_guard", "m04_bookings_guard",
-                 "m04_routing_decisions_guard", "m04_quota_usage_guard")
+                 "m04_routing_decisions_guard", "m04_quota_usage_guard", "m04_outbox_guard",
+                 "m04_idempotency_guard")
 
 #: 前置段（编号 ≤ 499）里必须存在的对象（升级测试要在这些对象上证明「只加不改」）
 BASE_TABLES = ("nodes", "capacity_announcements", "users", "user_accounts", "api_keys",

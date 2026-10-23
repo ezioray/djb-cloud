@@ -162,34 +162,29 @@ def _booking() -> models.Booking:
                           expires_at=moment + timedelta(seconds=60))
 
 
-def test_quote_builders_emit_the_declared_payloads():
-    seen: list[tuple[str, dict]] = []
-    events.set_publisher(lambda event_type, envelope: seen.append((event_type, envelope)))
-    try:
-        events.quote_created(_quote(), trace_id="t")
-        events.quote_expired(_quote(), trace_id="t")
-    finally:
-        events.set_publisher(None)
-    assert [item[0] for item in seen] == ["quote.created", "quote.expired"]
-    for _event_type, envelope in seen:
-        assert set(envelope["payload"]) >= {"quote_id", "node_id", "model", "price_minor", "ttl_s"}
+def test_quote_builders_write_the_declared_payloads(conn):
+    """T4 起事件走 outbox（同一事务），payload 仍按 02-events §3 的键集合落库。"""
+    first = _quote()
+    second = _quote()
+    events.quote_created(conn, first, trace_id="t")
+    events.quote_expired(conn, second, trace_id="t")
+    rows = conn.execute(
+        "SELECT type, payload FROM scheduling_outbox ORDER BY created_at, type").fetchall()
+    assert [row[0] for row in rows] == ["quote.created", "quote.expired"]
+    for _type, payload in rows:
+        assert set(payload) >= {"quote_id", "node_id", "model", "price_minor", "ttl_s"}
 
 
-def test_booking_builders_emit_the_declared_payloads():
-    seen: list[tuple[str, dict]] = []
-    events.set_publisher(lambda event_type, envelope: seen.append((event_type, envelope)))
-    try:
-        events.booking_created(_booking(), trace_id="t")
-        events.booking_expired(_booking(), trace_id="t")
-    finally:
-        events.set_publisher(None)
-    assert [item[0] for item in seen] == ["booking.created", "booking.expired"]
-    for _event_type, envelope in seen:
-        assert set(envelope["payload"]) >= {"booking_id", "node_id", "request_id",
-                                            "expires_at"}
+def test_booking_builders_write_the_declared_payloads(conn):
+    events.booking_created(conn, _booking(), trace_id="t")
+    events.booking_expired(conn, _booking(), trace_id="t")
+    rows = conn.execute("SELECT type, payload FROM scheduling_outbox ORDER BY type").fetchall()
+    assert [row[0] for row in rows] == ["booking.created", "booking.expired"]
+    for _type, payload in rows:
+        assert set(payload) >= {"booking_id", "node_id", "request_id", "expires_at"}
 
 
-def test_routing_decided_payload_uses_decision_id_as_snapshot_id():
+def test_routing_decided_payload_uses_decision_id_as_snapshot_id(conn):
     moment = __import__("datetime").datetime(2026, 10, 23, tzinfo=__import__("datetime").timezone.utc)
     decision = models.Decision(decision_id=uuid.uuid4(), trace_id="trace-1", attempt_no=1,
                                snapshot_ts=moment, quote_version=1,
@@ -198,28 +193,25 @@ def test_routing_decided_payload_uses_decision_id_as_snapshot_id():
                                        "model": "m1", "unit": "token"},
                                outcome="routed", reason_codes=["rep_missing"],
                                decided_at=moment)
-    seen: list[dict] = []
-    events.set_publisher(lambda event_type, envelope: seen.append(envelope))
-    try:
-        events.routing_decided(decision, trace_id="trace-1")
-    finally:
-        events.set_publisher(None)
-    payload = seen[0]["payload"]
+    events.routing_decided(conn, decision, trace_id="trace-1")
+    payload = conn.execute("SELECT payload FROM scheduling_outbox").fetchone()[0]
     assert payload["request_id"] == "trace-1"
     assert payload["node_id"] == "n1"
     assert payload["snapshot_id"] == str(decision.decision_id)
     assert payload["reason_codes"] == ["rep_missing"]
 
 
-def test_publisher_failure_does_not_break_the_business_path():
-    """02-events §2.6：投递失败不得回滚已提交的业务事务。"""
+def test_emit_is_transactional_with_the_business_fact(conn):
+    """02-events §2.1：事件与业务事实同一事务——业务回滚，事件也不能留下。"""
+    events.quote_created(conn, _quote(), trace_id="t")
+    assert conn.execute("SELECT count(*) FROM scheduling_outbox").fetchone()[0] == 1
+    conn.rollback()
+    assert conn.execute("SELECT count(*) FROM scheduling_outbox").fetchone()[0] == 0
 
-    def boom(_event_type, _envelope):
-        raise RuntimeError("bus broker down")
 
-    events.set_publisher(boom)
-    try:
-        envelope = events.quote_created(_quote(), trace_id="t")     # 不抛
-    finally:
-        events.set_publisher(None)
-    assert envelope["type"] == "quote.created"
+def test_event_idempotency_key_is_unique(conn):
+    """同一事实重复入队只产生一条事件（生产侧按业务键去重）。"""
+    quote = _quote()
+    events.quote_created(conn, quote, trace_id="t")
+    events.quote_created(conn, quote, trace_id="t")
+    assert conn.execute("SELECT count(*) FROM scheduling_outbox").fetchone()[0] == 1

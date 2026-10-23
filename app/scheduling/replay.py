@@ -173,6 +173,20 @@ class InMemoryJobStore:
 
 _store: JobStore = InMemoryJobStore()
 
+#: P0 工单出口（默认结构化 error 日志；合并时接 M14 工单 / M16 告警）
+P0Sink = Callable[[dict[str, Any]], None]
+_p0_sink: P0Sink | None = None
+
+
+def set_p0_sink(sink: P0Sink | None) -> None:
+    """注入 P0 出口（差异 ≠ 0 时调用）。传 None 恢复默认（结构化 error 日志）。"""
+    global _p0_sink
+    _p0_sink = sink
+
+
+def current_p0_sink() -> P0Sink | None:
+    return _p0_sink
+
 
 def set_store(store: JobStore | None) -> None:
     """注入 job store（``None`` = 复位成默认内存实现）。
@@ -223,7 +237,26 @@ def run(c, *, from_ts: datetime, to_ts: datetime, decision_ids: Sequence[str] | 
               "from": from_ts.isoformat(), "to": to_ts.isoformat()}
     log.info("scheduling.replay.done", extra={"event": "replay.done", **{
         key: report[key] for key in ("total", "consistent", "inconsistent")}})
+    if diffs:
+        _raise_p0(report)
     return report
+
+
+def _raise_p0(report: Mapping[str, Any]) -> None:
+    """差异 ≠ 0 即 P0（M04 §7「复算不一致」）：进 P0 出口 + 结构化告警，**不改**历史决策。"""
+    payload = {"kind": "replay_inconsistency", "inconsistent": report["inconsistent"],
+               "total": report["total"], "from": report["from"], "to": report["to"],
+               "decision_ids": [item["decision_id"] for item in report["diffs"]],
+               "diffs": report["diffs"]}
+    log.error("scheduling.replay.p0", extra={"event": "replay.p0",
+                                            "inconsistent": report["inconsistent"]})
+    sink = _p0_sink
+    if sink is None:
+        return
+    try:
+        sink(payload)
+    except Exception:                                        # pragma: no cover - 防御
+        log.error("scheduling.replay.p0_sink_failed", extra={"event": "replay.p0_sink_failed"})
 
 
 def start(c, *, from_ts: datetime, to_ts: datetime,
