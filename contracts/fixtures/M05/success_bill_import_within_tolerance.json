@@ -1,0 +1,24 @@
+{
+  "module": "M05",
+  "case": "success",
+  "description": "上游账单差额 0.5%（≤1%）→ 标记 reconciled，不产生校正",
+  "input": {
+    "provider": "openai",
+    "period": "2026-10",
+    "rows": [
+      {
+        "row_id": "row-1",
+        "usage_id": "u1",
+        "amount": {
+          "amount": "100.50",
+          "unit": "USD"
+        }
+      }
+    ]
+  },
+  "expect": {
+    "http": 200,
+    "row_status": "reconciled",
+    "corrections": 0
+  }
+}

@@ -35,6 +35,8 @@ def test_router_exposes_exactly_the_spec_paths():
         ("GET", "/api/v1/node/receipts/{receipt_id}"),
         ("GET", "/api/v1/user/usage/summary"),
         ("GET", "/api/v1/user/usage/records"),
+        ("POST", "/api/v1/admin/usage/upstream-bills"),
+        ("POST", "/api/v1/admin/usage/corrections"),
     }
 
 
@@ -229,3 +231,121 @@ def test_request_id_header_is_echoed(client, auth, api_account, api_node):
     response = _post(client, [receipt(account_id=api_account, node_id=api_node)],
                      headers={"X-Request-Id": "req-fixed-1"})
     assert response.headers["X-Request-Id"] == "req-fixed-1"
+
+
+# ─────────────────────────────────────────────────────── 管理面：上游账单导入
+def _usage_id(schema: str, *, amount_minor: int = 10_000) -> str:
+    import uuid as _uuid
+
+    from meterkit import NOW, connect
+
+    usage_id = str(_uuid.uuid4())
+    with connect(schema) as conn:
+        conn.execute(
+            """INSERT INTO usage_records
+                 (usage_id, request_id, attempt_no, account_id, node_id, model, access,
+                  tokens_in, tokens_out, usage_amount, usage_unit, amount_minor, usage_source,
+                  state, receipt_id, recorded_at)
+               VALUES (%s,%s,1,%s,'n1','m1','A1',1000,500,'1500','token',%s,'dual','recorded',
+                       %s,%s)""",
+            (usage_id, f"req_{_uuid.uuid4().hex[:10]}", _uuid.uuid4(), amount_minor,
+             f"rcpt_{_uuid.uuid4().hex[:10]}", NOW))
+    return usage_id
+
+
+def test_admin_endpoints_are_fail_closed(client):
+    for path in ("/api/v1/admin/usage/upstream-bills", "/api/v1/admin/usage/corrections"):
+        response = client.post(path, json={})
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == 40101
+
+
+def test_admin_endpoints_require_step_up(client, auth):
+    response = client.post("/api/v1/admin/usage/corrections", json={},
+                           headers={**api_headers(), "X-DJB-Idempotency-Key": "k1"})
+    assert response.status_code == 424
+    assert response.json()["error"]["code"] == 42401
+
+
+def test_admin_endpoints_require_idempotency_key(client, auth):
+    response = client.post("/api/v1/admin/usage/corrections", json={},
+                           headers={**api_headers(), "X-Admin-Step-Up": "1"})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == 40001
+    assert "Idempotency-Key" in response.json()["error"]["message"]
+
+
+def test_import_bills_endpoint(client, auth):
+    usage_id = _usage_id(auth["schema"], amount_minor=10_000)
+    row = {"row_id": f"bill_{uuid.uuid4().hex[:8]}", "usage_id": usage_id, "access": "A1",
+           "model": "m1", "amount": {"amount": "100.50", "unit": "USD"}}
+    response = client.post("/api/v1/admin/usage/upstream-bills",
+                           json={"provider": "openai", "period": "2026-10", "rows": [row]},
+                           headers={**api_headers(), "X-Admin-Step-Up": "1",
+                                    "X-DJB-Idempotency-Key": f"imp-{uuid.uuid4().hex[:8]}"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["rows_accepted"] == 1 and payload["rows_rejected"] == 0
+    assert payload["import_id"].startswith("imp_")
+    assert payload["total_amount"] == {"amount": "100.50", "unit": "USD"}
+    assert payload["imported_at"].endswith("Z")
+    assert payload["results"][0]["status"] == "reconciled"
+
+
+def test_import_bills_reports_per_row_rejection(client, auth):
+    usage_id = _usage_id(auth["schema"])
+    rows = [{"row_id": f"bad_{uuid.uuid4().hex[:6]}", "usage_id": usage_id,
+             "amount": {"amount": "NaN", "unit": "USD"}}]
+    response = client.post("/api/v1/admin/usage/upstream-bills",
+                           json={"provider": "openai", "period": "2026-10", "rows": rows},
+                           headers={**api_headers(), "X-Admin-Step-Up": "1",
+                                    "X-DJB-Idempotency-Key": "k-bills"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rows_rejected"] == 1 and body["rows_accepted"] == 0
+    assert body["rejected"][0]["code"] == 40001
+
+
+def test_create_correction_endpoint(client, auth):
+    usage_id = _usage_id(auth["schema"], amount_minor=100_000)
+    headers = {**api_headers(), "X-Admin-Step-Up": "1",
+               "X-DJB-Idempotency-Key": f"corr-{uuid.uuid4().hex[:8]}"}
+    body = {"usage_id": usage_id, "delta": {"amount": "10.00", "unit": "USD"},
+            "reason_code": "underbill"}
+    response = client.post("/api/v1/admin/usage/corrections", json=body, headers=headers)
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["state"] == "proposed" and payload["correction_id"]
+    # 同幂等键重放 → 同一校正（不新增）
+    replay = client.post("/api/v1/admin/usage/corrections", json=body, headers=headers)
+    assert replay.status_code == 202
+    assert replay.json()["correction_id"] == payload["correction_id"]
+    assert replay.json()["created"] is False
+
+
+def test_correction_requires_dual_approval_for_big_delta(client, auth):
+    usage_id = _usage_id(auth["schema"], amount_minor=1_000_000)
+    headers = {**api_headers(), "X-Admin-Step-Up": "1",
+               "X-DJB-Idempotency-Key": f"corr-{uuid.uuid4().hex[:8]}"}
+    body = {"usage_id": usage_id, "delta": {"amount": "80.00", "unit": "USD"},
+            "reason_code": "underbill"}                       # 80 USD ≥ 50 USD 门槛
+    response = client.post("/api/v1/admin/usage/corrections", json=body, headers=headers)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == 40902
+    assert response.json()["error"]["reason"] == "dual_approval_required"
+    with_second = dict(body, second_approver="fin-2")
+    ok = client.post("/api/v1/admin/usage/corrections", json=with_second,
+                     headers={**headers, "X-DJB-Idempotency-Key": f"corr-{uuid.uuid4().hex[:8]}"})
+    assert ok.status_code == 202 and ok.json()["state"] == "proposed"
+
+
+def test_correction_can_apply_immediately(client, auth):
+    usage_id = _usage_id(auth["schema"], amount_minor=100_000)
+    headers = {**api_headers(), "X-Admin-Step-Up": "1",
+               "X-DJB-Idempotency-Key": f"corr-{uuid.uuid4().hex[:8]}"}
+    body = {"usage_id": usage_id, "delta": {"amount": "5.00", "unit": "USD"},
+            "reason_code": "estimate_fix", "apply": True}
+    response = client.post("/api/v1/admin/usage/corrections", json=body, headers=headers)
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["state"] == "applied" and payload["applied_at"].endswith("Z")

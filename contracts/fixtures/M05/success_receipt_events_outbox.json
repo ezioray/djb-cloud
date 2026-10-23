@@ -1,0 +1,17 @@
+{
+  "module": "M05",
+  "case": "success",
+  "description": "收据受理后同事务写 outbox：receipt.signed + usage.recorded（迁移 506）",
+  "input": {
+    "receipt_id": "rcpt_1",
+    "usage_id": "u1"
+  },
+  "expect": {
+    "http": 200,
+    "events": [
+      "receipt.signed",
+      "usage.recorded"
+    ],
+    "same_transaction": true
+  }
+}

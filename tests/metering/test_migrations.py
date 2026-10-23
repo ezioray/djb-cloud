@@ -49,7 +49,7 @@ def test_empty_schema_applies_every_migration_in_numeric_order(schema: str):
     for table in M05_TABLES:
         assert table in tables, table
     m05_numbers = [number for number in numbers if 500 <= number <= 599]
-    assert m05_numbers == [501, 502, 503, 504, 505]
+    assert m05_numbers == [501, 502, 503, 504, 505, 506, 507, 508, 509]
 
 
 def test_numeric_order_is_not_lexicographic():
@@ -106,8 +106,12 @@ def test_status_reports_applied_after_up_and_missing_after_down(schema: str):
         assert all(not item["applied"] for item in missing)
         migrate.up(conn, files=m05_migration_files())
         applied = migrate.status(conn)
-        assert all(item["applied"] for item in applied)
         assert [item["name"] for item in applied] == list(M05_MIGRATIONS)
+        for item in applied:
+            if item["name"].startswith(("508", "509")):
+                assert item["applied"] is None            # 约束放宽型迁移无独立标记
+            else:
+                assert item["applied"] is True, item["name"]
 
 
 # ─────────────────────────────────────────────────────── 结构（索引 / 触发器 / 函数）
@@ -116,7 +120,8 @@ def test_required_indexes_exist(migrated: str):
     for name in ("usage_records_request_attempt_uq", "usage_records_receipt_uq",
                  "usage_records_account_time_idx", "metering_receipts_accepted_uq",
                  "metering_receipts_usage_uq", "usage_corrections_bill_uq",
-                 "loss_pool_request_attempt_uq"):
+                 "loss_pool_request_attempt_uq", "metering_outbox_idempotency_uq",
+                 "metering_outbox_pending_idx", "metering_outbox_published_idx"):
         assert name in indexes, name
 
 
@@ -126,11 +131,14 @@ def test_required_triggers_and_functions_exist(migrated: str):
                  "usage_records_no_truncate", "metering_receipts_no_mutation",
                  "metering_receipts_no_truncate", "usage_corrections_guard",
                  "usage_corrections_insert_guard", "upstream_bills_guard",
-                 "upstream_bills_insert_guard", "loss_pool_no_mutation"):
+                 "upstream_bills_insert_guard", "loss_pool_no_mutation",
+                 "metering_outbox_guard", "metering_outbox_insert_guard",
+                 "metering_outbox_no_truncate"):
         assert name in triggers, name
     functions = function_names(migrated)
     for name in ("m05_forbid_mutation", "m05_forbid_truncate", "m05_usage_state_guard",
-                 "m05_usage_insert_guard", "m05_correction_guard", "m05_bill_guard"):
+                 "m05_usage_insert_guard", "m05_correction_guard", "m05_bill_guard",
+                 "m05_outbox_guard", "m05_outbox_insert_guard"):
         assert name in functions, name
 
 
@@ -140,6 +148,11 @@ def test_columns_match_m05_contract(migrated: str):
             "tokens_in", "tokens_out", "usage_amount", "usage_unit", "amount_minor",
             "usage_source", "state", "receipt_id", "correction_id", "recorded_at",
             "settled_at", "corrected_at"} <= usage
+    outbox_columns = column_names(migrated, "metering_outbox")
+    assert {"event_id", "type", "version", "occurred_at", "producer", "aggregate_type",
+            "aggregate_id", "correlation_id", "causation_id", "trace_id", "idempotency_key",
+            "payload", "attempts", "next_attempt_at", "published_at", "last_error"} <= \
+        outbox_columns
     receipt = column_names(migrated, "metering_receipts")
     assert {"receipt_id", "usage_id", "node_id", "task_id", "access", "usage_amount",
             "usage_unit", "price_amount", "price_minor", "sig_provider", "sig_consumer",
@@ -252,10 +265,13 @@ def test_usage_records_state_machine(migrated: str):
         # recorded → settled 合法
         conn.execute("UPDATE usage_records SET state='settled', settled_at=%s WHERE usage_id=%s",
                      (NOW, usage_id))
-        # settled → corrected 非法（M05 §3 只允许 recorded 出发）
+        # settled → corrected 合法（508：迟到账单追加校正）
+        conn.execute("UPDATE usage_records SET state='corrected', corrected_at=%s, "
+                     "correction_id='c1' WHERE usage_id=%s", (NOW, usage_id))
+        # 反向（corrected → settled）非法
         with pytest.raises(psycopg.Error) as exc:
-            conn.execute("UPDATE usage_records SET state='corrected', corrected_at=%s, "
-                         "correction_id='c1' WHERE usage_id=%s", (NOW, usage_id))
+            conn.execute("UPDATE usage_records SET state='settled' WHERE usage_id=%s",
+                         (usage_id,))
         assert _sqlstate(exc.value) == "42501"
 
 
@@ -326,9 +342,13 @@ def test_corrections_constraints_and_state_machine(migrated: str):
         with pytest.raises(psycopg.errors.CheckViolation):        # delta 不能为 0
             conn.execute(insert, (uuid.uuid4(), usage_id, 0, 100, "overbill", None, "ops", None,
                                   NOW))
-        with pytest.raises(psycopg.errors.CheckViolation):        # 负向校正需复核人
-            conn.execute(insert, (uuid.uuid4(), usage_id, -10, 100, "underbill", None, "ops",
-                                  None, NOW))
+        # 509：负向校正在 proposed 态允许无复核人（自动对账要先在案），但**不可直接生效**
+        correction_neg = uuid.uuid4()
+        conn.execute(insert, (correction_neg, usage_id, -10, 100, "underbill", None, "ops",
+                              None, NOW))
+        with pytest.raises(psycopg.errors.CheckViolation):        # applied 必须有复核人
+            conn.execute("UPDATE usage_corrections SET state='applied', applied_at=%s "
+                         "WHERE correction_id=%s", (NOW, correction_neg))
         with pytest.raises(psycopg.errors.CheckViolation):        # reason 白名单
             conn.execute(insert, (uuid.uuid4(), usage_id, 10, 100, "guess", None, "ops", None,
                                   NOW))
@@ -393,7 +413,8 @@ def test_migrate_cli_up_status_down(schema: str, capsys):
         assert name in out
     assert migrate.main(["--schema", schema, "--dsn", dsn(), "--status"]) == 0
     status_out = capsys.readouterr().out
-    assert status_out.count("APPLIED") == len(M05_MIGRATIONS)
+    assert status_out.count("APPLIED") == len(M05_MIGRATIONS) - 2     # 508/509 无独立对象
+    assert status_out.count("UNKNOWN") == 2
     assert migrate.main(["--schema", schema, "--dsn", dsn(), "--down"]) == 0
     down_out = capsys.readouterr().out
     assert "down 501_usage_records.sql" in down_out
@@ -403,3 +424,43 @@ def test_migrate_cli_requires_dsn(monkeypatch, capsys):
     monkeypatch.delenv("DJB_DSN", raising=False)
     assert migrate.main(["--schema", "m05_noop", "--status"]) == 2
     assert "DJB_DSN" in capsys.readouterr().err
+
+
+# ─────────────────────────────────────────────────────── 507 / 508（T4）
+def test_corrections_have_request_key_idempotency(migrated: str):
+    assert "request_key" in column_names(migrated, "usage_corrections")
+    assert "usage_corrections_request_key_uq" in index_names(migrated)
+    with connect(migrated) as conn:
+        conn.execute(
+            """INSERT INTO usage_corrections (correction_id, usage_id, delta_minor,
+                   original_minor, reason_code, state, requested_by, created_at, request_key)
+               VALUES (%s,%s,10,100,'overbill','proposed','ops',%s,'k-1')""",
+            (uuid.uuid4(), uuid.uuid4(), NOW))
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            conn.execute(
+                """INSERT INTO usage_corrections (correction_id, usage_id, delta_minor,
+                       original_minor, reason_code, state, requested_by, created_at, request_key)
+                   VALUES (%s,%s,11,100,'overbill','proposed','ops',%s,'k-1')""",
+                (uuid.uuid4(), uuid.uuid4(), NOW))
+
+
+def test_state_machine_allows_recorded_then_corrected_and_settled_then_corrected(migrated: str):
+    """508：recorded → settled → corrected 全链路合法；corrected 不可回到 settled。"""
+    usage_id = uuid.uuid4()
+    with connect(migrated) as conn:
+        conn.execute(
+            """INSERT INTO usage_records (usage_id, request_id, attempt_no, account_id, node_id,
+                   model, access, usage_amount, usage_unit, amount_minor, usage_source, state,
+                   receipt_id, recorded_at)
+               VALUES (%s,%s,1,%s,'n1','m1','A1','1','token',100,'dual','recorded',%s,%s)""",
+            (usage_id, f"req_{uuid.uuid4().hex[:8]}", uuid.uuid4(),
+             f"rcpt_{uuid.uuid4().hex[:8]}", NOW))
+        conn.execute("UPDATE usage_records SET state='settled', settled_at=%s WHERE usage_id=%s",
+                     (NOW, usage_id))
+        # 508 新边：settled → corrected
+        conn.execute("UPDATE usage_records SET state='corrected', corrected_at=%s, "
+                     "correction_id='c-1' WHERE usage_id=%s", (NOW, usage_id))
+        with pytest.raises(psycopg.Error) as exc:
+            conn.execute("UPDATE usage_records SET state='settled' WHERE usage_id=%s",
+                         (usage_id,))
+        assert _sqlstate(exc.value) == "42501"

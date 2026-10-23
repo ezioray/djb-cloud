@@ -430,3 +430,70 @@ def test_current_price_provider_getter_reflects_injection(monkeypatch):
     provider = lambda request_id, model, access: None       # noqa: E731
     monkeypatch.setattr(receipts, "_price_provider", provider, raising=False)
     assert receipts.current_price_provider() is provider
+
+
+# ─────────────────────────────────────────────────────── outbox（CR-5：同事务）
+def test_accepted_receipt_writes_two_events_to_outbox(migrated, conn, account):
+    from meterkit import seed_node
+
+    node_id = "n_t3_outbox"
+    seed_node(migrated, node_id)
+    body = receipt(account_id=account, node_id=node_id, request_id="req_t3_outbox")
+    outcome = _accept(conn, [body], node_id=node_id)
+    usage_id = outcome.verdicts[0].usage_id
+    rows = fetch_all(migrated,
+                     """SELECT type, payload, published_at FROM metering_outbox
+                         ORDER BY occurred_at, type""", ())
+    mine = [row for row in rows if row[1].get("usage_id") == usage_id
+            or row[1].get("receipt_id") == body["receipt_id"]]
+    assert sorted(row[0] for row in mine) == ["receipt.signed", "usage.recorded"]
+    assert all(row[2] is None for row in mine)                 # 待投递（未派发）
+
+
+def test_rejected_receipt_writes_no_events(migrated, conn, account):
+    from meterkit import seed_node
+
+    node_id = "n_t3_outbox_bad"
+    seed_node(migrated, node_id)
+    before = fetch_all(migrated, "SELECT count(*) FROM metering_outbox")[0][0]
+    body = receipt(account_id=account, node_id=node_id, sig_consumer="")
+    outcome = _accept(conn, [body], node_id=node_id)
+    assert outcome.rejected[0].code == 46001
+    assert fetch_all(migrated, "SELECT count(*) FROM metering_outbox")[0][0] == before
+
+
+def test_events_roll_back_with_the_receipt_transaction(migrated, account):
+    """CR-5 语义：业务回滚 → 事件也不存在（不会发出幻影事件）。"""
+    from meterkit import seed_node
+
+    node_id = "n_t3_outbox_rollback"
+    seed_node(migrated, node_id)
+    body = receipt(account_id=account, node_id=node_id, request_id="req_t3_rollback")
+    connection = connect(migrated, autocommit=False)
+    try:
+        outcome = receipts.accept_batch(connection, [body], node_id=node_id,
+                                        keys=signing.SignatureKeys(TEST_PROVIDER_KEY,
+                                                                   TEST_CONSUMER_KEY), now=NOW)
+        assert outcome.accepted == (body["receipt_id"],)
+        connection.rollback()
+    finally:
+        connection.close()
+    for table in ("usage_records", "metering_receipts", "metering_outbox"):
+        rows = fetch_all(migrated, f"SELECT count(*) FROM {table} WHERE 1=1"
+                         + (" AND request_id = %s" if table == "usage_records"
+                            else " AND receipt_id = %s" if table == "metering_receipts"
+                            else " AND aggregate_id = %s"), (body["receipt_id"],))
+        assert rows[0][0] == 0, table
+
+
+def test_outbox_payload_carries_no_prompt_or_secret(migrated, conn, account):
+    from meterkit import seed_node
+
+    node_id = "n_t3_outbox_leak"
+    seed_node(migrated, node_id)
+    _accept(conn, [receipt(account_id=account, node_id=node_id)], node_id=node_id)
+    rows = fetch_all(migrated, "SELECT payload::text FROM metering_outbox")
+    serialised = " ".join(row[0] for row in rows).lower()
+    for forbidden in ("prompt", "response", "content", "secret", "password",
+                      TEST_PROVIDER_KEY.decode().lower()):
+        assert forbidden not in serialised

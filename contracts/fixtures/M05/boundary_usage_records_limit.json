@@ -1,0 +1,14 @@
+{
+  "module": "M05",
+  "case": "boundary",
+  "description": "明细 limit 上限边界：200 受理，201 拒绝（40001）",
+  "input": {
+    "limit": 200
+  },
+  "expect": {
+    "http": 200,
+    "max_items": 200,
+    "limit_over_max_http": 400,
+    "limit_over_max_error": "40001"
+  }
+}

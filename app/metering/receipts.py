@@ -10,7 +10,8 @@
 4. 窗口：``now - reported_at > metering.receipt_late_h`` → ``expired``（默认 24h）；
 5. 双签（INV-01）：两侧密钥独立，缺一 / 算法不符 / 摘要不符 → ``46001``；
 6. 金额（INV-05）：若注入了成交价 provider，用整数精确复算并与 ``price_amount`` 比对；
-7. 落库：收据 + 用量**同一事务**；被拒收据也留痕（append-only），供节点自查与失败率告警。
+7. 落库：收据 + 用量 + **outbox 事件**同一事务（CR-5，迁移 506）；被拒收据也留痕
+   （append-only），供节点自查与失败率告警。
 
 **不与 M06/M02 共享事务、不 import 其它模块**：节点存在性只读 ``v_supply_node_snapshot``，
 账户与成交价只经注入 provider（T3 接线）。事件信封在 :mod:`app.metering.events`（T3 投递）。
@@ -23,7 +24,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 import psycopg
 
-from . import amounts, clock, config_source, errors, events, facts, models, signing
+from . import (amounts, clock, config_source, errors, events, facts, models, outbox,
+               signing)
 
 log = logging.getLogger("djb.metering.receipts")
 
@@ -234,20 +236,8 @@ def _accept_one(c: Any, raw: Any, *, node_id: str | None, keys: signing.Signatur
             received_minor=draft.price_minor), node_id=node_id, c=c, now=now,
             trace_id=row_trace)
 
-    # 7) 同事务落库（保存点：单条失败不影响整批）
+    # 7) 同事务落库 + 同事务写 outbox（CR-5：事件与 usage/receipt 一个事务）
     usage_id = str(models.uuid7(now))
-    try:
-        with c.transaction():
-            _insert_accepted(c, draft, node_id=effective_node, account_id=draft.account_id,
-                             usage_id=usage_id, now=now, trace_id=row_trace)
-    except psycopg.errors.UniqueViolation as exc:
-        return _resolve_conflict(c, draft, exc, node_id=node_id, now=now, trace_id=row_trace)
-    except psycopg.errors.Error as exc:                   # pragma: no cover - 传染性故障
-        log.warning("metering.receipt.persist_failed",
-                    extra={"receipt_id": draft.receipt_id, "error": type(exc).__name__})
-        return _reject(draft, errors.StoreUnavailable("收据落库失败，请稍后重试"),
-                       node_id=node_id, c=c, now=now, trace_id=row_trace)
-
     signature_ref = signing.signature_ref(draft.sig_provider, draft.sig_consumer)
     envelopes = [
         events.receipt_signed_event(draft=draft, usage_id=usage_id, signature_ref=signature_ref,
@@ -257,6 +247,18 @@ def _accept_one(c: Any, raw: Any, *, node_id: str | None, keys: signing.Signatur
                                     source=draft.usage_source, trace_id=row_trace,
                                     occurred_at=now),
     ]
+    try:
+        with c.transaction():
+            _insert_accepted(c, draft, node_id=effective_node, account_id=draft.account_id,
+                             usage_id=usage_id, now=now, trace_id=row_trace)
+            outbox.append_all(c, envelopes)
+    except psycopg.errors.UniqueViolation as exc:
+        return _resolve_conflict(c, draft, exc, node_id=node_id, now=now, trace_id=row_trace)
+    except psycopg.errors.Error as exc:                   # pragma: no cover - 传染性故障
+        log.warning("metering.receipt.persist_failed",
+                    extra={"receipt_id": draft.receipt_id, "error": type(exc).__name__})
+        return _reject(draft, errors.StoreUnavailable("收据落库失败，请稍后重试"),
+                       node_id=node_id, c=c, now=now, trace_id=row_trace)
     return models.ReceiptVerdict(receipt_id=draft.receipt_id, state="accepted",
                                  usage_id=usage_id), envelopes
 

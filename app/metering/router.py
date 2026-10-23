@@ -37,17 +37,20 @@ from typing import Any, Awaitable, Callable
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import clock, errors, facts, models, receipts, usage
+from . import bills, clock, corrections, errors, facts, models, outbox, receipts, usage
 
 log = logging.getLogger("djb.metering.http")
 
 router = APIRouter(prefix="/api/v1", tags=["metering"])
 
 NODE_KEY_HEADER = "X-Client-Key"
+IDEMPOTENCY_HEADER = "X-DJB-Idempotency-Key"
+STEP_UP_HEADER = "X-Admin-Step-Up"
 
 Principal = Callable[[Request], "dict[str, Any] | Awaitable[dict[str, Any]]"]
 _node_authenticator: Principal | None = None
 _user_authenticator: Principal | None = None
+_admin_authenticator: Principal | None = None
 
 
 # --------------------------------------------------------------------------- 接线钩子
@@ -59,6 +62,12 @@ def set_node_authenticator(authenticator: Principal | None) -> None:
 def set_user_authenticator(authenticator: Principal | None) -> None:
     global _user_authenticator
     _user_authenticator = authenticator
+
+
+def set_admin_authenticator(authenticator: Principal | None) -> None:
+    """管理面（M01 会话 + step-up）：上游账单导入 / 人工校正。"""
+    global _admin_authenticator
+    _admin_authenticator = authenticator
 
 
 async def _principal(authenticator: Principal | None, request: Request, *,
@@ -79,6 +88,15 @@ def _connection() -> Any:
     from app.db import conn as db_conn                     # 基础设施，非业务模块
 
     return db_conn()                                       # pragma: no cover - 部署期接线
+
+
+def _dispatch_events(publisher: outbox.Publisher | None = None) -> None:
+    """**提交之后**尽力派发 outbox（投递失败不回滚业务、不影响本次响应，02-events §2.6）。"""
+    try:
+        with _connection() as c:
+            outbox.dispatch(c, publisher=publisher)
+    except Exception:                                      # pragma: no cover - 投递失败只告警
+        log.warning("metering.http.dispatch_failed", exc_info=True)
 
 
 # --------------------------------------------------------------------------- 信封
@@ -155,6 +173,8 @@ async def submit_node_receipts(request: Request) -> JSONResponse:
         node_id = (principal.get("node_id") or "").strip() or None
         with _connection() as c:
             outcome = receipts.accept_batch(c, batch, node_id=node_id, trace_id=request_id)
+        # 事务已提交：此时才派发 outbox 事件（避免发出未提交事件）
+        _dispatch_events()
         return _ok(outcome.as_response(), request_id)
     except errors.MeteringError as exc:
         return _fail(exc, request_id)
@@ -194,6 +214,34 @@ def _principal_sync(authenticator: Principal | None, request: Request, *,
     if not isinstance(resolved, dict):
         raise errors.AuthUnavailable(f"{what}鉴权返回非法主体")
     return resolved
+
+
+# --------------------------------------------------------------------------- 管理面主体
+def _admin_principal(request: Request, *, require_step_up: bool = True) -> dict[str, Any]:
+    """管理面主体：未接线 401（fail-closed）；缺 step-up 424/42401。"""
+    principal = _principal_sync(_admin_authenticator, request, what="管理面")
+    if require_step_up and not principal.get("step_up"):
+        raise errors.StepUpRequired("高危动作需要 step-up（X-Admin-Step-Up）")
+    return principal
+
+
+def _admin_id(principal: dict[str, Any]) -> str:
+    value = principal.get("admin_id") or principal.get("account_id")
+    if not value:
+        raise errors.Unauthorized("管理面主体缺少 admin_id")
+    return str(value)
+
+
+def _idempotency_key(request: Request) -> str:
+    """写接口必须带幂等键（00-conventions §5 / spec IdempotencyKey 参数）。"""
+    value = (request.headers.get(IDEMPOTENCY_HEADER) or "").strip()
+    if not value:
+        raise errors.InvalidArgument(
+            f"缺 {IDEMPOTENCY_HEADER}（写接口必须带幂等键，00-conventions §5.4）",
+            field="Idempotency-Key")
+    if len(value) > facts.MAX_REQUEST_KEY_LEN:
+        raise errors.InvalidArgument("幂等键超长（≤200）", field="Idempotency-Key")
+    return value
 
 
 # --------------------------------------------------------------------------- 用量查询
@@ -261,5 +309,68 @@ def list_user_usage_records(request: Request) -> JSONResponse:
         return _server_error(request_id)
 
 
-__all__ = ["router", "set_node_authenticator", "set_user_authenticator", "submit_node_receipts",
-           "get_node_receipt", "get_user_usage_summary", "list_user_usage_records"]
+# --------------------------------------------------------------------------- 上游账单导入
+@router.post("/admin/usage/upstream-bills")
+async def import_upstream_bills(request: Request) -> JSONResponse:
+    """上游账单导入（FIN / OPS；逐行受理，幂等键必带，单行失败不回滚整批）。"""
+    request_id = _request_id(request)
+    try:
+        principal = _admin_principal(request)
+        operator = _admin_id(principal)
+        request_key = _idempotency_key(request)
+        body = await _body(request)
+        rows = body.get("rows")
+        if not isinstance(rows, list):
+            raise errors.InvalidArgument("rows 必须是数组（spec UpstreamBillImportRequest）",
+                                         field="rows")
+        with _connection() as c:
+            ack = bills.import_rows(c, provider=body.get("provider"), period=body.get("period"),
+                                    rows=rows, imported_by=operator, trace_id=request_id)
+        ack["idempotency_key"] = request_key            # 回显便于客户端对齐重试
+        if "checksum" in body:
+            ack["checksum"] = body["checksum"]
+        _dispatch_events()
+        return _ok(ack, request_id)
+    except errors.MeteringError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                      # pragma: no cover - 防御
+        log.exception("metering.http.bills_failed", extra={"request_id": request_id})
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 人工校正
+@router.post("/admin/usage/corrections")
+async def create_usage_correction(request: Request) -> JSONResponse:
+    """人工校正（只追加；≥50 USD 或负向校正需双人复核）。"""
+    request_id = _request_id(request)
+    try:
+        principal = _admin_principal(request)
+        operator = _admin_id(principal)
+        request_key = _idempotency_key(request)
+        body = await _body(request)
+        item = corrections.from_request(body, requested_by=operator, request_key=request_key)
+        with _connection() as c:
+            result = corrections.propose(c, item)
+            correction = result["correction"]
+            apply_now = bool(body.get("apply"))
+            if apply_now and correction["state"] == "proposed":
+                applied = corrections.apply(c, correction["correction_id"], approver=operator,
+                                           trace_id=request_id)
+                correction = applied["correction"]
+        _dispatch_events()
+        payload = {"correction_id": correction["correction_id"],
+                   "state": correction["state"],
+                   "applied_at": models.iso(correction.get("applied_at")),
+                   "created": result["created"]}
+        return _ok(payload, request_id, status_code=202)
+    except errors.MeteringError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                      # pragma: no cover - 防御
+        log.exception("metering.http.correction_failed", extra={"request_id": request_id})
+        return _server_error(request_id)
+
+
+__all__ = ["router", "set_node_authenticator", "set_user_authenticator",
+           "set_admin_authenticator", "submit_node_receipts", "get_node_receipt",
+           "get_user_usage_summary", "list_user_usage_records", "import_upstream_bills",
+           "create_usage_correction"]

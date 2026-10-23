@@ -179,6 +179,7 @@ def client(api_schema: str):
         router_module._connection = original
         router_module.set_node_authenticator(None)
         router_module.set_user_authenticator(None)
+        router_module.set_admin_authenticator(None)
 
 
 @pytest.fixture
@@ -202,6 +203,9 @@ def auth(client, api_account, api_node, api_schema):      # noqa: ARG001
         lambda request: {"node_id": request.headers.get("X-Client-Key", api_node)})
     router_module.set_user_authenticator(
         lambda request: {"account_id": str(api_account), "tenant_id": str(api_account)})
+    router_module.set_admin_authenticator(
+        lambda request: {"admin_id": "ops-1",
+                         "step_up": bool(request.headers.get("X-Admin-Step-Up"))})
     return {"account_id": api_account, "node_id": api_node, "schema": api_schema}
 
 
