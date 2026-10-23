@@ -2,7 +2,7 @@
 """tests/recon 测试脚手架（DEV-M09 T1–T3）。
 
 隔离约定：
-* 每个测试进程独立 schema 前缀（``m09_t_<pid>_<hex>``，``M09_SCHEMA`` 可覆盖），结束 DROP；
+* 每个测试进程独立 schema 前缀（``r09_t_<pid>_<hex>``，``M09_SCHEMA`` 可覆盖），结束 DROP；
 * 迁移用 ``psql -f`` 逐文件执行（与 CI / 生产同一路径），DSN 由 ``DJB_DSN`` 注入；
 * 缺 ``DJB_DSN`` 时 DB 用例整体 skip，纯函数用例照跑；
 * 覆盖率（``M09_COVERAGE=1``）必须在导入 ``app.recon`` **之前**启动，所以放在本文件顶部。
@@ -52,7 +52,7 @@ def db() -> str:
 
 @pytest.fixture(scope="session")
 def schema_prefix(db: str) -> str:
-    return os.environ.get(SCHEMA_ENV) or f"m09_t_{os.getpid()}_{uuid.uuid4().hex[:6]}"
+    return os.environ.get(SCHEMA_ENV) or f"r09_t_{os.getpid()}_{uuid.uuid4().hex[:6]}"
 
 
 @pytest.fixture

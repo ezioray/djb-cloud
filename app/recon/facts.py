@@ -28,11 +28,15 @@ __all__ = [
     "EXCEPTION_STATUSES", "EXCEPTION_OPEN_STATUSES", "EXCEPTION_CLOSED",
     "EXCEPTION_STATUS_TRANSITIONS",
     "SEVERITIES", "SEVERITY_SLA_SECONDS",
-    "RECEIPT_KINDS", "DAILY_CLOSE_KINDS", "PAYMENT_KINDS", "STRUCTURAL_KINDS",
+    "RECEIPT_KINDS", "DAILY_CLOSE_KINDS", "PAYMENT_KINDS", "CHAIN_KINDS", "BANK_KINDS",
+    "STRUCTURAL_KINDS",
     "RESOLUTION_CODES", "RESOLUTION_REQUIRES_JOURNAL", "RESOLUTION_REQUIRES_CAUSE",
     "P0_AMOUNT_MINOR_EXCLUSIVE", "P1_AMOUNT_MINOR_MIN",
     "DEFAULT_GRACE_SECONDS", "MAX_GRACE_SECONDS",
-    "RULE_VERSION", "POLICY_VERSION", "MINOR_UNIT_SCALE",
+    "RULE_VERSION", "RULE_VERSION_BY_SCOPE", "POLICY_VERSION", "MINOR_UNIT_SCALE",
+    "RECON_UNIT_SCALE", "M08_UNIT_SCALE", "MICRO_PER_MINOR",
+    "PSP_FEE_TOLERANCE_BPS", "PSP_FEE_TOLERANCE_MIN_MINOR", "PSP_SETTLEMENT_WINDOW_HOURS",
+    "BANK_AMOUNT_TOLERANCE_MINOR",
     "ATTESTATION_STATUSES", "ATTESTATION_TRANSITIONS",
     "POR_GRANULARITIES", "POR_STATUSES", "REPORT_STATUSES",
     "REPORTS_IMPLEMENTED", "REPORTS_DEFERRED", "REPORT_VERSION_SEQ",
@@ -46,15 +50,13 @@ __all__ = [
 # ─────────────────────────────────────────────────────────────── scope（M09 §5 枚举 5 值）
 SCOPES: tuple[str, ...] = ("chain", "psp", "bank", "receipt", "daily_close")
 
-#: 本轮（T1–T3）实现的 scope。chain/psp/bank 依赖 M08（钱包 / 批次只读视图），
-#: 未合并 → 不实现、不注册路由、不返回假数据；扩展点见 ``engine.SCOPE_HANDLERS``。
-SCOPES_IMPLEMENTED: tuple[str, ...] = ("receipt", "daily_close")
-SCOPES_DEFERRED: tuple[str, ...] = ("chain", "psp", "bank")
-DEFERRED_SCOPE_OWNER: dict[str, str] = {
-    "chain": "M08（链上钱包 / chain_tx 只读视图）",
-    "psp": "M08（payment_orders / payment_attempts）",
-    "bank": "M08（payout_batches / payout_items / 银行对账单）",
-}
+#: 五个 scope 全部实现（S2：receipt / daily_close + 三方 chain / psp / bank）。
+#: chain / psp / bank 的 planner 在 `app.recon.threeway`，复用同一个 run / 差异 / 幂等 /
+#: 分级 / 复核边界；PSP 结算文件与银行流水只以**调用方注入的内存夹具**进入比较（不落正文）。
+SCOPES_IMPLEMENTED: tuple[str, ...] = SCOPES
+#: 已无 deferred scope；保留符号供报表 / 运维查询「还有没有未实现的 scope」。
+SCOPES_DEFERRED: tuple[str, ...] = ()
+DEFERRED_SCOPE_OWNER: dict[str, str] = {}
 
 # ─────────────────────────────────────────────────────────── run 状态机（M09 §3.2）
 RUN_STATUSES: tuple[str, ...] = ("scheduled", "running", "matched", "exceptions_open",
@@ -112,16 +114,30 @@ RECEIPT_KINDS: tuple[str, ...] = ("only_platform", "only_node", "amount_mismatch
                                   "signature_bad", "duplicate_receipt")
 #: scope=daily_close 两类（试算不平 / 派生余额漂移）。
 DAILY_CLOSE_KINDS: tuple[str, ...] = ("trial_imbalance", "balance_drift")
-#: scope=payment 的 9 类属 M08 域（§20.5.6），T2–T3 不做；仅登记名字空间占位，不伪造。
-PAYMENT_KINDS: tuple[str, ...] = ()
+#: scope=psp / bank 的 payment 9 类（20-payment-ledger §20.5.6，名字空间与产品一致）：
+#: missing_in_ledger / missing_external / amount_mismatch / duplicate / fee_diff / fx_diff /
+#: timing / unidentified / reorg。本模块只产出适用的那几类，不发明新错误码。
+PAYMENT_KINDS: tuple[str, ...] = ("missing_in_ledger", "missing_external", "amount_mismatch",
+                                  "duplicate", "fee_diff", "fx_diff", "timing", "unidentified",
+                                  "reorg")
+#: scope=chain 两类（INV-02：地址余额不符 / 借贷资产行归属不明 一律结构性 P0）。
+CHAIN_KINDS: tuple[str, ...] = ("chain_balance_mismatch", "missing_wallet_ref")
+#: scope=bank 使用的 kind（payout / refund ↔ E8/E11 ↔ 银行流水）。
+BANK_KINDS: tuple[str, ...] = ("missing_in_ledger", "missing_external", "amount_mismatch",
+                               "duplicate", "unidentified")
 
 #: INV-02：结构性差异一律 P0，与金额无关（M09 §3.3）。
-#: 借贷不平 / 重复入账 / 地址不符 / 拒付无匹配 / 覆盖率低 —— 本轮落地的对应 kind：
-#:   trial_imbalance = 借贷不平；duplicate_receipt = 重复入账；balance_drift = 派生余额与分录不符；
-#:   only_node / signature_bad = 平台无对应 / 签名不可验（伪造或密钥问题，结构性）；
-#: 地址不符 / 拒付无匹配 / 覆盖率低 属 chain/psp/por（M08 / T4）。
+#: 借贷不平 / 重复入账 / 地址不符 / 拒付无匹配 / 覆盖率低 —— 已落地的对应 kind：
+#:   trial_imbalance = 借贷不平；duplicate_receipt / duplicate = 重复入账；
+#:   balance_drift = 派生余额与分录不符；only_node / signature_bad = 平台无对应 / 签名不可验；
+#:   chain_balance_mismatch = 地址余额不符；missing_wallet_ref = 资产行归属不明。
+#: 拒付无匹配（reorg / chargeback）与覆盖率低（PoR）留 T4；本轮不伪造这些 kind。
 STRUCTURAL_KINDS: frozenset[str] = frozenset({
     "signature_bad", "only_node", "duplicate_receipt", "trial_imbalance", "balance_drift",
+    # chain：地址余额不符 / 1101·1102 行缺 wallet_id（无法归属，结构性）
+    "chain_balance_mismatch", "missing_wallet_ref",
+    # 三方通用：同一业务事实重复入账 / 同一通道单号重复（INV-02「重复入账」）
+    "duplicate",
 })
 
 # ───────────────────────────────────────────────────── 处置码（M09 §5）
@@ -144,10 +160,33 @@ MAX_GRACE_SECONDS = 1800
 # ───────────────────────────────────────────────────── 版本口径
 #: 对账规则版本（比较键 / 配对算法 / 分级口径）；改口径必须换版本号，便于回溯。
 RULE_VERSION = "m09-receipt-r1"
+#: 各 scope 的比较键 / 配对算法口径版本（改口径必须换版本号，便于回溯）。
+#: receipt / daily_close 沿用历史默认值；三方 scope 各自一版。
+RULE_VERSION_BY_SCOPE: dict[str, str] = {
+    "chain": "m09-chain-r1",
+    "psp": "m09-psp-r1",
+    "bank": "m09-bank-r1",
+}
 #: 事实源版本（03-facts §7 档位与容差）。
 POLICY_VERSION = "facts-v4@2026-10-21"
 #: 最小单位标度：1 USD = 100 分（03-facts §6）
 MINOR_UNIT_SCALE = 2
+#: 对账比较单位：micro-USD（unit_scale=6，M06 journal_line / account_balances 口径）。
+RECON_UNIT_SCALE = 6
+#: M08 支付 / 银行单据标度：分（unit_scale=2，03-facts §6「金额标度」）。
+M08_UNIT_SCALE = 2
+#: 分 → micro（10,000）；整数运算，不做浮点（INV-08）。
+MICRO_PER_MINOR = 10 ** (RECON_UNIT_SCALE - M08_UNIT_SCALE)
+
+#: PSP 手续费容差：±0.10% 或 ±0.01 USD（取大者；03-facts §7 / §20.5.3）。
+#: 单位统一成 micro：0.10% = 10 bps；下限 0.01 USD = 10,000 micro。
+PSP_FEE_TOLERANCE_BPS = 10
+PSP_FEE_TOLERANCE_MIN_MINOR = 10_000
+#: PSP 结算到账时间容差 ±T+3（03-facts §7）；窗口内未到只记 timing，不开差异。
+PSP_SETTLEMENT_WINDOW_HOURS = 72
+
+#: 银行金额容差 0（03-facts §7：银行 到账 ±T+2；手续费 ±0.50 USD——金额比较用 0）。
+BANK_AMOUNT_TOLERANCE_MINOR = 0
 
 # ───────────────────────────────────────────── attestation 状态机（M09 §3.2）
 ATTESTATION_STATUSES: tuple[str, ...] = ("valid", "superseded", "revoked")

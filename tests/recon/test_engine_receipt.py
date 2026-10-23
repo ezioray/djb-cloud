@@ -166,16 +166,20 @@ def test_trigger_event_id_replay_returns_existing_run(conn) -> None:
     assert len(list_all_runs(conn)) == 1
 
 
-def test_unsupported_scope_raises_explicitly(conn) -> None:
-    """chain / psp / bank 依赖 M08：明确报错，不返回假数据。"""
+def test_all_five_scopes_are_registered(conn) -> None:
+    """S2：chain / psp / bank 已实现（不再 deferred），五个 scope 都有 planner。"""
+    assert facts.SCOPES_DEFERRED == ()
+    assert set(facts.SCOPES_IMPLEMENTED) == set(facts.SCOPES)
+    assert set(engine.SCOPE_PLANNERS) == set(facts.SCOPES)
+    # 空 schema 的 chain 扫描是纯读、可落 run：不抛 ScopeNotImplemented、不返回假数据
     from app.recon import models
 
     spec = models.RunSpec(scope="chain", period_start=FIXED_NOW - timedelta(days=1),
                           period_end=FIXED_NOW, cutoff_at=FIXED_NOW)
-    with pytest.raises(engine.ScopeNotImplemented) as excinfo:
-        engine.run(conn, spec, now=FIXED_NOW)
-    assert "M08" in str(excinfo.value)
-    assert facts.SCOPES_DEFERRED == ("chain", "psp", "bank")
+    results = engine.run(conn, spec, now=FIXED_NOW)
+    assert len(results) == 1
+    assert results[0]["run"]["scope"] == "chain"
+    assert results[0]["run"]["status"] == facts.RUN_STATUS_MATCHED
 
 
 def test_period_bounds_exclude_outside_rows(conn) -> None:
