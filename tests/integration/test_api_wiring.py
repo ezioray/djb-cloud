@@ -63,3 +63,36 @@ def test_legacy_duplicate_summary_removed() -> None:
     body = response.json()
     assert "error" in body, body
     assert "consumer" not in body and "amount_micro" not in body
+
+
+# ── M16 审计链接线（spec 1.2.2）─────────────────────────────────────────────
+
+def test_healthz_matches_health_status_schema():
+    """GET /healthz 必须是 HealthStatus（status/version/checked_at），不是 legacy {"ok": true}。"""
+    response = client.get("/healthz")
+    body = response.json()
+    assert response.status_code in (200, 500, 503), body
+    if response.status_code == 200:
+        for field in ("status", "version", "checked_at"):
+            assert field in body, body
+        assert body["status"] in ("ok", "degraded")
+        assert "ok" not in body or body.get("ok") is not True  # legacy 字段不应回归
+
+
+def test_internal_audit_requires_service_token():
+    """内部审计端点默认 fail-closed：无令牌 → 401 + 40101，绝不 404。"""
+    for method, path in (("POST", "/internal/ops/audit/entries"), ("POST", "/internal/ops/audit/verify")):
+        response = client.request(method, path, json={})
+        assert response.status_code == 401, (path, response.status_code, response.text[:200])
+        err = response.json()["error"]
+        assert err["code"] == 40101
+        assert err["type"] == "authentication_error"
+
+
+def test_internal_audit_rejects_wrong_token(monkeypatch):
+    """令牌不匹配 → 401（不得因为配置了环境变量就放行）。"""
+    monkeypatch.setenv("DJB_INTERNAL_SERVICE_TOKEN", "expected-token-not-real")
+    response = client.post("/internal/ops/audit/entries", json={},
+                           headers={"X-DJB-Service-Token": "wrong-token-not-real"})
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == 40101

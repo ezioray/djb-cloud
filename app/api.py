@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac as hmaclib
 import json
 import os
 import time
@@ -12,6 +13,10 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import db, pricing, receipt as rcpt, upstream
+from .audit import keys as audit_keys
+from .audit.errors import Unauthorized as AuditUnauthorized
+from .audit.health import create_health_router
+from .audit.router import create_router as create_audit_router
 from .config_center.router import create_router as create_config_center_router
 from .identity.router import router as identity_router
 from .ledger.router import router as ledger_router
@@ -30,6 +35,32 @@ app.include_router(supply_router)
 app.include_router(scheduling_router)
 app.include_router(metering_router)
 app.include_router(create_config_center_router())
+
+
+# ── M16 内部运维面接线（spec 1.2.2）────────────────────────────────────────
+# 服务身份：mTLS 由网关终结，这里只校验服务令牌（fail-closed：未配置即拒绝）。
+# 生产部署须注入更细的主体解析（按 mTLS 证书 SAN 映射 scopes）；S1 用单令牌。
+INTERNAL_TOKEN_ENV = "DJB_INTERNAL_SERVICE_TOKEN"
+
+
+def _internal_service_principal(request: Request) -> dict:
+    expected = os.environ.get(INTERNAL_TOKEN_ENV, "")
+    provided = request.headers.get("X-DJB-Service-Token", "")
+    if not expected or not provided or not hmaclib.compare_digest(provided, expected):
+        raise AuditUnauthorized("内部接口需要服务令牌（X-DJB-Service-Token；mTLS 由网关终结）")
+    return {"service": "internal", "scopes": ["audit:append", "audit:read", "audit:verify"]}
+
+
+app.include_router(create_audit_router(
+    connection_factory=db.conn,
+    principal_resolver=_internal_service_principal,
+    key_provider=audit_keys.from_env(),
+))
+app.include_router(create_health_router(
+    connection_factory=db.conn,
+    key_provider=audit_keys.from_env(),
+    version="0.1.0",
+))
 
 
 # ── 鉴权：用方 Bearer（库里只存 sha256）───────────────────────────────────────
@@ -140,8 +171,3 @@ def ledger_entries(limit: int = 20):
                                         "hash": h} for s, d, cr, a, m, h in rows]}
 
 
-@app.get("/healthz")
-def healthz():
-    with db.conn() as c, c.cursor() as cur:
-        cur.execute("SELECT 1")
-    return {"ok": True}
