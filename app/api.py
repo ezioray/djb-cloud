@@ -20,14 +20,14 @@ from .config_center.router import create_router as create_config_center_router
 from .data_gov.router import create_router as create_data_gov_router
 from .identity.router import router as identity_router
 from .ledger.router import router as ledger_router
-from .metering.router import router as metering_router
+from .metering.router import router as metering_router, set_admin_authenticator as set_metering_admin_auth, set_user_authenticator as set_metering_user_auth
 from .nodes import router as node_router
 from .notify.router import create_router as create_notify_router
 from .recon.router import create_router as create_recon_router
 from .reputation.router import create_router as create_reputation_router
 from .risk.router import create_router as create_risk_router
 from .scheduling.router import router as scheduling_router
-from .supply.router import router as supply_router
+from .supply.router import router as supply_router, set_user_authenticator as set_supply_user_auth
 from .treasury.router import create_router as create_treasury_router
 from .wiring.treasury import M06LedgerPoster, make_attestation_verifier
 
@@ -41,6 +41,7 @@ app.include_router(supply_router)
 app.include_router(scheduling_router)
 app.include_router(metering_router)
 app.include_router(create_config_center_router())
+
 
 
 # ── M16 内部运维面接线（spec 1.2.2）────────────────────────────────────────
@@ -97,6 +98,22 @@ def _admin_dev_principal(request: Request) -> dict | None:
     roles = [r.strip().upper() for r in (request.headers.get("X-Admin-Roles") or "").split(",") if r.strip()]
     tenant = (request.headers.get("X-Admin-Tenant") or "").strip() or None
     return {"actor": actor, "roles": roles, "scopes": ["*"], "tenant_id": tenant}
+
+
+# ── M02 / M05 用方鉴权接线（spec 1.2.6 新端点）──────────────────────────────
+# 会话态节点列表 / 解绑、账单导出都走 userBearer（Bearer API Key → account_id）；
+# 解绑还要 step-up：S1 以 X-Admin-Step-Up 头存在视为已 step-up（与 M08 默认口径一致，
+# 真 MFA 由 M01 会话注入后替换该判定）。
+def _user_principal_step_up(request: Request) -> dict | None:
+    principal = _user_principal(request)
+    if principal and (request.headers.get("X-Admin-Step-Up") or "").strip():
+        principal = {**principal, "step_up": True}
+    return principal
+
+
+set_supply_user_auth(_user_principal_step_up)
+set_metering_user_auth(_user_principal)
+set_metering_admin_auth(_admin_dev_principal)
 
 
 app.include_router(create_audit_router(
