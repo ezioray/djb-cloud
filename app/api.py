@@ -28,6 +28,8 @@ from .reputation.router import create_router as create_reputation_router
 from .risk.router import create_router as create_risk_router
 from .scheduling.router import router as scheduling_router
 from .supply.router import router as supply_router
+from .treasury.router import create_router as create_treasury_router
+from .wiring.treasury import M06LedgerPoster, make_attestation_verifier
 
 app = FastAPI(title="djb-cloud", version="0.1.0")
 app.include_router(node_router)
@@ -151,6 +153,19 @@ app.include_router(create_risk_router(
 app.include_router(create_data_gov_router(
     connection_factory=db.conn,
     admin_resolver=_admin_dev_principal,
+))
+
+
+# ── M08 支付与资金接线（spec 1.2.5/1.2.6）─────────────────────────────────
+# 用方 / 共享方都走 Bearer→account_id（S1 共享方会话同用方）；管理面同 M07/M09/M11/M14。
+# 入账走 M06 ledger_poster（E3/E4/E5 两步记法），出款 attestation 走 M09 validate —— 都 fail-closed。
+app.include_router(create_treasury_router(
+    connection_factory=db.conn,
+    user_resolver=_user_principal,
+    provider_resolver=_user_principal,
+    admin_resolver=_admin_dev_principal,
+    ledger_poster=M06LedgerPoster(),
+    attestation_verifier=make_attestation_verifier(db.conn),
 ))
 
 
