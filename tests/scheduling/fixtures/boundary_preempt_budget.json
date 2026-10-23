@@ -1,0 +1,23 @@
+{
+  "module": "M04",
+  "case": "boundary",
+  "description": "INV-10：每节点每小时 ≤6 次抢占；用完 → 拒绝（不再抢）",
+  "input": {
+    "tier": "realtime",
+    "budget_limit": 6,
+    "budget_map": {
+      "n1": 6
+    },
+    "victims": [
+      {
+        "node_id": "n1",
+        "tier": "batch",
+        "checkpoint_age_s": 5
+      }
+    ]
+  },
+  "expect": {
+    "outcome": "rejected",
+    "reason": "preempt_budget_exhausted"
+  }
+}

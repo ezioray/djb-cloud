@@ -217,4 +217,5 @@ def test_migrate_module_exports_the_rollback_map() -> None:
     assert len(migrate.DOWN_SQL) == len(M04_MIGRATIONS)
     assert [name for name, _sql in migrate.DOWN_SQL] == list(reversed(M04_MIGRATIONS))
     for name, script in migrate.DOWN_SQL:
-        assert "DROP TABLE IF EXISTS" in script, name
+        # 建表类迁移删表；只加列的迁移（如 409）删列/索引即可
+        assert "DROP TABLE IF EXISTS" in script or "DROP COLUMN IF EXISTS" in script, name

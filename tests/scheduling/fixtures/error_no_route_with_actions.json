@@ -1,0 +1,17 @@
+{
+  "module": "M04",
+  "case": "error",
+  "description": "候选集为空 → 45001 + 原因 + 三个可选动作（INV-06）",
+  "input": {
+    "model": "unknown-model",
+    "kind": "realtime"
+  },
+  "expect": {
+    "http": 503,
+    "code": 45001,
+    "reasons": [
+      "no_candidates"
+    ],
+    "action_count": 3
+  }
+}

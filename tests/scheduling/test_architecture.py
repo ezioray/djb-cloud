@@ -40,8 +40,10 @@ def test_module_has_the_expected_layers():
     names = {path.name for path in _module_files()}
     assert {"__init__.py", "facts.py", "errors.py", "clock.py", "config_source.py",
             "features.py", "models.py", "quotes.py", "bids.py", "matching.py", "events.py",
-            "candidates.py", "scoring.py", "quota.py", "preempt.py", "pipeline.py",
-            "decisions.py", "replay.py", "snapshot.py", "migrate.py", "router.py"} <= names
+            "outbox.py", "idempotency.py", "candidates.py", "scoring.py", "quota.py",
+            "fairness.py", "preempt.py", "backpressure.py", "circuit.py", "pipeline.py",
+            "decisions.py", "replay.py", "snapshot.py", "migrate.py", "router.py",
+            "cli.py"} <= names
 
 
 def test_no_cross_module_imports():

@@ -1,0 +1,17 @@
+{
+  "module": "M04",
+  "case": "error",
+  "description": "金额超精度 → 400/40001，不四舍五入（INV-13）",
+  "input": {
+    "access": "A1",
+    "model": "m1",
+    "unit": "token",
+    "price_min": "8.005",
+    "ttl_s": 60
+  },
+  "expect": {
+    "http": 400,
+    "code": 40001,
+    "reason": "amount_precision"
+  }
+}

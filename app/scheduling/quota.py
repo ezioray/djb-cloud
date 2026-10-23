@@ -12,7 +12,11 @@
   来源；未接线时开关保持关闭（``features.scheduling.affinity_hard_constraint``），
   即「不拿猜测的拓扑淘汰候选」。
 * **单租户同模型并发占比 ≤25%**（INV-08）：超限**降权**而不是淘汰，且必须在响应可见。
-  T2 只做阈值判定与可见标记（``share_exceeded``），降权系数由 T3 的公平计数落地。
+  T3 的口径：占比**由 M04 自有计数算出**（本表 ``concurrent`` ÷ 同模型合计），
+  降权 = 把该租户在该模型上的可用并发槽位夹到 ``total_slots × 25%``（至少 1 个，防饿死），
+  并在 ``reason_codes`` 留 ``share_exceeded``。S2 换成加权公平的虚拟时间（§4.7.5）。
+* **配额软停**（§4.7.3 P3 失败动作）：全部约束违反时冻结该租户 60 s——
+  受开关 ``scheduling.quota_soft_stop`` 控制（默认关闭：只拒绝当前请求，不冻结）。
 
 计数落库：``quota_usage`` 按 ``(tenant_id, model, window_kind, window_start)`` 唯一，
 由 P5 在决策事务内 ``+1``，消费方释放时 ``-1``（永不删除行）。
@@ -117,12 +121,17 @@ class QuotaDecision:
     widening_rejected: bool = False
     share_exceeded: bool = False
     remaining: int | None = None
+    share_pct_bps: int | None = None
+    share_cap: int | None = None
+    frozen: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {"allowed": self.allowed, "effective_concurrency": self.effective_concurrency,
                 "reason_codes": list(self.reason_codes),
                 "widening_rejected": self.widening_rejected,
-                "share_exceeded": self.share_exceeded, "remaining": self.remaining}
+                "share_exceeded": self.share_exceeded, "remaining": self.remaining,
+                "share_pct_bps": self.share_pct_bps, "share_cap": self.share_cap,
+                "frozen": self.frozen}
 
 
 def snapshot(c, tenant_id: uuid.UUID, model: str) -> dict[str, Any]:
@@ -136,12 +145,27 @@ def snapshot(c, tenant_id: uuid.UUID, model: str) -> dict[str, Any]:
         return {}
 
 
+def share_cap_slots(total_slots: int | None, limit_pct: int) -> int | None:
+    """占比降权后的槽位上限 = ``max(1, floor(total_slots × limit%))``（INV-08）。
+
+    ``total_slots`` 是该模型当前全网可用并发合计（各候选 ``max_qps`` 之和）。
+    至少保留 :data:`facts.SHARE_CAP_MIN_SLOTS` 个槽位，避免把大租户直接饿死。
+    """
+    if total_slots is None:
+        return None
+    return max(facts.SHARE_CAP_MIN_SLOTS, int(total_slots) * int(limit_pct) // 100)
+
+
 def decide(*, snapshot: Mapping[str, Any] | None, node_max_qps: int | None,
            platform_concurrency: int | None, terminal_concurrency: int | None,
-           limit_pct: int, required_units: int = 1) -> QuotaDecision:
-    """P3 的**纯函数**部分：配额 / 并发 / 花费上限 / 占比（同一输入同一结论）。
+           limit_pct: int, required_units: int = 1,
+           observed_share_bps: int | None = None, total_slots: int | None = None,
+           frozen: bool = False) -> QuotaDecision:
+    """P3 的**纯函数**部分：配额 / 并发 / 花费上限 / 占比 / 软停（同一输入同一结论）。
 
     ``remaining`` 为 None 表示不限；``required_units`` 是本次要占用的并发单元数。
+    ``observed_share_bps`` 是**M04 自有计数**算出的占比（不是上游给的）；
+    越限时按 :func:`share_cap_slots` 降权；``frozen`` 为真直接拒绝（软停期内）。
     """
     values: Mapping[str, Any] = snapshot or {}
     effective, widened = resolve_concurrency(platform_concurrency, terminal_concurrency,
@@ -153,26 +177,40 @@ def decide(*, snapshot: Mapping[str, Any] | None, node_max_qps: int | None,
     remaining = values.get("remaining")
     spend = int(values.get("daily_spend_minor") or 0)
     cap = values.get("daily_cap_minor")
-    share = values.get("share_pct_bps")
+    provider_share = values.get("share_pct_bps")
+    if observed_share_bps is not None and provider_share is not None:
+        share = max(int(observed_share_bps), int(provider_share))
+    elif observed_share_bps is not None:
+        share = observed_share_bps
+    else:
+        share = provider_share
 
     if cap is not None and spend > int(cap):
         raise SpendCapExceeded("已超每日花费上限（42902）", reason="spend_cap_exceeded",
                                daily_spend_minor=spend, daily_cap_minor=int(cap))
 
     over_share = share_exceeded(share, limit_pct)
+    cap_slots = share_cap_slots(total_slots, limit_pct) if over_share else None
     if over_share:
         reasons.append("share_exceeded")
+        if cap_slots is not None:
+            effective = min(effective, cap_slots)
+
+    if frozen:
+        reasons.append("quota_frozen")
 
     insufficient = remaining is not None and int(remaining) < required_units
     exceeds_concurrency = effective < required_units
-    allowed = not insufficient and not exceeds_concurrency
+    allowed = not frozen and not insufficient and not exceeds_concurrency
     if insufficient or exceeds_concurrency:
         reasons.append("quota_exhausted")
 
     return QuotaDecision(allowed=allowed, effective_concurrency=effective,
                          reason_codes=tuple(reasons), widening_rejected=widened,
                          share_exceeded=over_share,
-                         remaining=None if remaining is None else int(remaining))
+                         remaining=None if remaining is None else int(remaining),
+                         share_pct_bps=None if share is None else int(share),
+                         share_cap=cap_slots, frozen=frozen)
 
 
 def evaluate(c, *, tenant_id: uuid.UUID, model: str, node_max_qps: int | None,
@@ -243,6 +281,144 @@ def usage(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
             "share_pct_bps": int(row[2])}
 
 
+def model_concurrency(c, *, model: str, now: datetime | None = None,
+                      kind: str = "day") -> dict[str, int]:
+    """该模型当前各租户的并发计数（P3 占比的真实来源：M04 自有计数）。
+
+    返回 ``{tenant_id: concurrent}``（只含 >0 的行）；合计由调用方 sum。
+    """
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    with c.cursor() as cur:
+        cur.execute(
+            """SELECT tenant_id, concurrent FROM quota_usage
+                WHERE model = %s AND window_kind = %s AND window_start = %s AND concurrent > 0""",
+            (model, kind, start))
+        return {str(row[0]): int(row[1]) for row in cur.fetchall()}
+
+
+def share_bps(part: int, total: int) -> int:
+    """占比（bps，0–10000）；分母为 0 时返回 0。整数运算，无浮点。"""
+    if total <= 0:
+        return 0
+    return max(0, min(BPS, int(part) * BPS // int(total)))
+
+
+def observed_share(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+                   kind: str = "day") -> tuple[int, int]:
+    """用自有计数算该租户在该模型上的占比：返回 ``(share_bps, tenant_concurrent)``。
+
+    口径（INV-08 / §4.7.5）：``tenant 并发 ÷ 同模型全租户并发合计``。
+    **不含本次请求**——本请求还没占用槽位，占比必须是「占之前」的观察值。
+    """
+    counts = model_concurrency(c, model=model, now=now, kind=kind)
+    total = sum(counts.values())
+    mine = counts.get(str(tenant_id), 0)
+    return share_bps(mine, total), mine
+
+
+def refresh_share(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+                  kind: str = "day") -> int:
+    """把最新观察到的占比写回 ``quota_usage.share_pct_bps``（P5 同事务；返回 bps）。"""
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    share, _mine = observed_share(c, tenant_id=tenant_id, model=model, now=moment, kind=kind)
+    with c.cursor() as cur:
+        cur.execute(
+            """UPDATE quota_usage
+                  SET share_pct_bps = %s, share_updated_at = %s, updated_at = %s
+                WHERE tenant_id = %s AND model = %s AND window_kind = %s
+                  AND window_start = %s""",
+            (share, moment, moment, tenant_id, model, kind, start))
+    return share
+
+
+def freeze(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+           seconds: int = facts.QUOTA_FREEZE_S, reason: str = "quota_exhausted",
+           kind: str = "day") -> datetime:
+    """配额软停（§4.7.3 P3）：把该租户在该模型上冻结到 ``now + seconds``。"""
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    until = moment + timedelta(seconds=int(seconds))
+    with c.cursor() as cur:
+        cur.execute(
+            """INSERT INTO quota_usage (tenant_id, model, window_kind, window_start,
+                                        concurrent, daily_spend_minor, share_pct_bps,
+                                        frozen_until, frozen_reason, updated_at)
+               VALUES (%s, %s, %s, %s, 0, 0, 0, %s, %s, %s)
+               ON CONFLICT (tenant_id, model, window_kind, window_start) DO UPDATE
+                  SET frozen_until = EXCLUDED.frozen_until,
+                      frozen_reason = EXCLUDED.frozen_reason,
+                      updated_at = EXCLUDED.updated_at""",
+            (tenant_id, model, kind, start, until, reason[:64], moment))
+    log.info("scheduling.quota.frozen", extra={"event": "quota.frozen",
+                                              "tenant_id": str(tenant_id),
+                                              "until": until.isoformat()})
+    return until
+
+
+def frozen_until(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+                 kind: str = "day") -> datetime | None:
+    """软停到期时刻（未冻结 / 已过期 → None）。"""
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    with c.cursor() as cur:
+        cur.execute(
+            """SELECT frozen_until FROM quota_usage
+                WHERE tenant_id = %s AND model = %s AND window_kind = %s
+                  AND window_start = %s""",
+            (tenant_id, model, kind, start))
+        row = cur.fetchone()
+    if not row or row[0] is None or row[0] <= moment:
+        return None
+    return row[0]
+
+
+def is_frozen(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+              kind: str = "day") -> bool:
+    return frozen_until(c, tenant_id=tenant_id, model=model, now=now, kind=kind) is not None
+
+
+def note_rejection(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+                   kind: str = "day") -> None:
+    """记录「首次被拒」时刻（反饥饿 / 公平观测输入；已有值不覆盖）。"""
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    with c.cursor() as cur:
+        cur.execute(
+            """INSERT INTO quota_usage (tenant_id, model, window_kind, window_start,
+                                        concurrent, daily_spend_minor, share_pct_bps,
+                                        wait_started_at, updated_at)
+               VALUES (%s, %s, %s, %s, 0, 0, 0, %s, %s)
+               ON CONFLICT (tenant_id, model, window_kind, window_start) DO UPDATE
+                  SET wait_started_at = COALESCE(quota_usage.wait_started_at,
+                                                 EXCLUDED.wait_started_at),
+                      updated_at = EXCLUDED.updated_at""",
+            (tenant_id, model, kind, start, moment, moment))
+
+
+def clear_wait(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None,
+               kind: str = "day") -> None:
+    """成功路由后清空等待起点（该租户已经拿到槽位）。"""
+    moment = now or clock.utcnow()
+    start = window_start(moment, kind)
+    with c.cursor() as cur:
+        cur.execute(
+            """UPDATE quota_usage SET wait_started_at = NULL, updated_at = %s
+                WHERE tenant_id = %s AND model = %s AND window_kind = %s
+                  AND window_start = %s""", (moment, tenant_id, model, kind, start))
+
+
+def windows(c, *, tenant_id: uuid.UUID, model: str, now: datetime | None = None) \
+        -> dict[str, dict[str, Any] | None]:
+    """日 / 周 / 月三个窗口的计数（报表 / 自查；缺该窗口返回 None）。"""
+    moment = now or clock.utcnow()
+    return {kind: usage(c, tenant_id=tenant_id, model=model, now=moment, kind=kind)
+            for kind in facts.QUOTA_WINDOWS}
+
+
 __all__ = ["QuotaProvider", "set_quota_provider", "current_provider", "resolve_concurrency",
-           "share_exceeded", "window_start", "QuotaDecision", "snapshot", "decide", "evaluate",
-           "reserve", "release", "usage"]
+           "share_exceeded", "share_cap_slots", "window_start", "QuotaDecision", "snapshot",
+           "decide", "evaluate", "reserve", "release", "usage", "model_concurrency",
+           "share_bps", "observed_share", "refresh_share", "freeze", "frozen_until",
+           "is_frozen", "note_rejection", "clear_wait", "windows"]

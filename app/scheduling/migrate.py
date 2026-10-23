@@ -52,6 +52,29 @@ def _table_down(name: str, *, extra: str = "") -> str:
 
 #: 回滚：逆序删本模块新增对象（**不碰**任何前置对象；可重复执行）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("409_quota_fairness.sql", """
+        DROP INDEX IF EXISTS quota_usage_share_idx;
+        DROP INDEX IF EXISTS quota_usage_frozen_idx;
+        ALTER TABLE IF EXISTS quota_usage DROP CONSTRAINT IF EXISTS quota_usage_frozen_pair_ck;
+        ALTER TABLE IF EXISTS quota_usage DROP CONSTRAINT IF EXISTS quota_usage_frozen_reason_ck;
+        ALTER TABLE IF EXISTS quota_usage DROP COLUMN IF EXISTS share_updated_at;
+        ALTER TABLE IF EXISTS quota_usage DROP COLUMN IF EXISTS wait_started_at;
+        ALTER TABLE IF EXISTS quota_usage DROP COLUMN IF EXISTS frozen_reason;
+        ALTER TABLE IF EXISTS quota_usage DROP COLUMN IF EXISTS frozen_until;
+    """),
+    ("408_scheduling_idempotency.sql", """
+        DROP INDEX IF EXISTS scheduling_idempotency_expiry_idx;
+        DROP TRIGGER IF EXISTS scheduling_idempotency_guard_trg ON scheduling_idempotency;
+        DROP FUNCTION IF EXISTS m04_idempotency_guard();
+        DROP TABLE IF EXISTS scheduling_idempotency;
+    """),
+    ("407_scheduling_outbox.sql", """
+        DROP INDEX IF EXISTS scheduling_outbox_aggregate_idx;
+        DROP INDEX IF EXISTS scheduling_outbox_pending_idx;
+        DROP TRIGGER IF EXISTS scheduling_outbox_guard_trg ON scheduling_outbox;
+        DROP FUNCTION IF EXISTS m04_outbox_guard();
+        DROP TABLE IF EXISTS scheduling_outbox;
+    """),
     ("406_model_catalog.sql", """
         DROP INDEX IF EXISTS model_catalog_vendor_idx;
         DROP INDEX IF EXISTS model_catalog_state_idx;
@@ -109,6 +132,9 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "404_routing_decisions.sql": ("table", "routing_decisions", ""),
     "405_quota_usage.sql": ("table", "quota_usage", ""),
     "406_model_catalog.sql": ("table", "model_catalog", ""),
+    "407_scheduling_outbox.sql": ("table", "scheduling_outbox", ""),
+    "408_scheduling_idempotency.sql": ("table", "scheduling_idempotency", ""),
+    "409_quota_fairness.sql": ("column", "quota_usage", "frozen_until"),
 }
 
 

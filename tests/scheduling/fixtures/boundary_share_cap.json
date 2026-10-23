@@ -1,0 +1,15 @@
+{
+  "module": "M04",
+  "case": "boundary",
+  "description": "INV-08：占比 >25% → 降权到 total×25%（至少 1 槽位）",
+  "input": {
+    "total_slots": 100,
+    "limit_pct": 25,
+    "observed_share_bps": 5000
+  },
+  "expect": {
+    "share_exceeded": true,
+    "share_cap": 25,
+    "allowed": true
+  }
+}

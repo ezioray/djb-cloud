@@ -204,7 +204,8 @@ def create_booking(c, match: MatchPlan, *, tenant_id: uuid.UUID,
                                                   "node_id": booking.node_id})
     from . import events
 
-    events.booking_created(booking, trace_id=trace_id or booking.booking_id, occurred_at=moment)
+    events.booking_created(c, booking, trace_id=trace_id or booking.booking_id,
+                          occurred_at=moment)
     return booking
 
 
@@ -254,7 +255,7 @@ def expire_due(c, *, now: datetime | None = None, trace_id: str = "") \
         from . import events
 
         for booking in expired:
-            events.booking_expired(booking, trace_id=trace_id or booking.booking_id,
+            events.booking_expired(c, booking, trace_id=trace_id or booking.booking_id,
                                    occurred_at=moment)
     return expired
 
