@@ -22,6 +22,8 @@ from .identity.router import router as identity_router
 from .ledger.router import router as ledger_router
 from .metering.router import router as metering_router
 from .nodes import router as node_router
+from .notify.router import create_router as create_notify_router
+from .recon.router import create_router as create_recon_router
 from .scheduling.router import router as scheduling_router
 from .supply.router import router as supply_router
 
@@ -43,12 +45,54 @@ app.include_router(create_config_center_router())
 INTERNAL_TOKEN_ENV = "DJB_INTERNAL_SERVICE_TOKEN"
 
 
-def _internal_service_principal(request: Request) -> dict:
+def _internal_service_principal(request: Request) -> dict | None:
+    """服务主体：mTLS 由网关终结，这里只校验服务令牌；未配置/不匹配 → None（调用方 fail-closed）。"""
     expected = os.environ.get(INTERNAL_TOKEN_ENV, "")
     provided = request.headers.get("X-DJB-Service-Token", "")
     if not expected or not provided or not hmaclib.compare_digest(provided, expected):
-        raise AuditUnauthorized("内部接口需要服务令牌（X-DJB-Service-Token；mTLS 由网关终结）")
-    return {"service": "internal", "scopes": ["audit:append", "audit:read", "audit:verify"]}
+        return None
+    return {"service": "internal", "scopes": ["*"]}
+
+
+def _user_principal(request: Request) -> dict | None:
+    """用方主体（Bearer API Key → 账户 UUID）：M12 站内信/Webhook 用。
+
+    失败一律返回 None（由模块侧 fail-closed 成 401/40101）；不在此抛异常。
+    """
+    authorization = (request.headers.get("authorization") or "").strip()
+    if not authorization.lower().startswith("bearer "):
+        return None
+    raw = authorization.split(" ", 1)[1].strip()
+    if not raw:
+        return None
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    try:
+        with db.conn() as c, c.cursor() as cur:
+            cur.execute("SELECT user_id FROM api_keys WHERE key_hash=%s AND revoked_at IS NULL", (digest,))
+            row = cur.fetchone()
+    except Exception:                                   # pragma: no cover - 依赖不可用
+        return None
+    if not row:
+        return None
+    try:
+        return {"account_id": str(uuid.UUID(str(row[0])))}
+    except (TypeError, ValueError):
+        return None
+
+
+def _admin_dev_principal(request: Request) -> dict | None:
+    """管理面主体（**仅本地/测试**）：X-Admin-Actor / Roles / Tenant 头。
+
+    生产（DJB_ENV=prod）一律返回 None：必须由 M01 会话 + step-up 解析注入后再放行。
+    """
+    if os.environ.get("DJB_ENV", "").lower() in ("prod", "production"):
+        return None
+    actor = (request.headers.get("X-Admin-Actor") or "").strip()
+    if not actor:
+        return None
+    roles = [r.strip().upper() for r in (request.headers.get("X-Admin-Roles") or "").split(",") if r.strip()]
+    tenant = (request.headers.get("X-Admin-Tenant") or "").strip() or None
+    return {"actor": actor, "roles": roles, "scopes": ["*"], "tenant_id": tenant}
 
 
 app.include_router(create_audit_router(
@@ -60,6 +104,25 @@ app.include_router(create_health_router(
     connection_factory=db.conn,
     key_provider=audit_keys.from_env(),
     version="0.1.0",
+))
+
+
+# ── M09 对账接线（spec 1.2.3）──────────────────────────────────────────────
+# 管理面主体沿用本地/测试头约定（生产必须注入 M01 会话解析）；
+# 出款前校验（validate）走服务令牌，与 M16 内部面同一套 fail-closed 口径。
+app.include_router(create_recon_router(
+    connection_factory=db.conn,
+    admin_resolver=_admin_dev_principal,
+    service_resolver=_internal_service_principal,
+))
+
+
+# ── M12 通知接线（spec 1.2.3）──────────────────────────────────────────────
+# 用方主体走 Bearer API Key（与 /v1 同一把钥匙）；未带/无效 → 401/40101。
+# Webhook 真实投递默认关闭（开关三字段在模块内），S1 只做订阅 CRUD 与站内信。
+app.include_router(create_notify_router(
+    connection_factory=db.conn,
+    principal_resolver=_user_principal,
 ))
 
 

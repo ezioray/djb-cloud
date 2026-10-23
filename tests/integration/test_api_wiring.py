@@ -96,3 +96,72 @@ def test_internal_audit_rejects_wrong_token(monkeypatch):
                            headers={"X-DJB-Service-Token": "wrong-token-not-real"})
     assert response.status_code == 401
     assert response.json()["error"]["code"] == 40101
+
+
+# ── M09 对账接线（spec 1.2.3）──────────────────────────────────────────────
+
+def test_recon_admin_endpoints_require_admin_actor():
+    """管理面未带主体 → 401 + 40101（不是 404，也不是放行）。"""
+    for path in ("/api/v1/admin/treasury/recon/runs", "/api/v1/admin/reports/exceptions?period=2026-10"):
+        response = client.get(path)
+        assert response.status_code == 401, (path, response.status_code, response.text[:160])
+        assert response.json()["error"]["code"] == 40101
+
+
+def test_recon_validate_requires_service_token():
+    """出款前校验走服务令牌：缺失 → 401 + 40101。"""
+    response = client.get("/api/v1/admin/treasury/recon/attestations/none/validate")
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == 40101
+
+
+def test_recon_routes_are_wired():
+    """八条 recon + 两条报表都必须在生产 app 上（未带主体时也不得 404）。"""
+    paths = [
+        ("GET", "/api/v1/admin/treasury/recon/runs"),
+        ("GET", "/api/v1/admin/treasury/recon/runs/x"),
+        ("POST", "/api/v1/admin/treasury/recon/runs/x/sign-off"),
+        ("GET", "/api/v1/admin/treasury/recon/exceptions"),
+        ("POST", "/api/v1/admin/treasury/recon/exceptions/x/resolve"),
+        ("POST", "/api/v1/admin/treasury/recon/attestations"),
+        ("GET", "/api/v1/admin/treasury/recon/attestations/x"),
+        ("GET", "/api/v1/admin/reports/recon-daily?period=2026-10"),
+    ]
+    for method, path in paths:
+        response = client.request(method, path, json={})
+        assert response.status_code != 404, (method, path, response.status_code)
+
+
+# ── M12 通知接线（spec 1.2.3）──────────────────────────────────────────────
+
+def test_notify_user_endpoints_require_bearer():
+    """站内信/Webhook 未带 Bearer → 401 + 40101（不是 404，也不放行）。"""
+    for path in ("/api/v1/user/notifications",
+                 "/api/v1/user/notifications/preferences",
+                 "/api/v1/user/webhooks"):
+        response = client.get(path)
+        assert response.status_code == 401, (path, response.status_code, response.text[:160])
+        assert response.json()["error"]["code"] == 40101
+
+
+def test_notify_rejects_unknown_bearer():
+    """无效 Bearer → 401/40101（走 api_keys 查询但不得放行）。"""
+    response = client.get("/api/v1/user/notifications",
+                          headers={"Authorization": "Bearer not-a-real-key"})
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == 40101
+
+
+def test_notify_routes_are_wired():
+    paths = [
+        ("GET", "/api/v1/user/notifications"),
+        ("POST", "/api/v1/user/notifications/all/read"),
+        ("GET", "/api/v1/user/notifications/preferences"),
+        ("PUT", "/api/v1/user/notifications/preferences"),
+        ("GET", "/api/v1/user/webhooks"),
+        ("POST", "/api/v1/user/webhooks"),
+        ("DELETE", "/api/v1/user/webhooks/x"),
+    ]
+    for method, path in paths:
+        response = client.request(method, path, json={})
+        assert response.status_code != 404, (method, path, response.status_code)
