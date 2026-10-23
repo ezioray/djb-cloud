@@ -19,6 +19,19 @@ from .errors import InvalidArgument, ProtocolIncompatible
 
 _PATTERN = re.compile(facts.PROTOCOL_PATTERN)
 
+#: S1 服务端能力清单（spec ``ProtocolCapabilities``：id / version / status）
+CAPABILITIES: tuple[dict[str, str], ...] = (
+    {"id": "capacity_announcement", "version": "1", "status": "stable"},
+    {"id": "policy_etag", "version": "1", "status": "stable"},
+    {"id": "protocol_deprecations", "version": "1", "status": "stable"},
+    {"id": "runtime_state", "version": "1", "status": "beta"},
+    {"id": "upstream_probe_receipt", "version": "1", "status": "stable"},
+)
+SERVER_CAPABILITIES: tuple[str, ...] = tuple(item["id"] for item in CAPABILITIES)
+
+#: 弃用清单（spec ``DeprecationList``）。S1 尚无弃用；条目必须满足 ≥90 天 + ≥2 MAJOR 才能登记。
+DEPRECATIONS: tuple[dict[str, object], ...] = ()
+
 
 def parse(version: str, *, field: str = "protocol_version") -> tuple[int, int, int]:
     """``MAJOR.MINOR.PATCH`` → 三元组；形态不合法即 40001（spec pattern）。"""
@@ -69,13 +82,86 @@ def check(client_version: str, *, server_version: str = facts.PROTOCOL_VERSION) 
 def capability_intersection(client: list[str] | None,
                             server: list[str] | None = None) -> list[str]:
     """双方只启用交集（M02 §1）；未知 capability 忽略不报错（INV-05）。"""
-    server_set = set(facts.SERVER_CAPABILITIES if server is None else server)
+    server_set = set(SERVER_CAPABILITIES if server is None else server)
     if not client:
         return sorted(server_set)
     return sorted({item for item in client if item in server_set})
 
 
+
+# --------------------------------------------------------------------------- 能力协商与弃用（T6）
+def parse_capability_header(value: str | None) -> list[str]:
+    """``DJB-Capabilities`` 头：逗号分隔；空值 / 非法形态一律当「没声明」（宽容读取）。"""
+    if not value:
+        return []
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def capabilities_payload(*, server_time: "object", client_version: str | None = None,
+                        client_capabilities: "list[str] | None" = None) -> dict:
+    """spec ``ProtocolCapabilities``：双方只启用交集；未知 capability 忽略不报错（INV-05）。"""
+    effective = capability_intersection(client_capabilities)
+    return {
+        "protocol_version": facts.PROTOCOL_VERSION,
+        "min_supported_version": min_supported_version(),
+        "capabilities": [
+            {"id": item["id"], "version": item["version"], "status": item["status"]}
+            for item in CAPABILITIES
+        ],
+        "enabled": effective,
+        "client_protocol_version": client_version or facts.PROTOCOL_VERSION,
+        "server_time": _iso(server_time),
+    }
+
+
+def _iso(moment: object) -> str | None:
+    if moment is None:
+        return None
+    return moment.astimezone(__import__("datetime").timezone.utc).isoformat().replace(
+        "+00:00", "Z")
+
+
+def validate_deprecation(entry: dict, *, expected_min_days: int = facts.DEPRECATION_MIN_DAYS,
+                         expected_min_majors: int = facts.DEPRECATION_MIN_MAJORS) -> None:
+    """弃用条目校验（spec：提前 ≥90 天公示、且至少跨 2 个 MAJOR）。"""
+    from datetime import datetime
+
+    required = ("path", "method", "deprecated_at", "sunset_at")
+    missing = [key for key in required if not entry.get(key)]
+    if missing:
+        raise InvalidArgument(f"弃用条目缺少 {','.join(missing)}", field=missing[0])
+    try:
+        deprecated = datetime.fromisoformat(str(entry["deprecated_at"]).replace("Z", "+00:00"))
+        sunset = datetime.fromisoformat(str(entry["sunset_at"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise InvalidArgument("弃用条目时间必须是 RFC 3339", field="sunset_at") from exc
+    if (sunset - deprecated).days < expected_min_days:
+        raise InvalidArgument(f"弃用公示期必须 ≥{expected_min_days} 天", field="sunset_at")
+    majors = entry.get("supported_majors")
+    if not isinstance(majors, (list, tuple)) or len(set(map(str, majors))) < expected_min_majors:
+        raise InvalidArgument(f"弃用必须跨 ≥{expected_min_majors} 个 MAJOR",
+                              field="supported_majors")
+
+
+def deprecations_payload(*, protocol_major: int | None = None) -> dict:
+    """spec ``DeprecationList``；可按 MAJOR 过滤（``supported_majors`` 命中或 ``all``）。"""
+    if protocol_major is not None and (isinstance(protocol_major, bool)
+                                       or not isinstance(protocol_major, int)
+                                       or protocol_major < 1):
+        raise InvalidArgument("protocol_major 必须是 ≥1 的整数", field="protocol_major")
+    items = []
+    for entry in DEPRECATIONS:
+        majors = [str(item) for item in entry.get("supported_majors", [])]
+        if protocol_major is not None and "all" not in majors \
+                and str(protocol_major) not in majors:
+            continue
+        items.append(dict(entry))
+    return {"items": items, "protocol_version": facts.PROTOCOL_VERSION}
+
+
 __all__ = [
     "parse", "supported_majors", "min_supported_version", "is_supported", "upgrade_hint",
-    "check", "capability_intersection",
+    "check", "capability_intersection", "CAPABILITIES", "SERVER_CAPABILITIES", "DEPRECATIONS",
+    "parse_capability_header", "capabilities_payload", "validate_deprecation",
+    "deprecations_payload",
 ]

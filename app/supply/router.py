@@ -36,13 +36,16 @@ from typing import Any, Awaitable, Callable
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import clock, errors, idempotency, models, protocol, security
+from . import (clock, config_source, errors, features, heartbeat, idempotency, models,
+               policy, protocol, security, state as state_machine, upstream)
 
 log = logging.getLogger("djb.supply.http")
 
 router = APIRouter(prefix="/api/v1", tags=["node"])
 
 NODE_KEY_HEADER = "X-Client-Key"
+PROTOCOL_HEADER = "DJB-Protocol-Version"
+CAPABILITIES_HEADER = "DJB-Capabilities"
 IDEMPOTENCY_HEADER = "X-DJB-Idempotency-Key"
 STEP_UP_HEADER = "X-Admin-Step-Up"
 
@@ -415,9 +418,9 @@ def unbind_node(request: Request) -> JSONResponse:
 
 
 # --------------------------------------------------------------------------- 准入审核（管理面）
-@router.post("/admin/supply/nodes/{node_id}/review", operation_id="reviewSupplyNode",
+@router.post("/admin/supply/nodes/{id}/review", operation_id="reviewSupplyNode",
              summary="节点准入审核（approve / reject）")
-async def review_supply_node(node_id: str, request: Request) -> JSONResponse:
+async def review_supply_node(id: str, request: Request) -> JSONResponse:  # noqa: A002 (spec 路径参数名)
     request_id = _request_id(request)
     try:
         body = await _body(request)
@@ -434,7 +437,7 @@ async def review_supply_node(node_id: str, request: Request) -> JSONResponse:
                     return _ok(record.response, request_id)
             with c.transaction():
                 node = models.review(
-                    c, node_id=node_id, decision=body.get("decision"),
+                    c, node_id=id, decision=body.get("decision"),
                     reason=body.get("reason"), actor=str(principal.get("admin_id")),
                     tier=body.get("tier"), now=clock.utcnow(), trace_id=request_id)
                 payload = _review_ack(node)
@@ -446,6 +449,210 @@ async def review_supply_node(node_id: str, request: Request) -> JSONResponse:
         return _fail(exc, request_id)
     except Exception:                                          # pragma: no cover - 兜底
         log.exception("supply.review.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+
+# --------------------------------------------------------------------------- 心跳 + 容量公告（T3）
+@router.post("/node/heartbeat", operation_id="postNodeHeartbeat",
+             summary="心跳 + 本轮容量公告")
+async def post_node_heartbeat(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                node_id = body.get("node_id")
+                if not isinstance(node_id, str) or auth.node.id != node_id.strip():
+                    raise errors.NodeNotFound("节点不存在", node_id=str(node_id))
+                result = heartbeat.pulse(
+                    c, node=auth.node,
+                    protocol_version=body.get("protocol_version"),
+                    policy_version=body.get("policy_version"),
+                    runtime_state=body.get("runtime_state"),
+                    capacity_entries=body.get("capacity"),
+                    load=body.get("load"),
+                    now=clock.utcnow(), trace_id=request_id)
+                payload = heartbeat.heartbeat_payload(result)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.heartbeat.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 上游申报（T4）
+@router.post("/node/upstream", operation_id="declareNodeUpstream", summary="申报接入方式（A1/A2/B）")
+async def declare_node_upstream(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                declared, created = upstream.declare(
+                    c, node=auth.node,
+                    access_type=body.get("access_type"),
+                    base_url=body.get("base_url"),
+                    models_list=body.get("models"),
+                    upstream_protocol=body.get("protocol"),
+                    credential_handle=body.get("credential_handle"),
+                    now=clock.utcnow(), trace_id=request_id)
+                payload = upstream.upstream_payload(declared)
+                payload["created"] = created
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.upstream.declare_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/node/upstream/probe", operation_id="reportNodeUpstreamProbe",
+             summary="上报本地体检结论（回执式，服务端不探测）")
+async def report_node_upstream_probe(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                           now=clock.utcnow())
+                updated = upstream.report_probe(
+                    c, node=auth.node,
+                    upstream_id=body.get("upstream_id"),
+                    reachable=body.get("reachable"),
+                    latency_ms=body.get("latency_ms"),
+                    error_class=body.get("error_class"),
+                    model_checks=body.get("model_checks"),
+                    checked_at=body.get("checked_at"),
+                    now=clock.utcnow(), trace_id=request_id)
+                payload = upstream.probe_ack_payload(updated, clock.utcnow())
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem, request_hash=request_hash,
+                                     status_code=200, response=payload, now=clock.utcnow())
+            return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.upstream.probe_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+
+# --------------------------------------------------------------------------- 策略（T5）
+POLICY_ETAG_SWITCH = "supply.policy_etag_304"
+_CONDITIONAL_SWITCH = POLICY_ETAG_SWITCH
+
+
+@router.get("/node/policy", operation_id="getNodePolicy", summary="拉取策略与配额（版本化）")
+def get_node_policy(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        with _connection() as c:
+            auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                       now=clock.utcnow())
+            node = auth.node
+            # pending（未准入）/ retired 不发放策略；frozen 允许读（只读提示，M02 §3）
+            if node.state == "retired":
+                raise errors.NodeStateForbidden("节点已清退，不再下发策略", state=node.state,
+                                                action="fetch_policy")
+            if node.state not in ("active", "frozen"):
+                state_machine.require_active(node.state, action="fetch_policy")
+            # 协议版本：优先用请求头（spec ProtocolVersion），缺省用节点注册时的版本
+            protocol.check(request.headers.get(PROTOCOL_HEADER) or node.protocol_version)
+            with c.transaction():
+                current = policy.ensure_for_node(c, node=node, now=clock.utcnow())
+            body = policy.policy_payload(current)
+            etag = current.etag
+            if features.enabled(_CONDITIONAL_SWITCH) \
+                    and policy.etag_matches(request.headers.get("If-None-Match"), current):
+                return JSONResponse(None, status_code=304,
+                                    headers=_headers(request_id, ETag=etag))
+            return _ok(body, request_id, ETag=etag)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.policy.failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+# --------------------------------------------------------------------------- 协议（T6）
+@router.get("/protocol/capabilities", operation_id="getProtocolCapabilities",
+            summary="能力协商（双方只启用交集）", openapi_extra={"security": []})
+def get_protocol_capabilities(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        client_version = request.headers.get(PROTOCOL_HEADER)
+        if client_version:
+            protocol.check(client_version)
+        payload = protocol.capabilities_payload(
+            server_time=clock.utcnow(), client_version=client_version,
+            client_capabilities=protocol.parse_capability_header(
+                request.headers.get(CAPABILITIES_HEADER)))
+        return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.protocol.capabilities_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.get("/protocol/deprecations", operation_id="getProtocolDeprecations",
+            summary="弃用清单与退役日期", openapi_extra={"security": []})
+def get_protocol_deprecations(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        raw_major = request.query_params.get("protocol_major")
+        protocol_major = None
+        if raw_major is not None:
+            try:
+                protocol_major = int(raw_major)
+            except (TypeError, ValueError) as exc:
+                raise errors.InvalidArgument("protocol_major 必须是整数",
+                                             field="protocol_major") from exc
+        return _ok(protocol.deprecations_payload(protocol_major=protocol_major), request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.protocol.deprecations_failed request_id=%s", request_id)
         return _server_error(request_id)
 
 

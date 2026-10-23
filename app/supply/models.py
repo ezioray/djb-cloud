@@ -58,7 +58,7 @@ NODE_COLUMNS: tuple[str, ...] = (
     "capabilities", "policy_version", "region", "labels", "runtime_state", "bound_account_id",
     "bound_at", "revoked_at", "key_id", "key_issued_at", "key_revoked_at", "prev_key_id",
     "prev_key_hash", "prev_key_expires_at", "reviewed_at", "reviewed_by",
-    "retire_requested_at", "retired_at", "updated_at",
+    "retire_requested_at", "retired_at", "updated_at", "heartbeat_seq", "offline_announced_at",
 )
 _COLS_SQL = ", ".join(NODE_COLUMNS)
 
@@ -136,6 +136,8 @@ class Node:
     retire_requested_at: datetime | None
     retired_at: datetime | None
     updated_at: datetime
+    heartbeat_seq: int
+    offline_announced_at: datetime | None
 
     @property
     def lifecycle_state(self) -> str:
@@ -669,6 +671,43 @@ def set_bound_tenant(c, node: Node, tenant_id: uuid.UUID, *, now: datetime | Non
     return get_node(c, node.id)
 
 
+def append_node_event(c, *, node_id: str, kind: str, from_state: str | None = None,
+                      to_state: str | None = None, reason_code: str | None = None,
+                      reason: str | None = None, actor: str | None = None,
+                      payload: Mapping[str, Any] | None = None,
+                      now: datetime | None = None) -> uuid.UUID:
+    """公共留痕入口（T3/T4 复用）：往只追加的 ``node_events`` 写一条。"""
+    return _event_row_id(c, node_id=node_id, kind=kind, from_state=from_state,
+                         to_state=to_state, reason_code=reason_code, reason=reason,
+                         actor=actor, payload=payload, now=now)
+
+
+def emit_upstream_changed(c, *, node_id: str, upstream_type: str, state: str, trace_id: str,
+                          moment: datetime, causation_id: uuid.UUID) -> dict[str, Any]:
+    """上游状态变化事件（M02 §4.2：payload = node_id, upstream_type, state）。"""
+    return events.node_upstream_changed(c, node_id=node_id, upstream_type=upstream_type,
+                                        state=state, trace_id=trace_id, occurred_at=moment,
+                                        causation_id=causation_id)
+
+
+# --------------------------------------------------------------------------- 容量公告事件（T3）
+def emit_capacity_announced(c, *, node_id: str, announcement: Any, trace_id: str,
+                            moment: datetime) -> dict[str, Any]:
+    """心跳携带**有效**公告时发 ``capacity.announced``（M02 §4.2）。
+
+    ``causation_id`` 直接用 announcement_id：公告明细已在 ``capacity_announcements``，
+    不再往 ``node_events`` 里写一条每心跳一条的噪声。
+    """
+    capabilities = [dict(item) for item in announcement.capabilities]
+    models_list = sorted({str(item["model"]) for item in capabilities})
+    gpu = next((item.get("gpu") for item in capabilities if item.get("gpu")), None)
+    ram_values = [float(item.get("ram_gb") or 0) for item in capabilities]
+    ram = int(max(ram_values)) if ram_values and max(ram_values) > 0 else None
+    return events.capacity_announced(c, node_id=node_id, models=models_list, gpu=gpu, ram=ram,
+                                     expires_at=announcement.expires_at, trace_id=trace_id,
+                                     announced_at=moment, causation_id=announcement.id)
+
+
 # --------------------------------------------------------------------------- 审核（T2）
 def review(c, *, node_id: str, decision: Any, reason: Any, actor: Any,
            tier: Any = None, now: datetime | None = None,
@@ -790,5 +829,6 @@ __all__ = [
     "authenticate", "register", "rotate_key",
     "issue_binding_code", "bind", "unbind", "set_bound_tenant",
     "review", "normalize_runtime_state", "record_runtime_state", "list_nodes",
-    "record_credential_rejection", "iso", "key_material",
+    "record_credential_rejection", "iso", "key_material", "emit_capacity_announced",
+    "append_node_event", "emit_upstream_changed",
 ]

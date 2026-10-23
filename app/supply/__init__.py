@@ -27,19 +27,21 @@
 """
 from __future__ import annotations
 
-from . import (clock, errors, events, facts, features, idempotency, migrate, models, protocol,
-               router, security, state)
+from . import (audit, capacity, clock, config_source, errors, events, facts, features,
+               heartbeat, idempotency, jobs, migrate, models, policy, protocol, router, security,
+               state, upstream)
 from .models import (NODE_COLUMNS, AuthResult, Binding, BindingCode, KeyRotation, Node,
                      RegisterResult, authenticate, bind, binding_dict, binding_of, find_by_fingerprint,
                      get_node, issue_binding_code, list_nodes, normalize_runtime_state, register,
                      review, rotate_key, unbind, uuid7)
 from .state import TRANSITIONS, can_transition, derive_online, derive_presence, legal_targets
 
-__version__ = "0.2.0-dev-m02t2"
+__version__ = "0.6.0-dev-m02t6"
 
 __all__ = [
     "models", "state", "protocol", "security", "events", "facts", "features", "idempotency",
-    "migrate", "router", "clock", "errors",
+    "migrate", "router", "clock", "errors", "capacity", "config_source", "heartbeat", "jobs",
+    "upstream", "policy", "audit",
     "Node", "Binding", "AuthResult", "RegisterResult", "KeyRotation", "BindingCode",
     "NODE_COLUMNS",
     "get_node", "find_by_fingerprint", "binding_of", "binding_dict", "authenticate",

@@ -70,11 +70,11 @@ def test_check_returns_parsed_triple_when_supported():
 def test_capability_intersection_ignores_unknown():
     client = ["capacity_announcement", "brand_new_thing"]
     assert protocol.capability_intersection(client) == ["capacity_announcement"]
-    assert protocol.capability_intersection([]) == sorted(facts.SERVER_CAPABILITIES)
-    assert protocol.capability_intersection(None) == sorted(facts.SERVER_CAPABILITIES)
+    assert protocol.capability_intersection([]) == sorted(protocol.SERVER_CAPABILITIES)
+    assert protocol.capability_intersection(None) == sorted(protocol.SERVER_CAPABILITIES)
     assert protocol.capability_intersection(["x"], server=[]) == []
 
 
 def test_server_capabilities_are_declared_once():
-    assert len(set(facts.SERVER_CAPABILITIES)) == len(facts.SERVER_CAPABILITIES)
-    assert "runtime_state" in facts.SERVER_CAPABILITIES
+    assert len(set(protocol.SERVER_CAPABILITIES)) == len(protocol.SERVER_CAPABILITIES)
+    assert "runtime_state" in protocol.SERVER_CAPABILITIES

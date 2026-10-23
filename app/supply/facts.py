@@ -89,14 +89,11 @@ PROTOCOL_SUPPORT_DEPTH = 3         # N / N-1 / N-2
 PROTOCOL_CAPABILITY_HEADER = "X-DJB-Capabilities"
 DEPRECATION_MIN_DAYS = 90          # 弃用提前 ≥90 天
 DEPRECATION_MIN_MAJORS = 2         # 且 ≥2 个 MAJOR
-SERVER_CAPABILITIES: tuple[str, ...] = (
-    # S1 服务端能力集（T6 的 /api/v1/protocol/capabilities 从这里出交集）
-    "capacity_announcement",
-    "policy_etag",
-    "protocol_deprecations",
-    "runtime_state",
-    "upstream_probe_receipt",
-)
+CAPABILITY_STATUSES: tuple[str, ...] = ("stable", "beta", "deprecated")
+"""能力状态枚举（spec ``ProtocolCapabilities.capabilities[].status``）。
+
+服务端**能力清单**（含版本与状态）在 ``protocol.CAPABILITIES`` 单点定义，facts 只放枚举。
+"""
 
 # --------------------------------------------------------------------------- 幂等与事件
 IDEMPOTENCY_TTL_HOURS = 24         # M02 §3 幂等段（00-conventions §5 同窗口）
