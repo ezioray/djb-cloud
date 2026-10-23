@@ -9,6 +9,8 @@
     POST   /api/v1/node/binding                          bindNode              200
     DELETE /api/v1/node/binding                          unbindNode            200
     POST   /api/v1/admin/supply/nodes/{id}/review        reviewSupplyNode      200
+    GET    /api/v1/user/nodes                            listUserNodes         200（spec 1.2.6）
+    POST   /api/v1/user/nodes/{node_id}/unbind           unbindUserNode        200（spec 1.2.6，step-up）
 
 约定（00-conventions §5 / spec ``Error``）：
 
@@ -31,13 +33,14 @@ from __future__ import annotations
 
 import inspect
 import logging
+import uuid
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import (clock, config_source, errors, features, heartbeat, idempotency, models,
-               policy, protocol, security, state as state_machine, upstream)
+               policy, protocol, security, state as state_machine, upstream, user_nodes)
 
 log = logging.getLogger("djb.supply.http")
 
@@ -51,6 +54,7 @@ STEP_UP_HEADER = "X-Admin-Step-Up"
 
 AdminAuthenticator = Callable[[Request], "dict[str, Any] | Awaitable[dict[str, Any]]"]
 _admin_authenticator: AdminAuthenticator | None = None
+_user_authenticator: AdminAuthenticator | None = None
 
 
 # --------------------------------------------------------------------------- 接线钩子
@@ -62,6 +66,44 @@ def set_admin_authenticator(authenticator: AdminAuthenticator | None) -> None:
 
 def admin_authenticator() -> AdminAuthenticator | None:
     return _admin_authenticator
+
+
+def set_user_authenticator(authenticator: AdminAuthenticator | None) -> None:
+    """注入用方鉴权（合并时由 Lead 接 M01 会话 / API Key）。传 `None` 恢复 fail-closed。"""
+    global _user_authenticator
+    _user_authenticator = authenticator
+
+
+def user_authenticator() -> AdminAuthenticator | None:
+    return _user_authenticator
+
+
+def _user_principal_sync(request: Request) -> dict[str, Any]:
+    """用方主体（`/api/v1/user/*`）：未接线即 401（fail-closed），不静默放行。
+
+    GET 端点走同步钩子（与 M05 同款）：钩子返回 awaitable 时不支持，直接 401 而不是猜。
+    """
+    if _user_authenticator is None:
+        raise errors.UserAuthUnavailable(
+            "用方鉴权未接线：合并时由 Lead 注入 M01 会话 / API Key（fail-closed）")
+    principal = _user_authenticator(request)
+    if inspect.isawaitable(principal):                          # pragma: no cover - 防御
+        principal.close()
+        raise errors.UserAuthUnavailable("用方鉴权钩子必须是同步函数")
+    if not isinstance(principal, dict):
+        raise errors.UserAuthUnavailable("用方鉴权返回非法主体")
+    return principal
+
+
+def _account_uuid(principal: dict[str, Any]) -> uuid.UUID:
+    """用方主体必须有账户（M01）；缺失 / 非法即 401（不猜、不回落）。"""
+    value = principal.get("account_id")
+    if not value:
+        raise errors.Unauthorized("主体缺少 account_id")
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise errors.Unauthorized("主体 account_id 非法") from exc
 
 
 async def _admin_principal(request: Request) -> dict[str, Any]:
@@ -656,5 +698,71 @@ def get_protocol_deprecations(request: Request) -> JSONResponse:
         return _server_error(request_id)
 
 
+# --------------------------------------------------------------------------- 用户态节点面（spec 1.2.6）
+@router.get("/user/nodes", operation_id="listUserNodes",
+            summary="我的节点（绑定状态 / 最近心跳 / 已生效版本）")
+def list_user_nodes(request: Request) -> JSONResponse:
+    """分页返回本账户节点（含已解绑历史）；越权一律 404（不泄露存在性）。"""
+    request_id = _request_id(request)
+    try:
+        principal = _user_principal_sync(request)
+        account_id = _account_uuid(principal)
+        limit = None
+        raw_limit = request.query_params.get("limit")
+        if raw_limit is not None:
+            if not raw_limit.strip().isdigit():
+                raise errors.InvalidArgument("limit 必须是整数", field="limit")
+            limit = int(raw_limit)
+        with _connection() as c:
+            payload = user_nodes.list_page(
+                c, account_id=account_id, state=request.query_params.get("state"),
+                lifecycle_state=request.query_params.get("lifecycle_state"),
+                cursor=request.query_params.get("cursor"), limit=limit)
+        return _ok(payload, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.user_nodes.list_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/user/nodes/{node_id}/unbind", operation_id="unbindUserNode",
+             summary="解绑我的节点（幂等；需 step-up）")
+async def unbind_user_node(node_id: str, request: Request) -> JSONResponse:
+    """会话态解绑：撤销客户端密钥 + 解除绑定；重复调用返回同一结果（spec 1.2.6）。"""
+    request_id = _request_id(request)
+    try:
+        principal = _user_principal_sync(request)
+        account_id = _account_uuid(principal)
+        if not principal.get("step_up"):
+            raise errors.StepUpRequired("解绑节点需要 step-up（M02 §4.1）")
+        body = await _body(request)
+        _scan(body, request, request_id)
+        key_idem = _idem_key(request)
+        scope = idempotency.scope_of(request.method, request.url.path)
+        request_hash = idempotency.body_hash(body)
+        with _connection() as c:
+            if key_idem:
+                record = idempotency.lookup(c, scope=scope, key=key_idem,
+                                            request_hash=request_hash)
+                if record is not None:
+                    return _ok(record.response, request_id)
+            with c.transaction():
+                view = user_nodes.unbind(c, node_id=node_id, account_id=account_id,
+                                         reason=body.get("reason"), now=clock.utcnow(),
+                                         trace_id=request_id)
+                if key_idem:
+                    idempotency.save(c, scope=scope, key=key_idem,
+                                     request_hash=request_hash, status_code=200,
+                                     response=view, now=clock.utcnow())
+            return _ok(view, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.user_nodes.unbind_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
 __all__ = ["router", "set_admin_authenticator", "admin_authenticator",
+           "set_user_authenticator", "user_authenticator",
            "NODE_KEY_HEADER", "IDEMPOTENCY_HEADER", "STEP_UP_HEADER"]

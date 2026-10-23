@@ -101,6 +101,22 @@ class AdminAuthUnavailable(SupplyError):
     reason = "admin_auth_unavailable"
 
 
+class UserAuthUnavailable(SupplyError):
+    """用方鉴权未接线 / 钩子返回非法主体（合并期由 Lead 注入 M01）：**fail-closed**。"""
+
+    status_code = 401
+    code = "40101"
+    reason = "user_auth_unavailable"
+
+
+class Unauthorized(SupplyError):
+    """用方主体缺少 / 非法 account_id（40101；不猜、不回落）。"""
+
+    status_code = 401
+    code = "40101"
+    reason = "unauthorized"
+
+
 # --------------------------------------------------------------------------- 403xx
 class NodeStateForbidden(SupplyError):
     """节点状态不允许该动作（40305，CR-7）。details 带当前状态与可做动作。"""
@@ -238,6 +254,7 @@ def error_type_for(status_code: int) -> str:
 __all__ = [
     "SupplyError", "InvalidArgument", "CredentialFieldRejected",
     "NodeKeyMissing", "NodeKeyInvalid", "NodeKeyRevoked", "AdminAuthUnavailable",
+    "UserAuthUnavailable", "Unauthorized",
     "NodeStateForbidden", "NodeNotFound", "AccountNotFound", "UpstreamNotFound",
     "FingerprintConflict", "BindingConflict", "KeyStateConflict", "RetireIrreversible",
     "BindingCodeInvalid", "IdempotencyConflict", "PolicyVersionRegression",

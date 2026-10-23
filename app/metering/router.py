@@ -7,6 +7,7 @@
     GET  /api/v1/node/receipts/{receipt_id}     getNodeReceipt          200 / 404
     GET  /api/v1/user/usage/summary             getUserUsageSummary     200
     GET  /api/v1/user/usage/records             listUserUsageRecords    200
+    GET  /api/v1/user/billing/export            exportUserBilling       200（流式 CSV / JSON，spec 1.2.6）
 
 约定（00-conventions §5 / spec ``Error``）：
 
@@ -35,9 +36,9 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from . import bills, clock, corrections, errors, facts, models, outbox, receipts, usage
+from . import bills, clock, corrections, errors, export, facts, models, outbox, receipts, usage
 
 log = logging.getLogger("djb.metering.http")
 
@@ -309,6 +310,35 @@ def list_user_usage_records(request: Request) -> JSONResponse:
         return _server_error(request_id)
 
 
+# --------------------------------------------------------------------------- 账单导出（spec 1.2.6）
+@router.get("/user/billing/export", operation_id="exportUserBilling")
+def export_user_billing(request: Request) -> Any:
+    """账单导出（流式 CSV / JSON；只导本人范围，Content-Disposition + TTL 头）。"""
+    request_id = _request_id(request)
+    try:
+        principal = _principal_sync(_user_authenticator, request, what="用方")
+        account_id = _account_id(principal)
+        mode = export.validate_format(request.query_params.get("format"))
+        start, end = _default_window(request)
+        export.validate_window(start, end)
+        expires = export.expires_at(clock.utcnow())
+        name = export.filename(date_from=start, date_to=end, fmt=mode)
+        headers = _headers(request_id, **{
+            export.EXPORT_DISPOSITION_HEADER: f'attachment; filename="{name}"',
+            export.EXPORT_EXPIRES_HEADER: models.iso(expires),
+            "Cache-Control": "no-store",
+        })
+        body = export.stream(connection_factory=_connection, account_id=account_id,
+                             date_from=start, date_to=end, fmt=mode, request_id=request_id)
+        return StreamingResponse(body, media_type=facts.EXPORT_MEDIA_TYPES[mode],
+                                 headers=headers)
+    except errors.MeteringError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                      # pragma: no cover - 防御
+        log.exception("metering.http.export_failed", extra={"request_id": request_id})
+        return _server_error(request_id)
+
+
 # --------------------------------------------------------------------------- 上游账单导入
 @router.post("/admin/usage/upstream-bills")
 async def import_upstream_bills(request: Request) -> JSONResponse:
@@ -372,5 +402,5 @@ async def create_usage_correction(request: Request) -> JSONResponse:
 
 __all__ = ["router", "set_node_authenticator", "set_user_authenticator",
            "set_admin_authenticator", "submit_node_receipts", "get_node_receipt",
-           "get_user_usage_summary", "list_user_usage_records", "import_upstream_bills",
-           "create_usage_correction"]
+           "get_user_usage_summary", "list_user_usage_records", "export_user_billing",
+           "import_upstream_bills", "create_usage_correction"]

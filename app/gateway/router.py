@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -198,7 +198,11 @@ _MODEL_FIELDS = ("id", "object", "created", "owned_by", "context_window", "unit"
 
 
 def _model_payload(item: dict[str, Any]) -> dict[str, Any]:
-    """spec ``Model``：``id`` / ``object`` / ``owned_by`` 必填；其余只加不改。"""
+    """spec ``Model``：``id`` / ``object`` / ``owned_by`` 必填；其余只加不改。
+
+    ``price_version`` 是 spec 1.2.6 的**可选**字段（string|null）：有快照版本就带上，
+    没有就缺省——公开侧 / 降级镜像允许不返回，客户端不得据此推断结算价。
+    """
     payload: dict[str, Any] = {"id": str(item.get("id") or item.get("slug") or ""),
                                "object": "model",
                                "owned_by": str(item.get("owned_by") or "djb")}
@@ -207,7 +211,26 @@ def _model_payload(item: dict[str, Any]) -> dict[str, Any]:
             continue
         if item.get(field_name) is not None:
             payload[field_name] = item[field_name]
+    version = _price_version(item)
+    if version is not None:
+        payload["price_version"] = version
     return payload
+
+
+def _price_version(item: Mapping[str, Any]) -> str | None:
+    """价格快照版本（M04 ``model_catalog.price_version`` / 嵌套 ``price.price_version``）。
+
+    宽容读取（INV-M03-07）：扁平字段优先，其次嵌套 ``price``；非字符串 / 空串一律不回
+    （不猜、不把内部对象序列化进响应）。
+    """
+    value = item.get("price_version")
+    if value is None:
+        price = item.get("price")
+        if isinstance(price, Mapping):
+            value = price.get("price_version")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 # --------------------------------------------------------------------------- 慢任务
