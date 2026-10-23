@@ -283,6 +283,10 @@ def _scan_login(c, ticket: str, *, now: datetime, client_ip: str | None,
                            scan={"status": state.status,
                                  "expires_at": state.expires_at.isoformat(),
                                  "retry_after_s": state.retry_after_s(now)})
+    if state.status in ("expired", "consumed"):
+        # 到期 / 已换取：一律 40905（ScanStatus.expired 是终态；不能落到 404）
+        raise errors.ScanTicketInvalid(
+            f"扫码票据已不可用：{state.status}", status=state.status)
     account = models.get_account(c, state.account_id)
     if account.is_closed:
         raise models.AccountClosed("账户已注销：禁止登录", account_id=str(account.id))

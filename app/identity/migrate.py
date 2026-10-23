@@ -29,9 +29,19 @@ MODULE_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = MODULE_DIR.parents[1]
 MIGRATIONS_DIR = REPO_ROOT / "migrations"
 
-# 一次正向迁移只属于一个模块（00-conventions §7.1）：M01 段 = 1xx
+# 一次正向迁移只属于一个模块（00-conventions §7.1）：M01 段 = 1xx（100–199）。
+# 注意：不能用 glob("1*.sql") —— 那会把 1000_config_*、1100_risk_*、1201_*、13xx、14xx
+# 一起当成 M01 迁移执行（回滚只删 v_identity_*，别的模块的视图就会残留）。
 BASE_MIGRATIONS = ("001_init.sql", "002_api_keys.sql")
-MODULE_MIGRATIONS = tuple(sorted(p.name for p in MIGRATIONS_DIR.glob("1*.sql")))
+
+
+def _module_number(name: str) -> int:
+    head = name.split("_", 1)[0]
+    return int(head) if head.isdigit() else -1
+
+
+MODULE_MIGRATIONS = tuple(sorted(
+    (p.name for p in MIGRATIONS_DIR.glob("*.sql") if 100 <= _module_number(p.name) <= 199)))
 
 # 回滚：逆序删除本模块新增对象；**存量对象只删新增列**，不删表、不改类型（00-conventions §7.2）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
