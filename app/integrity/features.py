@@ -4,7 +4,10 @@
 与 M02/M10 的 features.py 同款理由：「这段代码要不要启用」属于**发布节奏**，不是业务配置；
 不能塞进可发布的配置表（否则自举：要先读配置才知道能不能读配置）。
 
-本模块只有一个开关 ``supply.freeze.enabled``（M17 §9）：
+本模块的开关（M17 §9，全部默认关闭、无写面）：
+
+``supply.freeze.enabled``（C14 冻结）
+``supply.attestation.enabled``（C12 证明）——原文档段：
 
 * owner = ``risk-seat``（风险席，因为冻结是风控处置动作）；
 * expire_at = ``2026-12-31``；到期未清理要计数并回写；
@@ -65,6 +68,15 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
                        "已冻结金额随 hold 解除自然回到原待分润；保留案件 / 事件记录可查"),
         description=("M17 §6.1 待分润冻结（C14，S2 只冻结不罚没）：关闭时 create/release 一律 "
                      "fail-closed（503/50001），GET 只读保留"),
+    ),
+    FeatureSwitch(
+        name="supply.attestation.enabled",
+        owner="lead",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭 → 停止签发新挑战与客户端上报（写接口 503/50001，fail-closed）；"
+                       "已存证明保留只读，按 TTL 自然过期；不删除挑战 / 事件记录；不改账本"),
+        description=("M17 §5 模型身份证明（C12 服务端 L3+ 核心）：默认关闭，S2 测试网用 "
+                     "DJB_ATTEST=1 显式激活；关闭时读接口只读"),
     ),
 )
 

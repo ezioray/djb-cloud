@@ -24,7 +24,7 @@ from typing import Any
 
 __all__ = [
     "IntegrityError", "BadRequest", "Unauthorized", "Forbidden", "NotFound", "Conflict",
-    "FeatureUnavailable", "ServerError", "error_type_for",
+    "FeatureUnavailable", "TokenizerUnavailable", "ServerError", "error_type_for",
 ]
 
 TYPE_FOR_STATUS: dict[int, str] = {
@@ -117,6 +117,20 @@ class FeatureUnavailable(IntegrityError):
     code = 50001
     error_type = "server_error"
     reason = "feature_disabled"
+
+
+class TokenizerUnavailable(FeatureUnavailable):
+    """服务端 tokenizer provider 未接线 / 返回非法计数（503 / 50001，fail-closed）。
+
+    为什么不复用 50903：spec 里 50903 = 502 upstream_error（上游失败），用于
+    「服务端自身能力未接线」会误导；本模块沿用仓库既有 503 + 50001 口径
+    （与 C14 的 feature_disabled 一致），用 ``reason=tokenizer_unavailable`` 区分。
+    """
+
+    status_code = 503
+    code = 50001
+    error_type = "server_error"
+    reason = "tokenizer_unavailable"
 
 
 class ServerError(IntegrityError):

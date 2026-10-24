@@ -99,3 +99,48 @@ def feature_on(monkeypatch):
 
     monkeypatch.setattr(features, "enabled", lambda name: True)
     return True
+
+
+@pytest.fixture(autouse=True)
+def _reset_integrity_hooks(monkeypatch):
+    """每个用例后复位鉴权钩子 / tokenizer provider / DJB_ATTEST 环境（不污染他人）。"""
+    monkeypatch.delenv("DJB_ATTEST", raising=False)
+    monkeypatch.delenv("DJB_FREEZE", raising=False)
+    from app.integrity import attest_router, providers
+    from app.integrity import router as hold_router
+
+    providers.reset_token_counter()
+    try:
+        yield
+    finally:
+        attest_router.set_node_authenticator(None)
+        attest_router.set_admin_authenticator(None)
+        hold_router.set_admin_authenticator(None)
+        providers.reset_token_counter()
+
+
+@pytest.fixture
+def fake_tokenizer():
+    """注入确定性 tokenizer（按空白切分），并把版本钉成 fake-1。"""
+    from app.integrity import providers
+
+    counter = lambda prompt, model: len(prompt.split())          # noqa: E731
+    providers.set_token_counter(counter, version="fake-1")
+    return counter
+
+
+@pytest.fixture
+def fixed_tokenizer():
+    """注入「固定计数」tokenizer（用例自己控制 expected 值，便于测容差边界）。"""
+
+    from app.integrity import providers
+
+    class _Fixed:
+        value = 100
+
+        def __call__(self, prompt: str, model: str) -> int:
+            return self.value
+
+    counter = _Fixed()
+    providers.set_token_counter(counter, version="fixed-1")
+    return counter
