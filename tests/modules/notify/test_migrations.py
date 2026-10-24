@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M12 迁移验收：空库 001→1205、12xx 重复执行幂等、回滚两次干净、DB 层护栏。
+"""M12 迁移验收：空库 001→1209、12xx 重复执行幂等、回滚两次干净、DB 层护栏。
 
 对应任务卡验收 1：空库全通过 / 1201–1205 连跑两遍幂等 / 回滚两次干净。
 
@@ -32,16 +32,17 @@ from notifykit import (
 
 def test_segment_is_owned_and_ordered():
     numbers = [int(name.split("_", 1)[0]) for name in M12_MIGRATIONS]
-    assert numbers == [1201, 1202, 1203, 1204, 1205]
+    assert numbers == [1201, 1202, 1203, 1204, 1205,
+                       1206, 1207, 1208, 1209]
     assert all(1200 <= number <= 1299 for number in numbers)
     assert m12_migrate.MODULE_MIGRATIONS == M12_MIGRATIONS
     assert not [path for path in prerequisite_files() if 1200 <= int(path.name.split("_")[0])]
-    assert m12_migrate.DOWN_SQL[0][0].startswith("1205")
+    assert m12_migrate.DOWN_SQL[0][0].startswith("1209")
 
 
-def test_empty_database_upgrades_to_1205(schema):
+def test_empty_database_upgrades_to_1209(schema):
     applied = apply_migrations(schema)
-    assert applied[-5:] == list(M12_MIGRATIONS)
+    assert applied[-len(M12_MIGRATIONS):] == list(M12_MIGRATIONS)
     assert set(M12_TABLES) <= table_names(schema)
     assert all(item["applied"] for item in _status(schema))
     assert {"config_items", "ledger_entry"} <= table_names(schema)   # 前置段对象仍在
@@ -61,7 +62,7 @@ def test_rollback_twice_is_clean_and_reversible(schema):
     apply_migrations(schema)
     for _ in range(2):                                   # 回滚两次都要成功
         results = _down(schema)
-        assert [item["rc"] for item in results] == [0] * 5
+        assert [item["rc"] for item in results] == [0] * len(M12_MIGRATIONS)
     assert not set(M12_TABLES) & table_names(schema)
     assert {"config_items", "ledger_entry"} <= table_names(schema)   # 前置对象未被删
     # 回滚后再升级仍然通过（可重复执行）
@@ -73,7 +74,7 @@ def test_status_reports_missing_before_and_after(schema):
     assert all(item["applied"] is False for item in _status(schema))
     apply_migrations(schema, files=list(m12_migration_files()))
     assert all(item["applied"] is True for item in _status(schema))
-    assert m12_migrate.migration_files()[-5:] == tuple(m12_migration_files())
+    assert m12_migrate.migration_files()[-len(M12_MIGRATIONS):] == tuple(m12_migration_files())
 
 
 def _status(schema: str) -> list[dict]:
@@ -101,9 +102,24 @@ def _assert_key_objects(schema: str) -> None:
                                                   'notification_outbox_event_uq',
                                                   'webhook_subscriptions_account_url_uq',
                                                   'delivery_attempts_channel_attempt_uq')""") == 5
+        # 按 **current_schema()** 过滤：开发库是共享的，别的模块的测试 schema 里可能也有同名
+        # 函数（例如 M06 的 m12_* 副本），全局计数会让断言与本次迁移无关地失败。
         for function in ("m12_notification_guard", "m12_outbox_guard", "m12_webhook_guard",
                          "m12_attempt_immutable", "m12_forbid_truncate"):
-            assert scalar(conn, "SELECT count(*) FROM pg_proc WHERE proname = %s",
+            assert scalar(conn, """SELECT count(*) FROM pg_proc p
+                                     JOIN pg_namespace n ON n.oid = p.pronamespace
+                                    WHERE n.nspname = current_schema() AND p.proname = %s""",
+                          (function,)) == 1
+        assert scalar(conn, """SELECT count(*) FROM pg_indexes
+                                WHERE schemaname = current_schema()
+                                  AND indexname IN ('node_notifications_dedupe_uq',
+                                                    'node_notifications_source_event_uq',
+                                                    'node_notifications_pull_idx')""") == 3
+        for function in ("m12_node_payload_bad_key", "m12_node_notification_guard",
+                         "m12_node_delivery_immutable", "m12_node_event_guard"):
+            assert scalar(conn, """SELECT count(*) FROM pg_proc p
+                                     JOIN pg_namespace n ON n.oid = p.pronamespace
+                                    WHERE n.nspname = current_schema() AND p.proname = %s""",
                           (function,)) == 1
         assert count(conn, "notifications") == 0
     finally:

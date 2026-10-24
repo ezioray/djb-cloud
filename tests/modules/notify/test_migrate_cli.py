@@ -29,8 +29,9 @@ def test_migration_files_order_is_numeric():
     files = m12_migrate.migration_files()
     numbers = [int(path.name.split("_", 1)[0]) for path in files]
     assert numbers == sorted(numbers)
-    assert [path.name for path in files[-5:]] == list(m12_migrate.MODULE_MIGRATIONS)
-    assert all(int(path.name.split("_", 1)[0]) < 1200 for path in files[:-5])
+    module_count = len(m12_migrate.MODULE_MIGRATIONS)          # 1201→1209（随迁移递增）
+    assert [path.name for path in files[-module_count:]] == list(m12_migrate.MODULE_MIGRATIONS)
+    assert all(int(path.name.split("_", 1)[0]) < 1200 for path in files[:-module_count])
 
 
 def test_cli_status_and_down_on_empty_schema(monkeypatch):
@@ -47,7 +48,8 @@ def test_cli_up_with_only_module_files(monkeypatch):
     name = f"m12_cli_{uuid.uuid4().hex[:8]}"
     create_schema(name)
     try:
-        module_files = tuple(m12_migrate.migration_files()[-5:])
+        module_files = tuple(
+            m12_migrate.migration_files()[-len(m12_migrate.MODULE_MIGRATIONS):])
         monkeypatch.setattr(m12_migrate, "migration_files", lambda: module_files)
         assert m12_migrate.main(["--schema", name, "--up"]) == 0
         assert m12_migrate.main(["--schema", name, "--up"]) == 0      # 幂等重跑
