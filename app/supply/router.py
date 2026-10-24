@@ -11,6 +11,11 @@
     POST   /api/v1/admin/supply/nodes/{id}/review        reviewSupplyNode      200
     GET    /api/v1/user/nodes                            listUserNodes         200（spec 1.2.6）
     POST   /api/v1/user/nodes/{node_id}/unbind           unbindUserNode        200（spec 1.2.6，step-up）
+    POST   /api/v1/node/channel/poll                     pollNodeChannel       200 / 204（spec 1.2.9）
+    POST   /api/v1/node/channel/result                   submitNodeChannelResult 200（spec 1.2.9）
+
+节点通道（C10a）只做**契约与端点**：队列由 C10b 经 ``channel.set_channel_backend`` 注入；
+未接线一律 503 / 50903（fail-closed，不 import ``app.gateway``、不写队列、不落正文）。
 
 约定（00-conventions §5 / spec ``Error``）：
 
@@ -36,11 +41,12 @@ import logging
 import uuid
 from typing import Any, Awaitable, Callable
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
-from . import (clock, config_source, errors, features, heartbeat, idempotency, models,
-               policy, protocol, security, state as state_machine, upstream, user_nodes)
+from . import (channel, clock, config_source, errors, facts, features, heartbeat, idempotency,
+               models, policy, protocol, security, state as state_machine, upstream, user_nodes)
 
 log = logging.getLogger("djb.supply.http")
 
@@ -142,6 +148,11 @@ def _ok(payload: dict[str, Any], request_id: str, *, status_code: int = 200,
         **extra_headers: str) -> JSONResponse:
     return JSONResponse(payload, status_code=status_code,
                         headers=_headers(request_id, **extra_headers))
+
+
+def _no_content(request_id: str) -> Response:
+    """204：无任务（长轮询到点）。仍回显 ``X-Request-Id``，保证链路可追。"""
+    return Response(status_code=204, headers=_headers(request_id))
 
 
 def _fail(exc: errors.SupplyError, request_id: str) -> JSONResponse:
@@ -617,6 +628,82 @@ async def report_node_upstream_probe(request: Request) -> JSONResponse:
         log.exception("supply.upstream.probe_failed request_id=%s", request_id)
         return _server_error(request_id)
 
+
+
+# --------------------------------------------------------------------------- 节点通道（C10a）
+# 端点归 M02（鉴权 / 状态 / 协议 / 校验 / 信封 / 幂等）；队列归 M03，经 channel 接线位注入。
+@router.post("/node/channel/poll", operation_id="pollNodeChannel",
+             summary="长轮询取一个任务（wait_s 内无任务 → 204）")
+async def poll_node_channel(request: Request) -> Response:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        wait_s, capabilities = channel.validate_poll(body)
+        with _connection() as c:
+            auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                       now=clock.utcnow())
+            state_machine.require_active(auth.node.state, action="channel_poll")   # INV-02
+            protocol.check(request.headers.get(PROTOCOL_HEADER) or auth.node.protocol_version)
+        backend = channel.require_channel_backend()            # 未接线 → 503 / 50903
+        # 长等待（≤30 s）离开事件循环，且不占着数据库连接
+        job = await run_in_threadpool(backend.poll, auth.node.id, wait_s=wait_s,
+                                      capabilities=capabilities)
+        if job is None:
+            return _no_content(request_id)
+        # 只记「有/无任务 + 等待时长」：任务正文（messages/content）绝不进日志
+        log.info("supply.channel.poll", extra={"event": "channel.poll",
+                                               "node_id": auth.node.id, "dispatched": True,
+                                               "wait_s": wait_s, "trace_id": request_id})
+        return _ok({"job": dict(job), "server_time": models.iso(clock.utcnow())}, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.channel.poll_failed request_id=%s", request_id)
+        return _server_error(request_id)
+
+
+@router.post("/node/channel/result", operation_id="submitNodeChannelResult",
+             summary="回传任务结果（按 job_id 幂等）")
+async def submit_node_channel_result(request: Request) -> JSONResponse:
+    request_id = _request_id(request)
+    try:
+        body = await _body(request)
+        _scan(body, request, request_id)
+        result = channel.validate_result(body)
+        with _connection() as c:
+            auth = models.authenticate(c, _node_key(request), allow_previous=True,
+                                       now=clock.utcnow())
+            state_machine.require_active(auth.node.state, action="channel_result")  # INV-02
+            protocol.check(request.headers.get(PROTOCOL_HEADER) or auth.node.protocol_version)
+            backend = channel.require_channel_backend()        # 未接线 → 503 / 50903
+            # 结果级幂等：作用域按 job_id（不含正文），同键不同载荷由 lookup 抛 40919
+            scope = f"{facts.CHANNEL_IDEMPOTENCY_SCOPE_PREFIX}:{result['job_id']}"
+            request_hash = idempotency.body_hash(result)
+            with c.transaction():
+                record = idempotency.lookup(c, scope=scope, key=auth.node.id,
+                                            request_hash=request_hash)
+                if record is not None:                         # 同 job 同载荷重放
+                    ack = {"accepted": bool(record.response.get("accepted", True)),
+                           "duplicate": True}
+                else:
+                    reply = backend.submit(auth.node.id, result["job_id"], result)
+                    ack = {"accepted": bool(reply.get("accepted", True)),
+                           "duplicate": bool(reply.get("duplicate", False))}
+                    idempotency.save(c, scope=scope, key=auth.node.id,
+                                     request_hash=request_hash, status_code=200,
+                                     response=ack, now=clock.utcnow())
+            log.info("supply.channel.result", extra={"event": "channel.result",
+                                                     "node_id": auth.node.id,
+                                                     "status": result["status"],
+                                                     "duplicate": ack["duplicate"],
+                                                     "trace_id": request_id})
+            return _ok(ack, request_id)
+    except errors.SupplyError as exc:
+        return _fail(exc, request_id)
+    except Exception:                                          # pragma: no cover - 兜底
+        log.exception("supply.channel.result_failed request_id=%s", request_id)
+        return _server_error(request_id)
 
 
 # --------------------------------------------------------------------------- 策略（T5）

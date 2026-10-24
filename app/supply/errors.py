@@ -26,6 +26,7 @@
 42401  424     需要 step-up（管理面高危动作）
 42601  426     协议版本不兼容（INV-05，附 ``min_supported_version``）
 42901  429     限流（心跳过快；T3）
+50903  503     节点通道不可用（后端未接线 / 通道下游异常；spec 1.2.9 / C10a）
 ===  ======  ====================================================
 """
 from __future__ import annotations
@@ -133,6 +134,14 @@ class NodeNotFound(SupplyError):
     reason = "node_not_found"
 
 
+class ChannelJobNotFound(SupplyError):
+    """通道任务不存在 / 不属于该节点（40401；与节点面其余越权口径一致，不泄露存在性）。"""
+
+    status_code = 404
+    code = "40401"
+    reason = "channel_job_not_found"
+
+
 class UpstreamNotFound(SupplyError):
     """上游申报不存在 / 不属于该节点（40401；不泄露他人节点存在性）。"""
 
@@ -206,6 +215,19 @@ class PolicyVersionRegression(SupplyError):
     reason = "policy_version_regression"
 
 
+# --------------------------------------------------------------------------- 50xxx
+class ChannelUnavailable(SupplyError):
+    """节点通道不可用：C10b 队列未接线 / 通道下游异常（503 / 50903，fail-closed）。
+
+    决策单 §1「降级」：通道不可用 → 平台回 50903；是否回落 Echo 由部署层显式选择，
+    **不在本模块静默回落**。
+    """
+
+    status_code = 503
+    code = "50903"
+    reason = "channel_unavailable"
+
+
 # --------------------------------------------------------------------------- 424xx / 426xx / 429xx
 class StepUpRequired(SupplyError):
     """管理面高危动作二次认证缺失或过期（424 / 42401）。"""
@@ -242,6 +264,7 @@ _ERROR_TYPES = {
     426: "protocol_error",
     429: "rate_limit_error",
     500: "server_error",
+    503: "server_error",
     502: "upstream_error",
 }
 
@@ -259,5 +282,6 @@ __all__ = [
     "FingerprintConflict", "BindingConflict", "KeyStateConflict", "RetireIrreversible",
     "BindingCodeInvalid", "IdempotencyConflict", "PolicyVersionRegression",
     "StepUpRequired", "ProtocolIncompatible", "HeartbeatTooFast",
+    "ChannelJobNotFound", "ChannelUnavailable",
     "error_type_for",
 ]

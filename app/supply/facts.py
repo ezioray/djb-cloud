@@ -75,6 +75,22 @@ PROBE_FRESH_S = 900               # 上游体检结论新鲜度（C9b：容量�
 结论位不能永久有效，否则一次体检可以永久换容量）。不是 §8.1 配置键，故留在本文件。
 """
 
+# --------------------------------------------------------------------------- 节点通道（spec 1.2.9 / C10a）
+CHANNEL_WAIT_S_DEFAULT = 25        # NodeChannelPollRequest.wait_s 默认（长轮询上限 25 s，决策单 A）
+CHANNEL_WAIT_S_MIN = 1             # spec 1.2.9 下限
+CHANNEL_WAIT_S_MAX = 30            # spec 1.2.9 上限（平台请求总超时 ≤120 s 由队列侧兜底）
+CHANNEL_MAX_CAPABILITIES = 32      # capabilities 数组上限（与 register 的向量上限同量级）
+CHANNEL_CAPABILITY_MAX_LEN = 64    # 单个能力标识长度
+CHANNEL_JOB_KINDS: tuple[str, ...] = ("chat.completions",)          # NodeChannelJob.kind
+CHANNEL_RESULT_STATUSES: tuple[str, ...] = ("completed", "failed")   # NodeChannelResultRequest.status
+CHANNEL_USAGE_SOURCES: tuple[str, ...] = ("actual", "estimated", "dual")  # usage_source（actual=上游返回 / estimated=本地估算 / dual=两者都有，取用优先级 actual > estimated）
+CHANNEL_MESSAGE_ROLES: tuple[str, ...] = ("system", "user", "assistant")        # NodeChannelJob.messages[].role
+CHANNEL_IDEMPOTENCY_SCOPE_PREFIX = "channel.result"  # 按 job_id 幂等的作用域前缀（≤64 char）
+"""``channel.result:<job_id>`` 用本模块既有的 ``supply_idempotency`` 表做**结果级**幂等
+（同 ``job_id`` 同载荷 → 200 + ``duplicate=true``；不同载荷 → 40919）。
+只存 ack 与请求摘要，**不存正文**（C10 决策单：正文不落库）。
+"""
+
 BINDING_CODE_TTL_S = 600           # 一次性绑定码默认时效（spec：一次性、短时效；库层 ≤1 h）
 BINDING_CODE_MAX_ATTEMPTS = 5      # 单码最多尝试次数（防爆破）
 BINDING_CODE_ENTROPY_BYTES = 24    # 192 bit
