@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """模型 / Key / 会话 / 角色 / 配额 / 租户隔离（DEV-M01-T1 验收 3、4、5）。
 
 覆盖要点：

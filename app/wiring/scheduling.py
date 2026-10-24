@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M04 调度 → M03 网关的接线段，以及 demo 市场种子。
 
 节点 / 容量走 M02 的**公开领域入口**；报价走 M04 的 ``quotes.register``；

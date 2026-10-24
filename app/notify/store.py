@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 持久化（notifications / delivery_attempts）。**只有 SQL，没有业务判定。**
 
 约定：

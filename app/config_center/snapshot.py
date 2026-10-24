@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """快照与回放（T4，INV-08）。
 
 M10 §6 事务边界：**active 切换与快照写入同事务**；§7：快照缺失要阻止转 active。

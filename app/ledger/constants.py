@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 常量单点定义（唯一来源 + 出处）。
 
 来源分层（重要，避免"两处各写一份"）：

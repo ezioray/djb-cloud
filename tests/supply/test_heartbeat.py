@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """心跳（M02 §6.2 / INV-02 / §7 限流 / CR-5 runtime_state）。"""
 from __future__ import annotations
 

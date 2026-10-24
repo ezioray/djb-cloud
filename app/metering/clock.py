@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """可注入时钟（00-conventions §4.4 / §10「测试必须确定性：固定时钟」）。
 
 业务代码只调 :func:`utcnow`；测试用 ``monkeypatch.setattr(clock, "utcnow", lambda: NOW)``

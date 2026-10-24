@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """链哈希与 canonical JSON（纯函数；**算式钉死**，换实现必须红）。
 
 钉住的三件事：

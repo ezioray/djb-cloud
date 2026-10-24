@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 领域策略（纯函数，零 IO）：案件 / 申诉状态机、冻结期限、申诉窗口与 SLA、SoD、粗粒度原因。
 
 这些函数是**不变量唯一入口**：cases / appeals / router 都只通过它们判定，测试也直接打这里。

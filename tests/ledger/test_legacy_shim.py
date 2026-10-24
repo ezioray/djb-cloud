@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """旧调用回归：``app.ledger`` 的旧符号与行为不得因拆包而改变。
 
 覆盖 T2 任务卡第 2 条（app/ledger.py 兼容 shim）与验收「旧 tests/test_ledger.py、

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 reputation-cop：信誉分 / 等级 / COP / 邀请 / 人工授予（S1 基础面）。
 
 **COP 台账不重建**（Lead 裁决 / DEV-0003）：唯一账本是既有 ``points_*``（migration 006 +

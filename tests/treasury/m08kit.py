@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/treasury 脚手架：schema 隔离 / 迁移四跑 / 夹具构造 / M06 posting 适配器。
 
 隔离约定（与 tests/risk / tests/recon 同款）：

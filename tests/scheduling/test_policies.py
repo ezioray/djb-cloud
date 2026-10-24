@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P2 打分 / INV-04 tie-break / P3 配额 / P4 抢占（纯函数，不需要 DB）。
 
 这一组是「决策可解释、可复算」的地基：全整数、无浮点、固定顺序。

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-0004 管理后台运维中心 + 配置中心服务层（§22.21 / §21.12 / RPT-0002 §3）。
 
 本文件按验收 ①–⑥ 组织：

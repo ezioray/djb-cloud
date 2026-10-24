@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 领域策略：状态机 / 双人复核 / 签名链接 / 沙箱窗口。
 
 **不变量落地位置**（INV 编号见 M14 §3）::

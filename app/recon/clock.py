@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """统一时钟（00-conventions §4：存储与 API 一律 UTC；测试可注入固定时刻）。"""
 from __future__ import annotations
 

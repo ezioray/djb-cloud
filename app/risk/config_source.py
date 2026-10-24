@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 私有 risk-config 的**只读绑定**（INV-01 / M11 §7 LKG / §8.1）。
 
 本模块**永远不持有阈值数值**：这里只解析「某个 ``risk.*`` 键当前是哪一版」，

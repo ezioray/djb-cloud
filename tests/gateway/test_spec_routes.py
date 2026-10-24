@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """route-vs-spec：M03 拥有的路径与 spec 1.2.x 差集必须可解释（04-api-contracts §4 门禁）。
 
 spec 来源优先级：``$DJB_SPEC_FILE`` → ``<workspace>/spec/openapi.yaml`` → 缺则 skip。

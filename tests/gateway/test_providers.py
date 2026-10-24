@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """注入点契约（M03 / WIRING.md）：默认 fail-closed、返回体 coerce、错误翻译。"""
 from __future__ import annotations
 

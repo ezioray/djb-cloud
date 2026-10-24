@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移 CLI（``python -m app.notify.migrate``）与语句切分：三跑入口必须能直接用。"""
 from __future__ import annotations
 

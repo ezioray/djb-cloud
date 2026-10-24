@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 常量、枚举与口径校验（规格 §5 枚举 / §8.2 常量 / INV-03 / INV-07）。
 
 这一层是**纯函数 + 常量**，不碰数据库、不碰网络，方便单测把边界钉死：

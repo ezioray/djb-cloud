@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """幂等与请求体指纹去重（M03 §3.1 / §6.1 / INV-M03-03）。
 
 三种窗口（M03 §8.2）：

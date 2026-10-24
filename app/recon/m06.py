@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 只读适配层（试算平衡 / 科目余额漂移）。
 
 为什么在本模块里再写一条 SQL：M06 的 ``app.ledger.trial.trial_balance`` 出口把金额转成

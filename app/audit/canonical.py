@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计链哈希：canonical JSON + HMAC-SHA256（**唯一算式实现**，append 与 verify 都走这里）。
 
 算式（M16 §6.3 / 任务卡；换实现必须红 —— ``tests/infra/test_canonical.py`` 钉死向量）::

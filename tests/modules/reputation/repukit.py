@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M07 测试工具：迁移执行、schema 隔离、账户夹具、路由客户端、结构指纹。
 
 只读契约（本文件不改实现代码）：

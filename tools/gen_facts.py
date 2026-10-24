@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Generate contracts/facts.yaml from the vendored contracts/03-facts.md.
 
 03-facts.md is the human-readable source; facts.yaml is the machine-readable

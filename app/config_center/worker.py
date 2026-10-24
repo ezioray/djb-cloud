@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T5 worker：定时推进（scheduled 生效 / 复核过期 / kill switch 到期 / outbox 重投）。
 
 设计：

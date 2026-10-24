@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """spec 1.2.6 用户态节点面（M02 §4.1）：GET /api/v1/user/nodes 与 POST .../unbind。
 
 覆盖：成功 / 未认证 / 越权或不存在 / 边界 / 幂等（任务验收要求）。

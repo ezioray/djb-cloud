@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """仓储层测试：当前态 upsert、指标事件分页与时间过滤、后台评分分页、迁移 CLI。
 
 这些用例覆盖「读路径」与「运维入口」（``python -m app.reputation.migrate``），

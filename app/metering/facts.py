@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 metering-receipt · 常量与枚举（**唯一来源**，业务代码不得再写字面量）。
 
 逐条标注出处；凡是 03-facts 已有的口径一律引用不复制，本文件只放：

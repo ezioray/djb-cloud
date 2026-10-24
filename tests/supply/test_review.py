@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """准入审核（``POST /api/v1/admin/supply/nodes/{id}/review``，CR-3 归 M02）。
 
 状态机：``approve`` 使 ``pending → active``；``reject`` 保留 pending 并留理由；

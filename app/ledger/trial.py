@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """试算平衡与科目余额（只读，管理面用；M06 §4.1 / spec 1.2.1 TrialBalance · LedgerAccountPage）。
 
 口径：

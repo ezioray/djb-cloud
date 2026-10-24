@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 领域对象与对外 payload（spec 1.2.4 的 schema 一一对应）。
 
 原则：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 路由（需要 DJB_DSN）：契约形状、错误码、幂等、鉴权 fail-closed、/healthz。
 
 用真实 ASGI 客户端（TestClient）打，避免"只测函数不测接线"；

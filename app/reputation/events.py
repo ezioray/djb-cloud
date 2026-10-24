@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 事件消费与重算（§4.2 消费方 / §6.1 结算计提 / §6.2 邀请奖励 / §4.3 定时重算）。
 
 本模块消费两个已登记事件（02-events §3 已把 M07 列为消费方）：

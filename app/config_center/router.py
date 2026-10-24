@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 管理面 router（T4）：``/api/v1/admin/config/*``，operationId 对齐 spec 1.2.1。
 
 **不接线**：本文件只提供 ``create_router(...)``，由 Lead 在 ``app/api.py`` 合并窗口接线

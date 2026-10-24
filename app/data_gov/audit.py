@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 审计钩子（INV-08：审计唯一权威在 M16，M14 只追加读、不建第二条链）。
 
 ``sink`` 在**业务事务内**调用：sink 抛错 = 业务回滚（fail-closed，不会出现

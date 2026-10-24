@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M16 审计链 HTTP 路由（**工厂注入，不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 覆盖 spec-1.2.2 的三条操作::

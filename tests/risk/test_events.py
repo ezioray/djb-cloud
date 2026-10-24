@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件：02-events 信封 / payload 白名单（INV-01·INV-05）/ outbox 幂等 / 重试与 DLQ。"""
 from __future__ import annotations
 

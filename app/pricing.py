@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """价格表：**只从配置读，绝不硬编码**（价格与阈值属运营配置，不入公开仓）。"""
 from __future__ import annotations
 

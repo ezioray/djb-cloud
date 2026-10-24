@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 迁移：空库 / 幂等 / 升级 / 回滚 / 账本指纹不变 + CLI（up/down/status/seed）。
 
 为控制 NAS 上的 DDL 成本，三个用例各用一个 fresh schema，但每个 schema 只做**一次**全量迁移：

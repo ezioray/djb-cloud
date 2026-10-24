@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 事实常量：唯一来源是 ``contracts/facts.yaml``（CR-4）。
 
 背景：M01 §8.2 与本模块相关的数字（五态、冻结上限、八角色、会话 TTL、step-up）在

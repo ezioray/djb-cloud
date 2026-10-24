@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """PaymentProvider 适配器（M08 §1 / 产品 §19.10.1 / §19.6.5）。
 
 一期两个实现：

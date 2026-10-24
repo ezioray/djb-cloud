@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """把 DSN 里的口令从 argv 移到 PGPASSWORD（测试基础设施卫生）。
 
 问题：psql 子进程如果把 ``postgresql://user:pass@host/db`` 作为命令行参数，

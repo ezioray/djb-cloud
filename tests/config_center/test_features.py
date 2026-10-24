@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """特性开关契约：三字段（owner / expire_at / rollback_rule）+ 默认关闭 + 无可写面。
 
 硬约束第 4 条：特性开关必须带三字段、默认关闭；T1/T2 不引入可写开关。

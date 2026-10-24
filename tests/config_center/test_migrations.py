@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移验收（T2）：空库 001–1004 / 升级（只加不改）/ 回滚（可重复）/ 单文件重复执行幂等。
 
 三跑语义与 M01/M06 同款：

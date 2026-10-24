@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Webhook 签名（INV-05）：签名串、头部、±300 s 窗口、伪造拒绝。"""
 from __future__ import annotations
 

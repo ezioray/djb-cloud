@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """批次列表 / 详情 / 报表（REP-01 / REP-02）+ 未实现报表不注册路由。"""
 from __future__ import annotations
 

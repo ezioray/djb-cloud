@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 请求解析 / 行映射 / 对客序列化（对齐 spec 1.2.5 M08 段）。
 
 红线：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 上线前盘点（R5）：重复硬件指纹必须为 0。
 
 背景（R5，Lead 已并入 T6 清单）：``nodes(platform, hardware_fingerprint)`` 的唯一索引

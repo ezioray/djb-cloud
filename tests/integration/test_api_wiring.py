@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """app/api.py 接线回归：W1 模块路由必须真的挂在生产 app 上（不是只存在于各自测试里）。
 
 背景（2026-10-23 Lead 合并窗口）：

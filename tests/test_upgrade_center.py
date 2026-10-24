@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-0005 技术升级中心服务层（§22.22 · §18.7.1 · §22.9 · 〔决策K8〕）。
 
 本文件按验收 ①–⑥ 组织：

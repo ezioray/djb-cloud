@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 T4 · 管理面领域层（冻结 / 解冻 / 角色绑定 / 租户配额）。
 
 权限与复核（M01 §4.1、§6.3、INV-05 / INV-06 / INV-07；spec 1.2.1 admin 段）：

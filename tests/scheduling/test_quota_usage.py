@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """配额计数落库（M04 §5 quota_usage / §6 流程 2 P5 / INV-07 / INV-08）。
 
 计数是**可增可减但不可消失**的：``+1`` 由 P5 在决策事务内做，``-1`` 由消费方释放；

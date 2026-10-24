@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 身份 → M03 网关的接线段。
 
 * ``provision_account``：建登录身份 / personal 账户 / 验证 / API Key（明文只出现一次）；

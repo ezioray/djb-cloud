@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08c 退款（M08 §3 / §6 流程 5 / §4.1 / INV-12 / 03-facts §5）。
 
 规则：

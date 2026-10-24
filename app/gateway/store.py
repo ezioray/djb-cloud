@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本模块表读写（**只碰自己的表**：``api_request_log`` / ``m03_outbox`` / ``m03_idempotency``）。
 
 铁律：

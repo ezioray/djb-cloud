@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Ops 只读面：七块健康总览 / 变更日历 / 操作回放（审计时间线）。
 
 INV-01：只读聚合。数据来源只有两类——

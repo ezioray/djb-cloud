@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bearer Key 鉴权编排（M03 §6 流程 1 的第 2 步）。
 
 分工：

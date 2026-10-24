@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """凭证哈希链：规范化 → 计算 → 校验（journal_entry.prev_hash / hash）。
 
 链的定义（T2 落账与 T4 复算共用这一份实现，不允许各写一套）::

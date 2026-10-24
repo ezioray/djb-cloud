@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 ledger（DEV-M06-T2：记账网关 = 校验 → 落账 → 哈希链 → outbox）。
 
 本包是新账本（600–604 五表）的**唯一写入口**，也是旧符号的兼容出口::

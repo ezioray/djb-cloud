@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 HTTP 路由工厂（**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 覆盖 spec 1.2.3 的 8 条 recon 端点 + 本轮实现的 2 条报表端点::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08a 支付订单 / PSP 适配 / 回调（M08 §3 / §4.1 / §6 流程 2 / §7）。
 
 流程（§19.6.5.3–19.6.5.6）：

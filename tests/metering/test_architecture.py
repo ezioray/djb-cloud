@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """架构门禁（00-conventions §1 / §7.1 / 04-api-contracts §4 architecture）。不需要 DB。
 
 静态检查：

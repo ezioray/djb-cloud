@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Validate contracts/fixtures against the fixture schema and coverage rules."""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/gateway 测试工具：迁移执行、结构指纹、注入 provider 的假实现。
 
 只读契约：

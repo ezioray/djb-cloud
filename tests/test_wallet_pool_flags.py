@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """钱包池特性开关到期强制关（审计 AUDIT-DEVSTATUS P2-6）。
 
 纯函数用例，不依赖数据库：到期后即使环境变量/override 打开也必须为 False，

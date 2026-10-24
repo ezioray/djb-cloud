@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约 fixtures 对齐（contracts/fixtures/M10，只读）：键已注册、风险级一致、边界值来自 facts。
 
 fixtures 是契约（只读投影），模块测试用它反查实现：

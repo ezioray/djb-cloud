@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件 / outbox / 请求日志的存储护栏（M03 §5、02-events §2、INV-M03-02、INV-M03-06）。"""
 from __future__ import annotations
 

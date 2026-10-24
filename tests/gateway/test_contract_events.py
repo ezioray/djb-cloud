@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件契约漂移守卫（02-events §3 / 04-api-contracts §4 event-schema 门禁）。
 
 来由：M03 T3/T4 合并时事件门禁红过一次——`batch.*` 六个 webhook 事件当时只在

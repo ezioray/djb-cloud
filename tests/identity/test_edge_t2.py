@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T2 边界分支：把「拒绝」路径也钉死（401/40103/40102/500 兜底 / 票据 / 因子 / 口令）。
 
 覆盖的是领域与路由上的**负向分支**：缺令牌、令牌未知、绝对过期、epoch 不符、

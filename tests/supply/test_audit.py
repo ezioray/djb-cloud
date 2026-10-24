@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """上线前盘点（R5）：重复硬件指纹必须为 0（只读 CLI + 领域函数）。"""
 from __future__ import annotations
 

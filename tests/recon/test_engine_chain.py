@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """scope=chain 三方对账：wallet.balance_minor ↔ journal_line(wallet_id, 1101/1102)。"""
 from __future__ import annotations
 

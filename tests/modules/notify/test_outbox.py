@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件 outbox：同事务入队 / 幂等 / 退避重试 / 死信（02-events §2）。"""
 from __future__ import annotations
 

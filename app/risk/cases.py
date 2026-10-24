@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 案件领域服务（开案 / 去重 / 处置分级 / 只提案）。
 
 入口分两类：

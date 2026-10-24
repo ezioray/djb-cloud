@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """单位与量纲校验（§21.3.2「单位与量纲强制」）。
 
 这一层只回答「这个值在它声明的量纲下合不合法、规范化成什么」，不回答「这个键该取多少」：

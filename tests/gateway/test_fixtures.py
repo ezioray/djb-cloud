@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约 fixtures（04-api-contracts §5：contracts/fixtures/M03/*.json）。
 
 fixtures 只校验 schema 与状态码，不断言文案（文案由产品验收单独覆盖）。

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """单位与量纲校验（§21.3.2）：bps / pct / USD / USD 分 / 秒 / 分 / 时 / 天 / count / clock / window。"""
 from __future__ import annotations
 

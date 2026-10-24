@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08c 分润出款 / 白名单 / gas 三模式（HTTP + 域内）。"""
 from __future__ import annotations
 

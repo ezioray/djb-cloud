@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """INV-01 阈值扫描（验收硬指标）：代码 / 库表 / 响应 JSON / 事件 payload 中 0 处阈值。
 
 口径（写进证据）：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """上游申报与本地体检回执（M02 §6.3 / §3 / INV-02 / INV-04 / H1）。"""
 from __future__ import annotations
 

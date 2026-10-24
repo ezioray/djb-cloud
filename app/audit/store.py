@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计链存储层（只碰 ``audit_log`` / ``audit_anchors`` / ``m16_outbox``，不读任何业务表）。
 
 并发（关键设计，见证据文件「并发与锁」）：**每个 schema 一把事务级 advisory lock**::

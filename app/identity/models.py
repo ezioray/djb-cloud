@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 identity-tenant · 领域模型与唯一写入口（DEV-M01-T1）。
 
 范围（M01 §10.1 T1）：**只做模型 + 迁移 + 状态机**；登录 / 会话端点 / API 在 T2 起，

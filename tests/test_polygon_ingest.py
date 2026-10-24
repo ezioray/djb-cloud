@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-0002 · Polygon 收款与确认（E1/E2 · 64/200 确认）。
 
 覆盖验收：

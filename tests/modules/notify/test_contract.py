@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约测试：实现 vs ``spec/openapi.yaml``（spec 1.2.3）与 ``02-events.md``。
 
 三件事：

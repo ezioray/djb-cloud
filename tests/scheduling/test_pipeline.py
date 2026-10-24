@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P1–P5 决策管线（M04 §6 流程 2 / INV-03 / INV-05 / INV-06 / INV-11 / 验收 ②）。
 
 最有价值的两条：

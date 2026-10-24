@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 事件 outbox（02-events §1 信封 + §2 至少一次 + §3 事件目录）。
 
 本模块生产四个事件（§4.2）：

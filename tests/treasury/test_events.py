@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 事件生产：信封 / payload 白名单 / outbox 幂等 / 退避与 dead（02-events）。"""
 from __future__ import annotations
 

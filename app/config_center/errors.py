@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 配置中心的错误码（47xxx 段，本模块独占）。
 
 码值来源（只登记，不新造）：

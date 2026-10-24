@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """金额与用量的**精确整数**换算（00-conventions §3 / INV-05 / 03-facts §6）。
 
 三条硬规则：

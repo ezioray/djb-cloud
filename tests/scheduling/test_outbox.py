@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件出站（CR-4 / 迁移 407）：至少一次、幂等、退避、DLQ（02-events §2）。"""
 from __future__ import annotations
 

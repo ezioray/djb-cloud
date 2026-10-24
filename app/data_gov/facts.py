@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 admin-data 常量与枚举（M14 §3 / §5 / §8.2 · 02-events §3 · 03-facts §8）。
 
 本文件只放**枚举、状态机、文件失效期、批量上限、事件 payload 白名单**；

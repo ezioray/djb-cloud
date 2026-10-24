@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """每日 Merkle 根（M16 §3 ``daily_root`` / §6.3 ``--seal``；等价于 ops/audit/verify.mjs 的算法）。
 
 算式（与 ``verify.mjs`` 第 133–140 行逐字一致，改实现必须同步改运维链）::

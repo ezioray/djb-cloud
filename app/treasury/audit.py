@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 管理面审计钩子（M16 audit_log 的注入点；本模块不拥有审计表）。
 
 约定（与 M11 同款）：

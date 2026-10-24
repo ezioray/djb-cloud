@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 迁移执行器：701/702/704/705/706/707 正向升级 + 可执行回滚 + 结构指纹。
 
 为什么回滚 SQL 放在 Python 里而不是 ``migrations/7xx_*_down.sql``：CI 与本地都按

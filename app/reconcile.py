@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """双边对账：节点上报（供方视角） vs 平台记账（平台视角），差异必须为 0。
 
 对账键：task_id（= 平台侧 request_id）。差异分四类：

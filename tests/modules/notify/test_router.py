@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 契约：七条操作 + 错误信封 + fail-closed 接线 + 账户隔离（spec 1.2.3）。"""
 from __future__ import annotations
 

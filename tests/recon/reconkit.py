@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M09 测试工具：隔离 schema、psql 迁移、结构指纹、M05/M06 只读夹具。
 
 只读契约（与 tests/infra / tests/ledger / tests/metering 同款）：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 迁移验收：空库 001→707、7xx 重复执行幂等、回滚两次干净、``points_*`` 结构不变、DB 护栏。
 
 对应任务卡验收 1：空库全通过 / 7xx 连跑两遍幂等 / 回滚两次干净 / points_* 结构指纹前后一致。

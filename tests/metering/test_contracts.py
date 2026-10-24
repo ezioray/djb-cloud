@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件信封 / 特性开关 / 配置快照（02-events §1 §3 / M05 §8.1 / 硬约束第 4 条）。不需要 DB。"""
 from __future__ import annotations
 

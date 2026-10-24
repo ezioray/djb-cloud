@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE 流式实时调用（T3 / M03 §6 流程 2 / §4.3 / INV-M03-04）。
 
 口径：

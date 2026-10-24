@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """保留任务：矩阵 / dry-run / 删除报告 / (object, cutoff) 幂等 / 失败重放 / 30 天 SLA。"""
 from __future__ import annotations
 

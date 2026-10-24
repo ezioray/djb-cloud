@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """试算平衡与科目余额验收（spec 1.2.1 TrialBalance / LedgerAccountPage；INV-04 / INV-05 / INV-12）。
 
 口径：一切从分录聚合，`balance = Σ借 − Σ贷`（借方为正）；借贷平衡只在本 unit_type 内判定。

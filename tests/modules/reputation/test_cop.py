@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """COP 台账适配测试（薄封装既有 points_* 台账）：INV-01 / INV-02 / INV-05 / INV-06 + 兑换与转让。
 
 对应任务卡验收 3：

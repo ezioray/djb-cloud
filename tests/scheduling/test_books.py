@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """报价簿 / 出价簿 / 成交锁（M04 §3 状态机 / §5 表 / §6 流程 1）。
 
 守的是四件事：**只追加 + 版本化**、**内容不变不升版本**、**状态机只能前进**、

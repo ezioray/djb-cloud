@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """scope=receipt 对账引擎（M09 §6.3）：四类差异 + 重复入账 + 宽限期 + INV-04 幂等。
 
 验收锚点：书侧 100 / 外部 97 → 1 条差异 3，``run.diff_minor = 3``。

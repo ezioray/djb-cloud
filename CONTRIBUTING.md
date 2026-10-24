@@ -45,16 +45,17 @@ CI 的 `dco` job 会逐个提交检查；漏签会被拒。
 
 ## 3 许可证
 
-- 默认 **Apache-2.0**（见仓库根 `LICENSE`）。
+- **`djb-cloud` 自 2026-10-24 起为 AGPL-3.0-or-later**（见仓库根 `LICENSE`）；历史 tag 仍为 Apache-2.0（`LICENSE-APACHE-2.0.txt`）。
+- **`djb-node` 保持 Apache-2.0**（客户端要能被广泛集成）。
 - 每个源文件头部要有 SPDX 标识：
 
 ```
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 DJB contributors
 ```
 
   Shell/Python 用 `#`，JS/TS/Go/Rust/Java 用各自行注释。CI 的 `license-headers` job 会检查。
-- 若某仓改用 AGPL-3.0（见仓库根 `LICENSE` 与 README 的说明），SPDX 写 `AGPL-3.0-or-later`，并把 `LICENSE_MODE` 变量改成 `agpl`。
+- 商业闭源使用需另取商业授权，见 `COMMERCIAL.md`；AGPL 义务不因商业授权之外的分支而消失。
 
 ## 4 这些改动必须维护者 review（DCO 之外唯一的额外门）
 

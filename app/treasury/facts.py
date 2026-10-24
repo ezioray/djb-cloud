@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 payments-treasury · 常量、枚举与口径（**唯一来源**，业务代码不得再写字面量）。
 
 出处逐条标注：

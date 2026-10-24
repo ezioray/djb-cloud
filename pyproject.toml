@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "djb-cloud"
 version = "0.1.0"
 description = "DJB 云端最小骨架：双签收据 -> 只追加账本 -> 可复算"
+license = {text = "AGPL-3.0-or-later"}
+classifiers = ["License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)"]
 requires-python = ">=3.11"
 dependencies = ["fastapi>=0.110", "uvicorn>=0.29", "psycopg[binary]>=3.1"]
 

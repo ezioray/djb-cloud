@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """facts 读取层测试：形状、解析、失败即报错、与 yaml 交叉验证（防静默读空）。
 
 对照 M06 的同名测试：这里额外覆盖「owner 不唯一」（M08 同时是 §1 与 §2 的 owner）与

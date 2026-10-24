@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """记账网关验收：E6 落账、借贷平衡、幂等重放、校验拒绝、同事务 outbox、并发链。
 
 验收来源：DEV-M06-T2 §验收 1（T2 用例全绿 + 复算 diff=0）、§交付 1/4。

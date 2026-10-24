@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MFA 因子生命周期（M01 §3 mfa_state、§8.2；spec `LoginRequest.mfa_code`）。
 
 ``users.mfa_state``：``none`` → ``pending``（已登记因子，待确认）→ ``enabled``；

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Polygon PoS 收款：地址派生 · 扫描入账（E1/E2）· 确认数策略 · 错链/假充值冲正。
 
 对应设计 v4：§19.4.2（一期单链 Polygon PoS）、§19.6.1（确认数 64 / 大额 200、幂等键

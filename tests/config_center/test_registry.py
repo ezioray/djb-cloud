@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """十域注册表测试：十域全覆盖、键契约自洽、默认值来自 facts、危险键与黑名单、schema 扩展关键字。"""
 from __future__ import annotations
 

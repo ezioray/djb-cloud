@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """单 Key QPS 限流（M03 §4.1 / §4.4 的 ``42901``）。
 
 口径：

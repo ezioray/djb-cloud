@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M16 platform-infra · 审计链（只追加 HMAC 哈希链 + 每日 Merkle 根）。
 
 本包是 M16 §4.1 / §6.3 的服务端实现，语义与现行运维链完全一致：

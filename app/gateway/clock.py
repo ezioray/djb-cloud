@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """时钟与延迟测量（测试用 monkeypatch 钉死，00-conventions §10「测试必须确定性」）。"""
 from __future__ import annotations
 

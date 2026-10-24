@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """上游账单导入与对账（M05 §5 / §6 流程 3 / §7 / INV-07 / spec ``UpstreamBillImportRequest``）。
 
 逐行受理（单行失败不回滚整批）：

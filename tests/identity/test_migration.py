@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移验收（DEV-M01-T1 验收 1）：空库 / 升级 / 回滚三跑 + 对象与约束清单。
 
 三跑的语义：

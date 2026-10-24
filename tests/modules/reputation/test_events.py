@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件消费与重算测试（§4.2 / §6.1 / §6.2 / §7 / §4.3）。
 
 覆盖验收 3 的「同一 ``usage.settled`` 重放 10 次 → COP 只增一次」与 §9 的 ①「结算 100 USD →

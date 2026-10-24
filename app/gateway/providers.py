@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """跨模块注入点（M01 鉴权 / M04 路由 / M05 计量 / 上游节点 / M10 配置）。
 
 **为什么是注入而不是 import**（00-conventions §1.2 / 04-api-contracts §2）：

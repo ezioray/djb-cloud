@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """背压：队列水位的三档动作（M04 §8.2「队列水位 70% / 85% / 95%」）。
 
 | 水位 | 档位 | 动作 |

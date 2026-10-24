@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约 fixtures（M04 §9 契约用例 / 04-api-contracts §5）。
 
 **放这里而不是 ``contracts/fixtures/M04/``**：本轮写域只到 ``tests/scheduling/**``，

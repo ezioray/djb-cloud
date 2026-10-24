@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """支付通道适配器：SHA256 规范化 / 验签 / 时钟窗 / 金额主单位（§19.6.5）。"""
 from __future__ import annotations
 

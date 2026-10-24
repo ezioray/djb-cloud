@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S1 端到端 demo 的可执行断言（独立 schema，结束自动 DROP）。"""
 from __future__ import annotations
 

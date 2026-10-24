@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """链校验 + 日根封盘（``POST /internal/ops/audit/verify``，等价于 ``ops/audit/verify.mjs --seal``）。
 
 行为（M16 §6.3 / spec-1.2.2 ``AuditVerifyResponse``）：

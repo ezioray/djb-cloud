@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """哈希链验收：规范化确定性、链接、断链与篡改检测（INV-13 / BUG-0002 口径）。
 
 做法上不赌并发竞态：断链与篡改都在**显式事务 + 回滚**里构造，断言检测得到后立刻撤销。

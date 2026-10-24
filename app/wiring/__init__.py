@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S1 端到端 demo 的接线包。
 
 只在这里做跨模块适配：M01→M03、M04→M03、M05→M03/M06、M02→M04。

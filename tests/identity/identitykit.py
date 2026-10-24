@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/identity 的**唯一 helper 模块**（M01 测试工具；conftest 只留 pytest fixture）。
 
 背景（DEV-TESTINFRA）：测试文件不得再 ``from conftest import ...`` —— 单进程全量 pytest 时，

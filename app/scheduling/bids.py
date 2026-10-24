@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """出价簿（M04 §3 Bid / §5 bids / spec ``BidRequest``）。
 
 规则与报价簿同款（只追加 + 版本化 + 内容不变不升版本），差别只有两点：

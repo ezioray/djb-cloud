@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """金额 / ID / 归一化（INV-13 / 00-conventions §2–§3）。
 
 全部纯函数，不需要 DB：这里是「超精度直接拒绝」「不出现浮点」两道闸的守门用例。

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 错误码（spec 1.2.3 已登记码 · 00-conventions §5 · M09 §4.1）。
 
 约定（与 M05/M10/M16 同款）：

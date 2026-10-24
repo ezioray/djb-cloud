@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """规则元数据（rules ×2）与限额（limits ×2）：版本只加不改 / 48005 / 幂等 / 租户隔离 / 视图口径。"""
 from __future__ import annotations
 

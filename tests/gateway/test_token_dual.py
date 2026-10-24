@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """C9a 网关双计（PROBE-TOKEN-AUDIT §2.2 / §5 C9）：开关语义、>1% 告警、口径不被本地覆盖。
 
 三层用例：

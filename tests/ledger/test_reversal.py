@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """冲正验收（INV-07 / INV-14 / R5）：整单等额取反、至多一条、posted→voided、ledger.reversed。
 
 验收来源：DEV-M06-T3 §交付 1 + §验收「冲正全链路 / 部分冲正拒绝 / 重复冲正拒绝 / 并发」，

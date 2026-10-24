@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """outbox 事件契约验收：三个事件的业务键、同事务落库、幂等、待投递查询。
 
 契约来源：contracts/02-events.md §1/§3 + 604 迁移的 m06_outbox CHECK（库里也有一份兜底）。

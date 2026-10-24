@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/recon 测试脚手架（DEV-M09 T1–T3）。
 
 隔离约定：

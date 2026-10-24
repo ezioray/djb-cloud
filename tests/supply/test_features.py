@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """特性开关登记（硬约束第 4 条）：三字段 + 默认关闭 + 无可写面。"""
 from __future__ import annotations
 

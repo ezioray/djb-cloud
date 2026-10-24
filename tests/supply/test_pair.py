@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """pair / 密钥轮换（M02 §4.1 / INV-10 / spec NodePairRequest）。
 
 要点：明文只回一次、库中只有哈希；轮换重叠 ≤24 h，重叠期内旧钥**只验签**、

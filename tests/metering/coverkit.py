@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """极简行覆盖率（stdlib 实现，零依赖；与 tests/scheduling/coverkit.py 同款）。
 
 为什么不用 coverage.py：共享 venv 只装了 pytest / psycopg / fastapi / httpx / pyyaml，

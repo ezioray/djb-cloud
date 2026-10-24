@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """协议版本与能力协商（M02 §1 / INV-05 / §6 版本与弃用）。
 
 规则（spec 1.2.0 / 04-api-contracts §6）：

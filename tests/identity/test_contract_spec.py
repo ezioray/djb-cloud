@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 契约面测试：spec 1.2.0 的 13 个 M01 操作逐条对账（tasks-11 验收 3）。
 
 对账口径：

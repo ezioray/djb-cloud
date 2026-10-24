@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """差异台账：列表 / 游标 / 处置码 / 关闭后不可重开 / diff 归零 / 幂等重放。"""
 from __future__ import annotations
 

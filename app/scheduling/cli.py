@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M04 运维 CLI（M04 §4.1「CLI ``djb-sched replay`` 只读」/ 02-events §2.4 人工重放）。
 
 两个子命令，都是**运维/排障**用途，不提供任何写业务数据的入口：

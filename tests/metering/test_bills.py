@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """上游账单导入与对账：幂等 / 1% 容差 / >1% 追加校正 / 原 usage 不改（需要 DJB_DSN）。"""
 from __future__ import annotations
 

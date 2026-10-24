@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """边界门禁：无跨模块 import、迁移段正确、不转发事件、不碰只读适配器、facts 纪律。
 
 对应 `tools/ci/architecture_check.py` / `migration_check.py` / `_boundary-checks.md`：

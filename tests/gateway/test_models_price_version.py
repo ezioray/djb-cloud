@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """spec 1.2.6 /v1/models 的可选 ``price_version``（M03 §4.1，只加不改）。
 
 覆盖：有快照版本 → 回显；无 → 缺省（公开侧允许）；嵌套 ``price.price_version`` 宽容读取；

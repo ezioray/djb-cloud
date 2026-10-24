@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 迁移执行器：800–805 正向升级 + 可执行回滚 + seed（验收「空库 / 升级 / 回滚 / 幂等」四跑）。
 
 为什么回滚 SQL 放在 Python 里而不是 migrations/8xx_*_down.sql：

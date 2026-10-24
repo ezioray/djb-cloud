@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 时钟（00-conventions §4.4：时间比较只用服务端时间；测试注入固定时钟）。
 
 业务日切按 UTC+4（§8.2「每日 00:30（UTC+4）全量重算」），但**存储与 API 一律 UTC**

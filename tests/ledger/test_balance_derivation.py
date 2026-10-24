@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """余额派生一致性（INV-10）与新账本复算 diff=0。
 
 口径（见 migrations/602_account_balances.sql 头注释）：

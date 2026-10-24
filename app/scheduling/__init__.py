@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M04 scheduler-pricing（DEV-M04 T1+T2：报价簿 / 撮合 / 取价 + P1–P5 决策管线 / 决策日志）。
 
 本包是 M04 的**唯一写入口**，也是以下 6 张表的唯一写者（01-ownership §2 / M04 §5）::

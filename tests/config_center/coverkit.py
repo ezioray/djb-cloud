@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """极简行覆盖率（stdlib 实现，零依赖）。
 
 为什么不用 coverage.py：M10 工作境只装了 pytest / psycopg / pyyaml，装新依赖要么污染共享

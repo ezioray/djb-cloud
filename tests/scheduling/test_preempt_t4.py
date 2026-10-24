@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T4 抢占执行与预算（INV-09 / INV-10 / §4.7.3 P4）。
 
 两个新能力：

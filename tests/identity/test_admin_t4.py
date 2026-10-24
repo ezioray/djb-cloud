@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T4 · 管理面：冻结 / 解冻 / 角色 SoD / 租户配额（tasks-17 验收）。
 
 覆盖：

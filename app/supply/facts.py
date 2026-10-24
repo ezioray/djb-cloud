@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 node-supply · 常量（一份事实一个来源）。
 
 本文件的每个常量都能追到出处，代码里**不再出现同义字面量**：

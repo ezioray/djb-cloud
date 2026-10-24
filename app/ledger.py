@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """兼容 shim：``app.ledger`` 的旧符号仍然可用（DEV-M06-T2 起实现搬进 ``app/ledger/`` 包）。
 
 为什么保留本文件（虽然 Python 导入时同名包优先，实际命中的是 ``app/ledger/__init__.py``）：

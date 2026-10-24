@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 §4.1 会话态节点面（spec 1.2.6）：我的节点列表 / 解绑。
 
 覆盖 **1.2.6 新增的两条用户态端点**（归属 M02，鉴权 userBearer；节点侧仍走 ``/api/v1/node/*``）::

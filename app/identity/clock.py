@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """可注入时钟：领域层与路由都通过 ``clock.utcnow()`` 取时间。
 
 00-conventions §10 要求测试确定性；00-conventions §4 要求「时间比较只用服务端时间」。

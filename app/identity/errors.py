@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T2 认证域错误码（M01 §4.1 / spec 1.2.0 已登记项）。
 
 沿用 T1 的 ``models.IdentityError``（``status_code`` + 字符串 ``code`` + ``as_dict``），

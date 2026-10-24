@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 ↔ M06 记账适配：E3 / E4 两步 / E5 两步（真实 M06 网关；只 propose）。"""
 from __future__ import annotations
 

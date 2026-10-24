@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """配置来源（M02 §8.1）：provider 注入、缺省兜底、越界夹取。纯函数 + 无 DB。"""
 from __future__ import annotations
 

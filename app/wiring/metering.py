@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 计量 → M03 网关 / M06 账本的接线段。
 
 * ``UsageAdapter`` 实现 M03 ``UsageProvider``：网关给出 ``UsageDraft``，这里生成

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件 outbox 投递（02-events §2：至少一次 / 退避 / 死信 / 不阻塞主链路）。
 
 分工：

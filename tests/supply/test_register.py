@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """注册（M02 §6.1 / INV-01 / INV-03 / INV-05 / 验收 A1）——领域层，事务回滚隔离。"""
 from __future__ import annotations
 

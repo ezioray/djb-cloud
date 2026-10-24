@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """批量五步：预览 / 双人复核 / 执行 / 10 分钟撤销 / 只读沙箱（INV-03 / INV-09）。"""
 from __future__ import annotations
 

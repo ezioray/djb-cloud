@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """操作回放：audit_log + outbox 合并时间线（只读、脱敏、游标分页）。"""
 from __future__ import annotations
 

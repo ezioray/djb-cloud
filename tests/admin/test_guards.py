@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """架构 / 安全 / 不变量静态扫描（INV-01 / INV-04 / INV-06 / INV-08 / S6）。
 
 这些断言不依赖数据库：读 ``app/data_gov/*.py`` 的 AST 与字符串常量，证明

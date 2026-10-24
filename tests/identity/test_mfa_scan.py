@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """MFA 与扫码中间态（tasks-11 验收：MFA / 扫码中间态 / 不存明文）。
 
 覆盖：

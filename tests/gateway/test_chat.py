@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """实时非流式主链路（M03 §6 流程 1 / T2）：鉴权 → 限流/配额 → 校验 → 幂等 → 路由 →
 派发（≤2 次尝试）→ 计量 → 日志 + 事件。DB 用例（隔离 schema）。"""
 from __future__ import annotations

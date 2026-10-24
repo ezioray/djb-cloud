@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """outbox：同事务入队 / 至少一次派发 / 退避 / 死信 / 保留期（迁移 506，需要 DJB_DSN）。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 契约（T5/T6）：策略 200/304/403/426 + 协议能力 / 弃用清单（无鉴权）。"""
 from __future__ import annotations
 

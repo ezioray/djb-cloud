@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """公平观测与计数（M04 §8.2「基尼 ≤0.35 / 小节点中位等待 ≤5 min」/ §4.7.5 / INV-08）。
 
 边界写清楚：

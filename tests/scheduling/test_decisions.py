@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """决策日志（M04 §3 / §5 / INV-03 / INV-11 / CR-3 归档口径）。
 
 这一组守的是「日志能不能当真凭据」：四元锚点唯一、只追加、写失败即熔断、

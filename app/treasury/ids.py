@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ID 生成（00-conventions §2：内部主键 UUIDv7；对外单号 ≤32 字符、全局唯一、创建后不变）。
 
 UUIDv7 按 RFC 9562 布局自实现（stdlib 3.11 没有 uuid.uuid7，与 M01/M02/M11 同口径）：

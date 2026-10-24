@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/risk 脚手架：schema 隔离 / 迁移三跑 / 行检查 / 夹具构造 / 阈值扫描。
 
 隔离约定（与 tests/recon 同款）：

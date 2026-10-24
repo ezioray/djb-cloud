@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 metering-receipt（DEV-M05 T1+T2：双签收据受理 + 用量落库 / 汇总 / 明细）。
 
 本包是 M05 的**唯一写入口**，也是以下 5 张表的唯一写者（01-ownership §2 / M05 §5）::

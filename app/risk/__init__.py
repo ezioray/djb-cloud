@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 risk-abuse：风控规则元数据 / 限额 / 案件 / 申诉 / 处置提案（S1+S2 管理面）。
 
 责任边界（M11 §1）：

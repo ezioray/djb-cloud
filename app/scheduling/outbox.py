@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件出站：本地事务 + outbox（02-events §2 / CR-4 已裁决，迁移 407）。
 
 三条语义：

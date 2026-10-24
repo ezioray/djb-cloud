@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M16 测试工具：隔离 schema、psql 迁移、结构指纹、断言小工具、固定测试密钥。
 
 只读契约（与 tests/config_center / tests/metering 同款）：

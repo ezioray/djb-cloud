@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件生产（M02 §4.2 / 02-events §1 信封 / §2 至少一次）。
 
 本模块只生产 4 个事件，全部经 ``supply_outbox``（本地事务 + outbox，**禁止分布式事务**）::

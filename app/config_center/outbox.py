@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 事件 outbox（config_outbox，1005）：事件构造 + 同事务落库 + 待投递查询。
 
 02-events §3 登记 M10 只生产三个事件：

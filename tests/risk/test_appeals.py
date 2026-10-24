@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """申诉：30 天窗口 / 重复 48003 / 7 工作日 SLA / 裁决 SoD 48006 / 撤销解冻提案 / 误伤恢复。"""
 from __future__ import annotations
 

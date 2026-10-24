@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """scope=bank 三方对账：payout / refund ↔ E8/E11 ↔ 银行流水（§20.5.4）。"""
 from __future__ import annotations
 

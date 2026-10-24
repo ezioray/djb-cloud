@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """幂等键（CR-5 / 迁移 408 / M04 §3 / 00-conventions §6.1）。
 
 两条语义，缺一不可：

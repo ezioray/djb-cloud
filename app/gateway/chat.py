@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """实时**非流式**主链路（M03 §6 流程 1 / T2）。
 
 顺序严格按 M03 §6：

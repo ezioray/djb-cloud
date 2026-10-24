@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """要点常量 / 错误码 / 特性开关 / 配置来源（M04 §8 / §4.1 / 00-conventions §1.5）。
 
 这些用例不碰 DB：它们守的是「常量只有一个来源」和「开关三字段 + 默认关闭」两类硬约束。

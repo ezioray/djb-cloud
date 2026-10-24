@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """边界与分支补充用例（DEV-M01-T1 验收 5：关键分支 100%）。
 
 这里的每一条都对应 ``models.py`` / ``state.py`` 的一个具体分支：取值越界、对象不存在、

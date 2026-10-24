@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """人工授予 / 扣回测试（§4.1 / CR-5 / §7）：双人复核、理由必填、404、幂等、扣回不透支。
 
 step-up（424 / 42401）在路由层判定，见 ``test_router.py``；本文件测领域层。

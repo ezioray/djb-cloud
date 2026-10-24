@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """双签收据的规范串与 HMAC-SHA256 验签（M05 §8.2 / 04-api-contracts CR-2 / INV-01）。
 
 钉死的三件事（CR-2 已裁决，写进 04/02，不许各端各自实现）：

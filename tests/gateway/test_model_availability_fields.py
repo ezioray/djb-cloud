@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """spec 1.2.8：Model.available / Model.probe 的透传（C9 收尾）。
 
 只测 M03 的字段规整与响应组装；不依赖数据库、不联网。

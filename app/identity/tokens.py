@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """会话与令牌生命周期（DEV-M01-T2）：登录 / 刷新轮换 / 登出 / 访问鉴权 / step-up。
 
 口径（M01 §1、§6；03-facts §8；spec 1.2.0 `AuthTokens`）：

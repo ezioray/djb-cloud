@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 纯函数单测：常量 / 合并窗口 / 渠道 / payload 零 PII（INV-03 / INV-07 / INV-09）。"""
 from __future__ import annotations
 

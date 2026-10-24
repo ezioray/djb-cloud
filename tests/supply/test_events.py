@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件生产（02-events §1 信封 / §3 业务键 / M02 §4.2）：4 个事件 + outbox 契约。"""
 from __future__ import annotations
 

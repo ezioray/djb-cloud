@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """完整链路：请求 → 双签收据 → 账本 → 复算（差异必须 0）"""
 import hashlib
 import os

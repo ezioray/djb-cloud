@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 常量的事实源读取层：``contracts/facts.yaml``（W0-QA 生成的机器源）。
 
 纪律（03-facts §13 / 任务卡 T2 第 3 条）：

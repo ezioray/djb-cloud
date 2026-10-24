@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """只追加护栏（INV-08）与冲正唯一迁移（INV-07）。
 
 验收来源：DEV-M06-T1 验收 2「非法 UPDATE / DELETE 被触发器拒绝（有测试）」。

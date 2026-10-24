@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """导出闭环：申请 → 审批（双人）→ 执行 → 完成（水印 + 签名链接）→ 取消 / 过期。
 
 INV-04 落地：范围白名单 + 行数上限（``49001``）+ 大导出双人复核（>1,000 行或含个人信息）

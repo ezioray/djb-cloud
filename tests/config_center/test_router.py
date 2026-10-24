@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """管理面 router（T4）：11 条端点 / operationId 对齐 spec 1.2.1 / 错误信封 / 生效链路。
 
 用 TestClient + 独立 schema（模块级，避免污染共享 schema）；``now_provider`` 固定在

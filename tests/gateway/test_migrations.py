@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移验收（M03 §5 / 04-api-contracts §4 migration 门禁）：空库 / 升级 / 回滚三跑 exit=0。"""
 from __future__ import annotations
 

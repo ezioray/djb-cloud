@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """双签规范串与 HMAC-SHA256 验签（M05 §8.2 / CR-2 / INV-01）。不需要 DB。"""
 from __future__ import annotations
 

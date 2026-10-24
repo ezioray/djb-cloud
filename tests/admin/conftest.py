@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/admin 测试脚手架（DEV-M14）。
 
 两套 schema（NAS 上一次全量迁移 ~20s，能省就省）：

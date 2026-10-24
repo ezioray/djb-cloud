@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S2 资金闭环回归（M08 → M06/M09）：把 runbook 十二步的 Step 3–12 固化成**一条**用例。
 
 只跑这一条（独立 schema，跑完自动 DROP）::

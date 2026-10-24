@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """撮合与取价（INV-01 / INV-02 / §9 验收 ①③）。
 
 先说清楚两件事：

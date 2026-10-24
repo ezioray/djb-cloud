@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 单层邀请（INV-03 / INV-04 / §6.2）。
 
 对外只有一条只读接口（spec ``GET /api/v1/user/cop/invites``）；**发码与绑定是内部函数**

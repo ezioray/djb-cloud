@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 identity-tenant（DEV-M01-T1：账户 / 组织 / 租户模型 + 五态机 + 迁移 1xx）。
 
 本包是 M01 的**唯一写入口**，也是 8 张身份表的唯一写者（01-ownership §2）::

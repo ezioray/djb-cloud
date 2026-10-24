@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """双签收据：供方签 + 用方签，缺任一即拒绝。
 
 签名用 HMAC-SHA256，密钥各自独立（供方与用方密钥不同 → 单方无法伪造双侧签名）。

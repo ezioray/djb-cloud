@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 T2 HTTP 路由（独立模块，**不接 app/api.py**——由 Lead 合并时统一 include）。
 
 覆盖 spec 1.2.0/1.2.1 中 M02 的 T2 六个操作（T3–T6 的其余端点后续补齐）::

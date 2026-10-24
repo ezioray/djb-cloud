@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T5：审计接口 / CLI（verify·replay）/ worker / 退避与 DLQ / 灰度推进。
 
 CLI 与 worker 用例用**函数级独立 schema**（写入需要提交，避免污染模块级共享 schema）。

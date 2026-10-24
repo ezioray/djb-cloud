@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """十域配置键注册表（T1「schema 注册」；§21.1.1 / §21.3.1 / §21.3.5）。
 
 一个 ``ConfigKey`` = 一条**契约**，不是一条数据：键名、类型、单位、范围、风险级、owner、

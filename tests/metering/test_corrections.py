@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """校正：只追加 / 累计不超原额 / 双人复核 / 幂等 / usage.settled（需要 DJB_DSN）。"""
 from __future__ import annotations
 

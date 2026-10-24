@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """消费 M03 / M04 的事件（M05 §4.2 的「消费」四行）：request.completed / request.failed /
 booking.created / config.published。
 

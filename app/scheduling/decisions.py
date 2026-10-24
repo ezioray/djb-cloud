@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """决策日志（M04 §3 RoutingDecision / §5 routing_decisions / INV-03 / INV-11）。
 
 三条硬规则：

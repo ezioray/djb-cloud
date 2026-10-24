@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 领域模型：UUIDv7、收据解析（spec ``ReceiptInput``）、受理结论与用量行。
 
 这里只做**纯函数**（无 DB、无网络、无时钟副作用）：把上报 JSON 变成 :class:`ReceiptDraft`，

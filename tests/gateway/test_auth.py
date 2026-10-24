@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """鉴权编排（M03 §6.1 第 2 步 / §4.4 / INV-M03-05）。不需要 DB。"""
 from __future__ import annotations
 

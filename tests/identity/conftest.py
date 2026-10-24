@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/identity 测试脚手架（M01）：**只留 pytest fixture**。
 
 helper / 构造器 / 断言工具已移到同目录 ``identitykit.py``（DEV-TESTINFRA）：

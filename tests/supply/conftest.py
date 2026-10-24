@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/supply 测试脚手架（DEV-M02 T1+T2）。
 
 隔离约定（W1-EXECUTION-PLAN §3）：

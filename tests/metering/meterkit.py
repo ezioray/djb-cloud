@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M05 T1+T2 测试工具：迁移执行、schema 隔离、夹具（节点 / 账户 / 收据 / 签名）。
 
 只读契约（本文件不改实现代码）：

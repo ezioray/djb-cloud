@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 退款原路服务端推导 + 掩码展示（契约 1.2.7 / INV-12）。
 
 覆盖 Lead 口径：

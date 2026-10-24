@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """收据受理：双签 / 24h 窗口 / 幂等 / 唯一计费 / 留痕 / 不泄露密钥（需要 DJB_DSN）。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 → M06 / M09 接线段：账本 poster 与 attestation verifier。
 
 边界：M08 不 import M06/M09，只通过注入的协议调用；本文件是合并窗口的适配层。

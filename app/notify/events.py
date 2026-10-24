@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件消费与事件矩阵（M12 §4.2 / §6.1 / INV-03 / INV-08 / INV-09）。
 
 一行摘要：**事件到达 → 查矩阵（级别 / 模板 / 渠道）→ 算 dedupe_bucket → 命中就累加次数、

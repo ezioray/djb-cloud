@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """每日 Merkle 根（纯函数；与 ops/audit/verify.mjs 的算式逐字一致）。"""
 from __future__ import annotations
 

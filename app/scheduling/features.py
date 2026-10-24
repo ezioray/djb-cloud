@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本模块的特性开关登记（硬约束：三字段 + 默认关闭 + 不提供可写面）。
 
 与 M02 ``app/supply/features.py`` / M10 ``app/config_center/features.py`` 同款理由：

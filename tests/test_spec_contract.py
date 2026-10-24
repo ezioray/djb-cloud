@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约测试：实现必须与 djb-node 的 spec 一致（spec 是唯一真源）。
 
 spec 来源优先级：$DJB_SPEC_FILE → ./spec/openapi.yaml → 环境缺失则 skip（本地不阻断）。

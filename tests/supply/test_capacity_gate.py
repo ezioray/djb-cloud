@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """容量公告门控（C9b「容量只认已验证上游」）。
 
 口径（服务端不再相信客户端公告）：

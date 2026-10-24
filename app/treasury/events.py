@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 事件生产（02-events §1/§2/§3/§5）：信封校验 + 本地事务内 outbox + 投递重试。
 
 硬规则：

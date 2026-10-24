@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 E6 → M06 账本的接线段：把 ``settlement.e6_request`` 落成一张凭证。"""
 from __future__ import annotations
 

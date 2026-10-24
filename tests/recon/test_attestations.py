@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """复核凭证：提交 / 唯一 valid / 双人 / 幂等 / validate 只回结论（INV-05 / §6.2）。"""
 from __future__ import annotations
 

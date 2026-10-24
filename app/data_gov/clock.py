@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UTC 时钟与时间解析（M14 统一口径：库里 timestamptz，序列化 UTC ISO8601）。"""
 from __future__ import annotations
 

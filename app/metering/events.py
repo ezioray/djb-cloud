@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 生产事件的信封（02-events §1 / §3 / M05 §4.2）。
 
 本模块只负责**把事实变成合规信封**（纯函数），投递方式按 02-events §2.1「本地事务 + outbox」：

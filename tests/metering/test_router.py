@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 路由：fail-closed 鉴权、错误信封、逐条受理、分页与 spec 形状（需要 DJB_DSN）。"""
 from __future__ import annotations
 

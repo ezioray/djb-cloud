@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """幂等键（M02 §3 幂等段 / 00-conventions §6.1）。
 
 窗口 24 h，作用域 = ``方法 + 归一化路径``（路径参数折成 ``{id}``）。三条铁律：

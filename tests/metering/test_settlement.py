@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 E6 的注入式对接：金额换算 / 幂等键 / 开关闸门 / 不 import 账本（需要 DJB_DSN）。"""
 from __future__ import annotations
 

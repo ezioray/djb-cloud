@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 人工授予 / 扣回（spec ``POST /api/v1/admin/reputation/grants`` / CR-5 / §7）。
 
 规则（全部在写账之前判定）：

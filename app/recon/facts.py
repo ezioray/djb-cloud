@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 对账与报表 · 常量（唯一事实源出口）。
 
 出处纪律（M09 §8.2 / 03-facts §6–§7）：本模块**不定义**容差、档位、覆盖率阈值之外的

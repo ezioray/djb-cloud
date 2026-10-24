@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """BUG-0002：`ledger.post_entry` 并发写入不得让 hash 链分叉。
 
 修复口径：`post_entry` 在「读 prev_hash → INSERT」之前拿事务级

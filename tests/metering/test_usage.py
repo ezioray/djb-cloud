@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """用量汇总 / 明细：口径、分页、过滤（需要 DJB_DSN）。"""
 from __future__ import annotations
 

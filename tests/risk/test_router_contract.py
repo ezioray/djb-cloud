@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约测试：9 条操作 ⊆ spec 1.2.4、错误信封、request_id、错误码登记、无阈值泄漏。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 资金意图与签名六事件（M08 §3 / §8.2 / 产品 §19.5.2 / §19.11.4）。
 
 边界：**只 propose，不持钥**。

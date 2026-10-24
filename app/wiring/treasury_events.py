@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 outbox → M06 账本消费端（S2 资金闭环的 E9 / E8 / E11 落地）。
 
 职责

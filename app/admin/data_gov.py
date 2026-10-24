@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 数据治理 / Ops 只读面 · 管理面路由入口（薄门面，不含业务逻辑）。
 
 为什么单独留这个文件：历史管理面服务层（``ops_center`` / ``ops_growth`` /

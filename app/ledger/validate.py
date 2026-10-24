@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """凭证校验与规范化（纯函数，不碰数据库）。
 
 校验口径逐条对应 M06 不变量，失败即抛 :mod:`app.ledger.errors` 里的类型错误：

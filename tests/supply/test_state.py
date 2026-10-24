@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """状态机（M02 §3）：权威层四态机 + 派生层在线判定。纯函数，无需 DB。"""
 from __future__ import annotations
 

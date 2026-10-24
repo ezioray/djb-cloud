@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S1 demo 的数据库接线：独立 schema + 全链迁移 + 连接工厂。
 
 只做三件事：

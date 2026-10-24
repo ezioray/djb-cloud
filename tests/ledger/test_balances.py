@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """余额派生验收（INV-10 / CR-L3）：版本化只追加、上一版本+1、借方为正、最新视图、并发无跳版。
 
 验收来源：DEV-M06-T3 §交付 3 与 §验收「并发用例无余额跳版」「复算 diff=0」。

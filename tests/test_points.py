@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-0003 COP 积分台账与转让开关（K4 / v4 §4.5 §6.6 §9.1 §20.1 §20.4.4）。
 
 覆盖验收：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """节点接入：注册 / 策略下发 / 收据上报（双签校验）。
 
 密钥设计：节点密钥不落库明文。平台用主密钥按 node_id 派生：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08c 分润出款 / 退款 / 白名单 / gas 策略。
 
 出款（§19.8.3 maker–checker–signer 三段 + INV-10 四要素）::

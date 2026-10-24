@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 config-center（DEV-M10 T1+T2：schema 注册 + 校验器 + 版本存储 + digest + 幂等）。
 
 本包是配置中心的**领域层**，不注册任何 HTTP 路由（T3/T4 才接管理面 ``/api/v1/admin/config/*``），

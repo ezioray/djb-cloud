@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """批次 HTTP 层（T4 / spec `BatchAccepted` / `Batch` / `BatchCancelAck`）：状态码、幂等、信封。"""
 from __future__ import annotations
 

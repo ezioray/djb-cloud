@@ -52,3 +52,8 @@ python scripts/recompute.py --expect-zero                 # 必须 diff=0
 - CI 从 `ezioray/djb-node` **固定 SHA** 拉 `openapi.yaml` 到 `spec/`（不入库）
 - `tests/test_spec_contract.py`：**实现了 spec 未声明的端点即失败**；响应必填字段需与 spec 一致；spec 不得含反作弊内部字段
 - 实战胜例：本仓一度把 `/api/v1/user/usage/summary` 写成 `/api/v1/usage/summary`，被契约测试当场拦下并修正
+
+## 许可证
+
+`djb-cloud` 自 2026-10-24 起以 **AGPL-3.0-or-later** 分发；历史 tag 仍为 Apache-2.0（`LICENSE-APACHE-2.0.txt`）。
+闭源/SaaS 商用需另行取得商业授权，见 [`COMMERCIAL.md`](COMMERCIAL.md)。`djb-node` 保持 Apache-2.0。

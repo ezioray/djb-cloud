@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 领域模型：请求解析、行 → 契约 payload、游标、幂等指纹（纯函数，无 DB）。
 
 三条纪律：

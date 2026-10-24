@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """用量查询：汇总（``GET /api/v1/user/usage/summary``）与明细（``.../records``，游标分页）。
 
 口径（M05 §4.1 / spec ``UsageSummary`` / ``UsageRecordPage``）：
