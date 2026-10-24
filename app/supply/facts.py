@@ -66,8 +66,9 @@ MAX_UPSTREAMS_PER_NODE = 16        # 单节点上游上限（超出 40001）
 MAX_MODELS_PER_UPSTREAM = 200      # 单上游模型上限（超出 40001）
 MAX_CAPABILITIES_PER_ANNOUNCEMENT = 200   # 公告单批上限（超出 40001）
 
-PROBE_FRESH_S = 900
-INTEGRITY_FROZEN_VIEW = "v_supply_integrity_frozen"  # M17 只读视图（1711）               # 上游体检结论新鲜度（C9b：容量公告只认 ≥ now-900s 的 verified）
+PROBE_FRESH_S = 900               # 上游体检结论新鲜度（C9b：容量公告只认 ≥ now-900s 的 verified）
+INTEGRITY_FROZEN_VIEW = "v_supply_integrity_frozen"  # M17 只读视图（1711）
+ATTESTED_VIEW = "v_supply_model_attested"  # M17 只读视图（1721）
 """心跳公告门控的新鲜窗口（C9b 硬化）。
 
 口径：``node_upstreams.state='verified'`` **且** ``verified_at >= now - PROBE_FRESH_S``

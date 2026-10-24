@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -116,11 +117,20 @@ def _probe_join(now: datetime, probe_freshness_s: int | None) -> tuple[str, dict
     return join, {"cutoff": now - timedelta(seconds=int(probe_freshness_s))}
 
 
+def _attestation_join() -> str:
+    """C12 证明门控：``DJB_ATTEST=1`` 时只放行 L3+ 且未过期的 (node, model)。"""
+    if os.environ.get("DJB_ATTEST") != "1":
+        return ""
+    return (f" JOIN {facts.ATTESTED_VIEW} a"
+            f"   ON a.node_id = c.node_id AND a.model = c.model")
+
+
 def _view_rows(c, *, model: str, now: datetime,
                probe_freshness_s: int | None = facts.CANDIDATE_PROBE_FRESH_S
                ) -> list[Mapping[str, Any]]:
     """默认市场来源：M02 三个只读视图（报价另从 ``quotes`` 取，见 :func:`collect`）。"""
     probe_join, probe_params = _probe_join(now, probe_freshness_s)
+    attestation_join = _attestation_join()
     with c.cursor() as cur:
         cur.execute(
             f"""SELECT s.node_id, s.account_id, s.tenant_id, s.region, s.lifecycle_state,
@@ -129,6 +139,7 @@ def _view_rows(c, *, model: str, now: datetime,
                   FROM {facts.CAPACITY_LATEST_VIEW} c
                   JOIN {facts.NODE_SNAPSHOT_VIEW} s ON s.node_id = c.node_id
                   {probe_join}
+                  {attestation_join}
                   LEFT JOIN {facts.INTEGRITY_FROZEN_VIEW} f
                          ON f.node_id = c.node_id AND f.model = c.model
                  WHERE c.model = %(model)s

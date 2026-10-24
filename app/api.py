@@ -20,6 +20,10 @@ from .audit.router import create_router as create_audit_router
 from .config_center.router import create_router as create_config_center_router
 from .data_gov.router import create_router as create_data_gov_router
 from .identity.router import router as identity_router
+from .integrity import providers as integrity_providers
+from .integrity.attest_router import router as attest_router
+from .integrity.attest_router import set_admin_authenticator as set_attest_admin_auth
+from .integrity.attest_router import set_node_authenticator as set_attest_node_auth
 from .integrity.router import router as integrity_router, set_admin_authenticator as set_integrity_admin_auth
 from .ledger.router import router as ledger_router
 from .metering.router import router as metering_router, set_admin_authenticator as set_metering_admin_auth, set_user_authenticator as set_metering_user_auth
@@ -28,6 +32,7 @@ from .notify.router import create_router as create_notify_router
 from .recon.router import create_router as create_recon_router
 from .reputation.router import create_router as create_reputation_router
 from .risk.router import create_router as create_risk_router
+from .gateway import tokenizer as gateway_tokenizer
 from .scheduling.router import router as scheduling_router
 from .supply.router import router as supply_router, set_user_authenticator as set_supply_user_auth
 from .treasury.router import create_router as create_treasury_router
@@ -78,6 +83,7 @@ app.include_router(ledger_router)
 # 鉴权/连接默认 fail-closed；生产部署再注入 provider（见各模块 router 头部说明）。
 app.include_router(supply_router)
 app.include_router(integrity_router)
+app.include_router(attest_router)
 app.include_router(scheduling_router)
 app.include_router(metering_router)
 app.include_router(create_config_center_router())
@@ -137,7 +143,8 @@ def _admin_dev_principal(request: Request) -> dict | None:
         return None
     roles = [r.strip().upper() for r in (request.headers.get("X-Admin-Roles") or "").split(",") if r.strip()]
     tenant = (request.headers.get("X-Admin-Tenant") or "").strip() or None
-    return {"actor": actor, "roles": roles, "scopes": ["*"], "tenant_id": tenant}
+    return {"actor": actor, "admin_id": actor, "roles": roles, "scopes": ["*"],
+            "tenant_id": tenant}
 
 
 # ── M02 / M05 用方鉴权接线（spec 1.2.6 新端点）──────────────────────────────
@@ -155,6 +162,37 @@ set_supply_user_auth(_user_principal_step_up)
 set_metering_user_auth(_user_principal)
 set_metering_admin_auth(_admin_dev_principal)
 set_integrity_admin_auth(_admin_dev_principal)
+set_attest_admin_auth(_admin_dev_principal)
+
+
+def _node_principal(request: Request) -> dict | None:
+    """节点侧主体（M02 X-Client-Key）：返回 {node_id}；未带/无效 → None（路由 fail-closed）。"""
+    key = (request.headers.get("X-Client-Key") or "").strip()
+    if not key:
+        return None
+    from .supply import models as supply_models
+
+    try:
+        with db.conn() as c:
+            auth = supply_models.authenticate(c, key, allow_previous=True)
+            if auth.node.state != "active":
+                return None
+            return {"node_id": auth.node.id, "roles": ["node"]}
+    except Exception:                                      # noqa: BLE001 - 鉴权失败一律 401
+        return None
+
+
+set_attest_node_auth(_node_principal)
+
+
+def _integrity_token_count(prompt: str, model: str) -> int:
+    """M17 服务端 tokenizer：复用 M03 的本地计数（同一实现，避免两套口径）。"""
+    return gateway_tokenizer.count_prompt_tokens(
+        model, ({"role": "user", "content": prompt},))
+
+
+integrity_providers.set_token_counter(_integrity_token_count,
+                                      version="gateway.heuristic.v1")
 
 
 app.include_router(create_audit_router(

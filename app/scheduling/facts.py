@@ -192,6 +192,7 @@ NODE_SNAPSHOT_VIEW = "v_supply_node_snapshot"        # M02 只读视图（禁止
 CAPACITY_LATEST_VIEW = "v_supply_capacity_latest"    # M02 只读视图（已过滤过期与 0 容量）
 UPSTREAM_VERIFIED_VIEW = "v_supply_upstream_verified"  # M02 只读视图（209：verified 上游 × 模型）
 INTEGRITY_FROZEN_VIEW = "v_supply_integrity_frozen"  # M17 只读视图（1711：生效冻结 × 模型）
+ATTESTED_VIEW = "v_supply_model_attested"  # M17 只读视图（1721：L3+ 生效证明 × 模型）
 
 #: 决策锚点的默认 policy_version（M10 未接线时用固定 12 位十六进制，保持可复算）
 DEFAULT_POLICY_VERSION = "000000000000"
