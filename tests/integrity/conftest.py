@@ -106,7 +106,8 @@ def _reset_integrity_hooks(monkeypatch):
     """每个用例后复位鉴权钩子 / tokenizer provider / DJB_ATTEST 环境（不污染他人）。"""
     monkeypatch.delenv("DJB_ATTEST", raising=False)
     monkeypatch.delenv("DJB_FREEZE", raising=False)
-    from app.integrity import attest_router, providers
+    monkeypatch.delenv("DJB_SAMPLING", raising=False)
+    from app.integrity import attest_router, providers, sampling_router
     from app.integrity import router as hold_router
 
     providers.reset_token_counter()
@@ -115,6 +116,7 @@ def _reset_integrity_hooks(monkeypatch):
     finally:
         attest_router.set_node_authenticator(None)
         attest_router.set_admin_authenticator(None)
+        sampling_router.set_admin_authenticator(None)
         hold_router.set_admin_authenticator(None)
         providers.reset_token_counter()
 

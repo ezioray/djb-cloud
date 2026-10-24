@@ -31,12 +31,15 @@ FIXED_NOW = datetime(2026, 10, 24, 0, 0, tzinfo=timezone.utc)
 M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",          # 1710（C14 冻结）
     "model_attestations", "attestation_challenges", "attestation_events",  # 1720（C12 证明）
+    "sampling_epochs", "sampling_draws", "sampling_events",           # 1730（C14b 抽检）
 )
-M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen",)           # 1711
+M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen", "v_supply_model_attested")
 M17_FUNCTIONS: tuple[str, ...] = (
     "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
     "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
     "m17_attest_forbid_truncate",
+    "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
+    "m17_sampling_forbid_truncate",
 )
 M17_INDEXES: tuple[str, ...] = (
     # 1710
@@ -50,6 +53,12 @@ M17_INDEXES: tuple[str, ...] = (
     "idx_attestation_events_node", "model_attestations_pkey",
     "attestation_challenges_pkey", "attestation_challenges_nonce_key",
     "attestation_events_pkey",
+    # 1730
+    "uq_sampling_draws_epoch_node_model", "idx_sampling_epochs_state",
+    "idx_sampling_draws_epoch", "idx_sampling_draws_node", "idx_sampling_draws_challenge",
+    "idx_sampling_events_epoch", "idx_sampling_events_draw",
+    "sampling_epochs_pkey", "sampling_epochs_epoch_no_key", "sampling_draws_pkey",
+    "sampling_events_pkey",
 )
 
 ADMIN_PRINCIPAL = {
@@ -338,3 +347,37 @@ def build_attest_client(connection: Any, monkeypatch: Any, *, node: Mapping[str,
     app = FastAPI()
     app.include_router(attest_router.router)
     return TestClient(app)
+
+
+SAMPLING_ADMIN_PRINCIPAL = {
+    "admin_id": "admin-sampling-1",
+    "scopes": ["integrity.read", "integrity.write"],
+}
+
+
+def build_sampling_client(connection: Any, monkeypatch: Any, *,
+                          admin: Mapping[str, Any] | None = None,
+                          now: datetime | None = None, feature: bool = True) -> Any:
+    """构造带 C14b 抽检路由的 ASGI 客户端（SAVEPOINT 连接、时钟钉死、开关按需）。
+
+    ``admin=None`` 表示**不注入鉴权钩子**（fail-closed → 401）。
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.integrity import clock as clock_module
+    from app.integrity import features, sampling_router
+
+    monkeypatch.setattr(sampling_router, "_connection", savepoint_factory(connection))
+    monkeypatch.setattr(clock_module, "utcnow", lambda: now or FIXED_NOW)
+    monkeypatch.setattr(features, "enabled", lambda name: feature)
+    sampling_router.set_admin_authenticator(
+        (lambda request: dict(admin)) if admin is not None else None)
+    app = FastAPI()
+    app.include_router(sampling_router.router)
+    return TestClient(app)
+
+
+def sampling_contributions(*rows: tuple[str, str, int]) -> list[dict[str, Any]]:
+    return [{"node_id": node, "model": model, "weight": weight}
+            for node, model, weight in rows]
