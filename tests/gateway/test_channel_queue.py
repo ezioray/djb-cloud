@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """C10b 平台内存队列（``app.gateway.channel.ChannelQueue``）语义。
 
 纯内存、不连 DB、不联网；时钟用固定 ``NOW``（显式 ``now=``），只有「等待预算」用真实时间

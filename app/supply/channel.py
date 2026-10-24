@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 节点通道（长轮询）· 契约层与接线位（C10a；**不含队列实现**）。
 
 分工（01-ownership §1 · CR-C10-01）：

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
+from typing import Any
 
 from app.gateway import providers
 from app.metering import signing
@@ -37,15 +38,18 @@ class S1Wiring:
     identity: IdentityAuth
     route: RouteAdapter
     usage: UsageAdapter
-    node: EchoNodeClient
+    node: Any
     catalog: DemoCatalog
     availability: SupplyAvailability
+    channel_queue: Any | None = None
+    channel_client: Any | None = None
 
     def settle(self, usage_id: str, *, policy_version: str, trace_id: str):
         return settle_usage(self.db, usage_id, policy_version=policy_version, trace_id=trace_id)
 
 
-def install(db: Database, *, keys: signing.SignatureKeys | None = None) -> S1Wiring:
+def install(db: Database, *, keys: signing.SignatureKeys | None = None,
+            channel: bool = False) -> S1Wiring:
     """把 M03 的 9 个 provider 中 demo 需要的 5 个接到真实模块入口。"""
     signature_keys = keys or signing.SignatureKeys(
         provider=secrets.token_bytes(32),
@@ -54,7 +58,19 @@ def install(db: Database, *, keys: signing.SignatureKeys | None = None) -> S1Wir
     identity = IdentityAuth(db)
     route = RouteAdapter(db)
     usage = UsageAdapter(db, signature_keys)
-    node = EchoNodeClient()
+    channel_queue = None
+    channel_client = None
+    if channel:
+        # 只给 demo/测试显式开启；生产接线必须判 gateway.channel.enabled（默认关）
+        from .channel import install_channel
+
+        channel_queue, channel_client = install_channel()
+        node = channel_client
+    else:
+        from app.supply import channel as supply_channel
+
+        supply_channel.set_channel_backend(None)
+        node = EchoNodeClient()
     availability = SupplyAvailability(db)
     catalog = DemoCatalog(availability=availability)
 
@@ -73,4 +89,6 @@ def install(db: Database, *, keys: signing.SignatureKeys | None = None) -> S1Wir
         node=node,
         catalog=catalog,
         availability=availability,
+        channel_queue=channel_queue,
+        channel_client=channel_client,
     )

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """C10b ``ChannelNodeClient``：把通道结果投影成 ``NodeResult``，失败按 M03 既有口径抛错。
 
 不连 DB、不联网：节点侧用线程扮演（``poll`` → ``submit``），网关侧直接 ``complete()``。

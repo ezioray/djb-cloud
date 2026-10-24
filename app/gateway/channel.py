@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """C10b 平台**内存通道队列** + ``ChannelNodeClient``（M03 数据面，替换 ``EchoNodeClient``）。
 
 为什么要内存队列：S2 阶段节点侧还没有出站长连接（PROBE-TOKEN-AUDIT §1「实时接入只有回环
@@ -88,7 +88,7 @@ RECENT_RESULTS_MAX: int = 256
 _RESULT_KEYS: tuple[str, ...] = (
     "status", "content", "finish_reason", "model", "tokens_in", "tokens_out",
     "usage_source", "latency_ms", "first_byte_ms", "upstream_request_id",
-    "error_class", "error_message",
+    "error_class", "error_code", "error_message",
 )
 
 #: ``poll`` 的等待切片（秒）：同时兼顾「新任务入队」「租约到期」两类唤醒

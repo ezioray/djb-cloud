@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """节点通道端点（C10a / spec 1.2.9）：鉴权、状态、协议、校验、204、幂等、fail-closed。
 
 口径（01-ownership §1 · CR-C10-01）：
