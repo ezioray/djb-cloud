@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Iterable, Sequence
@@ -43,8 +44,11 @@ __all__ = [
 
 # ───────────────────────────────────────────────────────── 开关（fail-closed）
 def feature_enabled() -> bool:
-    """只读开关：``supply.freeze.enabled``（默认 False；打开必须改代码 + 评审）。"""
-    return features.enabled(facts.FEATURE_NAME)
+    """只读开关：``supply.freeze.enabled``（默认 False；S2 测试网用显式 env 打开）。
+
+    代码默认仍关闭；部署层 `DJB_FREEZE=1` 只用于 S2 测试网/演练，生产默认不设。
+    """
+    return features.enabled(facts.FEATURE_NAME) or os.environ.get("DJB_FREEZE") == "1"
 
 
 def require_feature() -> None:

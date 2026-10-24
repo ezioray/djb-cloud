@@ -338,3 +338,11 @@ def test_list_holds_filters_and_cursor(conn, now, feature_on):
     assert by_level["items"] == []
     with pytest.raises(BadRequest):
         holds.list_holds(conn, state="bogus", now=now)
+
+
+def test_s2_env_activation(monkeypatch):
+    """S2 测试网显式 env 打开；代码默认仍 False（不改变安全默认）。"""
+    monkeypatch.delenv("DJB_FREEZE", raising=False)
+    assert holds.feature_enabled() is False
+    monkeypatch.setenv("DJB_FREEZE", "1")
+    assert holds.feature_enabled() is True
