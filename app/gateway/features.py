@@ -95,6 +95,17 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
         description=("T4 的 webhook 闸门：打开后批次状态迁移会向 batch_jobs.webhook_url 投递"
                      "签名回调（batch.queued/started/completed/failed/…）；关闭时只落库"),
     ),
+    FeatureSwitch(
+        name="gateway.token.dual.enabled",
+        owner="lead",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭后只记上游 usage、不比较：不再做本地计数与 >1% 比对，不写 "
+                       "usage_source=dual（回到 actual），响应与计费数值始终不变；"
+                       "已写入的 dual 行按原值保留，不回滚、不重写"),
+        description=("C9a 的双计闸门：打开后上游给了 tokens_in/out 时用本地 tokenizer 复核，"
+                     "差异 >1% 记 gateway.token_mismatch 告警并标 usage_source=dual；"
+                     "关闭时保持既有 actual 行为（PROBE-TOKEN-AUDIT §5 C9）"),
+    ),
 )
 
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""M03 迁移执行器：301–305 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
+"""M03 迁移执行器：301–307 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
 
 为什么回滚 SQL 放在 Python 里而不是 ``migrations/3xx_*_down.sql``：
 CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执行（M02/M04/M05/M06/M10 同因），
@@ -13,7 +13,7 @@ CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执�
     python -m app.gateway.migrate --schema m03_t12_x --status
 
 ``--up`` 先应用**前置段**（编号 < 300 的全部迁移：001–006 / 1xx / 2xx），再按数字序
-应用 301–305 —— M03 只依赖 M01（账户 / Key 口径）与 M02（节点视图），其余模块与本模块无关。
+应用 301–307 —— M03 只依赖 M01（账户 / Key 口径）与 M02（节点视图），其余模块与本模块无关。
 ``--down`` 只回滚 3xx，**不动**任何前置对象。
 """
 from __future__ import annotations
@@ -53,10 +53,21 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "304_m03_outbox.sql": ("table", "m03_outbox", ""),
     "305_m03_idempotency.sql": ("table", "m03_idempotency", ""),
     "306_batch_webhook_state.sql": ("column", "batch_jobs", "webhook_state"),
+    # 307 的对象是既有 CHECK 的**取值扩展**：标记 = 约束存在且定义里已含 dual
+    "307_api_request_log_usage_source_dual.sql": (
+        "constraint", "api_request_log", "api_request_log_usage_source_ck:dual"),
 }
 
 #: 回滚：逆序删本模块新增对象（**不碰**任何前置对象；可重复执行）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("307_api_request_log_usage_source_dual.sql", """
+        -- 收回 307：usage_source 枚举回到 301 的两值口径（只改 CHECK，不重写表、不删 dual 行；
+        -- NOT VALID 只约束新写入，历史行不校验）
+        ALTER TABLE IF EXISTS api_request_log
+          DROP CONSTRAINT IF EXISTS api_request_log_usage_source_ck;
+        ALTER TABLE IF EXISTS api_request_log ADD CONSTRAINT api_request_log_usage_source_ck
+          CHECK (usage_source IS NULL OR usage_source IN ('estimated', 'actual')) NOT VALID;
+    """),
     ("306_batch_webhook_state.sql", """
         -- 收回 306：删 webhook 台账列，并把状态机护栏恢复为 302 的版本（终态行只允许
         -- 结果/成本/检查点列变化）
@@ -161,7 +172,7 @@ DOWN_SQL: tuple[tuple[str, str], ...] = (
 
 
 def migration_files() -> tuple[pathlib.Path, ...]:
-    """CLI 默认执行顺序：前置段（< 300）+ 本模块段（301–305）。"""
+    """CLI 默认执行顺序：前置段（< 300）+ 本模块段（301–307）。"""
     return tuple(MIGRATIONS_DIR / name for name in PREREQUISITE_MIGRATIONS + MODULE_MIGRATIONS)
 
 
@@ -230,7 +241,7 @@ def connect(schema: str) -> psycopg.Connection:
 # --------------------------------------------------------------------------- 执行
 def apply_up(schema: str, *, files: Iterable[pathlib.Path] | None = None,
              verbose: bool = False) -> dict[str, Any]:
-    """按数字序应用迁移（默认：前置段 + 301–305）；返回逐文件结果。"""
+    """按数字序应用迁移（默认：前置段 + 301–307）；返回逐文件结果。"""
     paths = list(files if files is not None else migration_files())
     ensure_schema(schema)
     conn = connect(schema)
@@ -275,6 +286,18 @@ def _exists(conn: psycopg.Connection, kind: str, name: str, extra: str = "") -> 
                         " WHERE table_schema = current_schema() AND table_name = %s"
                         " AND column_name = %s", (name, extra))
             return cur.fetchone() is not None
+    if kind == "constraint":
+        # extra = "<约束名>:<必须出现的字面量>"（307：必须已含 dual）
+        constraint, _, required = extra.partition(":")
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_get_constraintdef(con.oid)"
+                        " FROM pg_constraint con"
+                        " JOIN pg_class c ON c.oid = con.conrelid"
+                        " JOIN pg_namespace n ON n.oid = c.relnamespace"
+                        " WHERE n.nspname = current_schema() AND c.relname = %s"
+                        " AND con.conname = %s", (name, constraint))
+            row = cur.fetchone()
+        return row is not None and (not required or required in row[0])
     raise ValueError(f"未知标记类型：{kind!r}")                   # pragma: no cover - 编程错误
 
 
@@ -297,9 +320,9 @@ def status(schema: str) -> dict[str, Any]:
 
 # --------------------------------------------------------------------------- CLI
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="M03 迁移执行器（301–305）")
+    parser = argparse.ArgumentParser(description="M03 迁移执行器（301–307）")
     parser.add_argument("--schema", required=True, help="目标 schema（隔离，勿用 public）")
-    parser.add_argument("--up", action="store_true", help="前置段 + 301–305 正向升级")
+    parser.add_argument("--up", action="store_true", help="前置段 + 301–307 正向升级")
     parser.add_argument("--down", action="store_true", help="逆序回滚 3xx")
     parser.add_argument("--status", action="store_true", help="查看对象存在性")
     parser.add_argument("--verbose", action="store_true")

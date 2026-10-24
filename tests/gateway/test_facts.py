@@ -42,7 +42,8 @@ def test_fingerprint_windows_are_shorter_than_idempotency_ttl():
 def test_enums_match_the_spec_vocabulary():
     assert facts.SERVICE_TIERS == ("realtime", "batch")
     assert facts.REQUEST_STATUSES == ("completed", "failed", "interrupted")
-    assert facts.USAGE_SOURCES == ("estimated", "actual")
+    # INV-M03-07 只加不改：C9a 在 estimated / actual 之后**追加** dual（顺序即契约顺序）
+    assert facts.USAGE_SOURCES == ("estimated", "actual", "dual")
     assert facts.BATCH_STATUSES == ("queued", "running", "succeeded", "failed", "canceled")
     assert facts.BATCH_TERMINAL_STATUSES == ("succeeded", "failed", "canceled")
     assert set(facts.MESSAGE_ROLES) == {"system", "user", "assistant", "tool"}

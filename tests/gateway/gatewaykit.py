@@ -28,7 +28,7 @@ from app.gateway import models
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = ROOT / "migrations"
 
-#: 本模块的迁移（301–306，数字序）
+#: 本模块的迁移（301–307，数字序）
 M03_MIGRATIONS = (
     "301_api_request_log.sql",
     "302_batch_jobs.sql",
@@ -36,6 +36,7 @@ M03_MIGRATIONS = (
     "304_m03_outbox.sql",
     "305_m03_idempotency.sql",
     "306_batch_webhook_state.sql",
+    "307_api_request_log_usage_source_dual.sql",
 )
 
 #: M03 拥有的表（01-ownership §2 + M03 §5；``m03_outbox`` 按 01-ownership §2「每模块自己的 outbox」；

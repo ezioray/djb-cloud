@@ -18,6 +18,9 @@
 * **计费**：正常收尾按上游用量（缺则估算）；中断一律 ``estimated``。开关
   ``gateway.stream_estimated_usage_sync`` 关闭时，中断**不主动**写 M05 估算用量
   （由 M05 用收据 / 上游账单校正），只在网关侧留事实。
+* **双计（C9a）**：开关 ``gateway.token.dual.enabled`` 打开且上游给了两端用量时，本地
+  tokenizer 复核并标 ``usage_source=dual``，差异 >1% 记 ``gateway.token_mismatch`` 告警；
+  **响应帧里的 usage 数值不因本地计数改变**（计费口径不变）。关闭时回到 ``actual``。
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ from datetime import datetime
 from typing import Any, Callable, Iterator, Mapping
 
 from . import (clock, config_source, errors, events, facts, features, idempotency, models,
-               outbox, providers, quota, ratelimit, store, validation)
+               outbox, providers, quota, ratelimit, store, tokenizer, validation)
 
 log = logging.getLogger("djb.gateway.stream")
 
@@ -203,13 +206,29 @@ class StreamPlan:
     # ------------------------------------------------------------------ 内部
     def _usage(self, tokens_in: int | None, tokens_out: int | None,
                content: list[str]) -> tuple[int, int, str]:
+        """与 :func:`app.gateway.chat._usage_of` 同口径（C9a）：流式 completion 用已收集正文计数。
+
+        * 上游两端都有：双计开关打开 → 本地复核 + 差异告警，标 ``dual``（**数值仍用上游**）；
+          关闭 → ``actual``（行为不变）。
+        * 缺一端：用本地 tokenizer 补齐（替代 ``len // 4``），标 ``estimated``。
+        """
+        text = "".join(content)
         if tokens_in is not None and tokens_out is not None:
-            return int(tokens_in), int(tokens_out), "actual"
-        prompt_text = "".join(item.get("content") or "" for item in self.validated.messages)
-        estimated_in = int(tokens_in) if tokens_in is not None else max(
-            1, len(prompt_text) // 4)
-        estimated_out = int(tokens_out) if tokens_out is not None else max(
-            1, len("".join(content)) // 4)
+            if not features.enabled(facts.TOKEN_DUAL_SWITCH):
+                return int(tokens_in), int(tokens_out), "actual"
+            local_in = tokenizer.count_prompt_tokens(self.validated.model, self.validated.messages)
+            local_out = tokenizer.count_completion_tokens(self.validated.model, text)
+            for event in tokenizer.dual_mismatch_events(
+                    request_id=self.request_id, model=self.validated.model,
+                    local_in=local_in, upstream_in=int(tokens_in),
+                    local_out=local_out, upstream_out=int(tokens_out),
+                    threshold=facts.TOKEN_DUAL_MISMATCH_RATIO):
+                log.warning("gateway.token_mismatch", extra=event)
+            return int(tokens_in), int(tokens_out), "dual"
+        estimated_in = (int(tokens_in) if tokens_in is not None else max(
+            1, tokenizer.count_prompt_tokens(self.validated.model, self.validated.messages)))
+        estimated_out = (int(tokens_out) if tokens_out is not None else max(
+            1, tokenizer.count_completion_tokens(self.validated.model, text)))
         return estimated_in, estimated_out, "estimated"
 
     def _connection(self) -> Any:
