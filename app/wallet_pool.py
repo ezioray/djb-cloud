@@ -23,7 +23,7 @@ import math
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Iterable, Mapping, Sequence
 
 from .ledger import recompute
@@ -111,11 +111,28 @@ FEATURE_FLAGS: dict[str, FeatureFlag] = {
 _TRUTHY = {"1", "true", "on", "yes", "y", "t"}
 
 
-def flag_enabled(flag: FeatureFlag | str, override: bool | None = None,
-                 env: Mapping[str, str] | None = None) -> bool:
-    """开关判定：显式 override > 环境变量 > 默认（默认一律关闭）。"""
+def flag_expired(flag: FeatureFlag | str, *, today: date | None = None) -> bool:
+    """开关是否已过 expire_at（到期即强制为关，口径同 chain/admin）。
+
+    expire_at 非法时 fail-closed 视为已到期：配置错误不得变成永久开启。
+    """
     if isinstance(flag, str):
         flag = FEATURE_FLAGS[flag]
+    today = today or date.today()
+    try:
+        return today > date.fromisoformat(flag.expire_at)
+    except (TypeError, ValueError):
+        return True
+
+
+def flag_enabled(flag: FeatureFlag | str, override: bool | None = None,
+                 env: Mapping[str, str] | None = None, *,
+                 today: date | None = None) -> bool:
+    """开关判定：到期强制关 > 显式 override > 环境变量 > 默认（默认一律关闭）。"""
+    if isinstance(flag, str):
+        flag = FEATURE_FLAGS[flag]
+    if flag_expired(flag, today=today):
+        return False
     if override is not None:
         return bool(override)
     environ = os.environ if env is None else env
