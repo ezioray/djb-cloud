@@ -411,7 +411,7 @@ def list_models() -> list[dict[str, Any]]:
 
 
 _MODEL_FIELDS: tuple[str, ...] = ("id", "object", "created", "owned_by", "context_window",
-                                  "unit", "price", "price_version")
+                                  "unit", "price", "price_version", "available", "probe")
 
 
 def _model_dict(item: Any) -> dict[str, Any]:

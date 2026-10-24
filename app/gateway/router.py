@@ -194,7 +194,8 @@ def list_models(request: Request) -> JSONResponse:
         return _unexpected(request_id, exc)
 
 
-_MODEL_FIELDS = ("id", "object", "created", "owned_by", "context_window", "unit", "price")
+_MODEL_FIELDS = ("id", "object", "created", "owned_by", "context_window", "unit", "price",
+                   "available", "probe")
 
 
 def _model_payload(item: dict[str, Any]) -> dict[str, Any]:
