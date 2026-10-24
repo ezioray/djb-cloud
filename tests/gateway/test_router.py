@@ -263,4 +263,5 @@ def test_health_reports_wiring_without_leaking_providers():
     assert info["features"] == {"gateway.protocol_version_strict": False,
                                "gateway.node_layer_rate_limit": False,
                                "gateway.stream_estimated_usage_sync": False,
-                               "gateway.batch_webhook_delivery": False}
+                               "gateway.batch_webhook_delivery": False,
+                               "gateway.token.dual.enabled": False}

@@ -14,6 +14,7 @@ from app.metering import signing
 
 from .db import Database
 from .identity import IdentityAuth, Provisioned, provision_account
+from .availability import SupplyAvailability
 from .nodes import DemoCatalog, EchoNodeClient
 from .scheduling import Market, RouteAdapter, seed_market
 from .metering import UsageAdapter, settle_usage
@@ -38,6 +39,7 @@ class S1Wiring:
     usage: UsageAdapter
     node: EchoNodeClient
     catalog: DemoCatalog
+    availability: SupplyAvailability
 
     def settle(self, usage_id: str, *, policy_version: str, trace_id: str):
         return settle_usage(self.db, usage_id, policy_version=policy_version, trace_id=trace_id)
@@ -53,7 +55,8 @@ def install(db: Database, *, keys: signing.SignatureKeys | None = None) -> S1Wir
     route = RouteAdapter(db)
     usage = UsageAdapter(db, signature_keys)
     node = EchoNodeClient()
-    catalog = DemoCatalog()
+    availability = SupplyAvailability(db)
+    catalog = DemoCatalog(availability=availability)
 
     providers.reset_providers()
     providers.set_auth_provider(identity)
@@ -69,4 +72,5 @@ def install(db: Database, *, keys: signing.SignatureKeys | None = None) -> S1Wir
         usage=usage,
         node=node,
         catalog=catalog,
+        availability=availability,
     )
