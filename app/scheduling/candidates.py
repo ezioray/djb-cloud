@@ -129,7 +129,10 @@ def _view_rows(c, *, model: str, now: datetime,
                   FROM {facts.CAPACITY_LATEST_VIEW} c
                   JOIN {facts.NODE_SNAPSHOT_VIEW} s ON s.node_id = c.node_id
                   {probe_join}
+                  LEFT JOIN {facts.INTEGRITY_FROZEN_VIEW} f
+                         ON f.node_id = c.node_id AND f.model = c.model
                  WHERE c.model = %(model)s
+                   AND f.node_id IS NULL
                  ORDER BY s.node_id, c.access""",
             {"model": model, **probe_params})
         names = [column.name for column in cur.description]

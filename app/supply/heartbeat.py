@@ -102,6 +102,7 @@ def pulse(c, *, node, protocol_version: Any, policy_version: Any,
     if capacity_entries is not None:
         entries, ignored = capacity.normalize(capacity_entries)
         gated_count = _gate_unverified(c, node_id=node.id, entries=entries, moment=moment)
+        gated_count += _gate_frozen(c, node_id=node.id, entries=entries)
         announcement = capacity.record(c, node_id=node.id, entries=entries, ttl_seconds=ttl_s,
                                        now=moment)
         if gated_count:
@@ -180,6 +181,29 @@ def _gate_unverified(c, *, node_id: str, entries: list[dict[str, Any]],
             continue
         entry["max_qps"] = 0.0
         gated += 1
+    return gated
+
+
+def _gate_frozen(c, *, node_id: str, entries: list[dict[str, Any]]) -> int:
+    """冻结门控（C14）：M17 生效冻结的模型把 ``max_qps`` 置 0（只裁剪，不改校验口径）。
+
+    读 M17 只读视图 ``v_supply_integrity_frozen``；视图不存在（迁移未应用）→ 0，不阻断心跳。
+    """
+    if not entries:
+        return 0
+    with c.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) AS view_name", (facts.INTEGRITY_FROZEN_VIEW,))
+        if models._rows(cur)[0]["view_name"] is None:
+            return 0
+        cur.execute(
+            f"SELECT model FROM {facts.INTEGRITY_FROZEN_VIEW} WHERE node_id = %s",
+            (node_id,))
+        frozen = {row["model"] for row in models._rows(cur)}
+    gated = 0
+    for entry in entries:
+        if entry["model"] in frozen and entry["max_qps"] > 0:
+            entry["max_qps"] = 0.0
+            gated += 1
     return gated
 
 
