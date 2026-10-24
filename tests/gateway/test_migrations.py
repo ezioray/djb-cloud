@@ -5,8 +5,11 @@ from __future__ import annotations
 import pathlib
 import re
 
+import psycopg
+import pytest
+
 from app.gateway import migrate as gateway_migrate
-from gatewaykit import (BASE_TABLES, M03_FUNCTIONS, M03_MIGRATIONS, M03_TABLES,
+from gatewaykit import (BASE_TABLES, M03_FUNCTIONS, M03_MIGRATIONS, M03_TABLES, ROOT,
                         apply_migrations, column_names, function_names, index_names,
                         m03_migration_files, migration_files, migration_number,
                         prerequisite_files, run_migrations, session, table_names)
@@ -117,7 +120,7 @@ def test_numeric_order_differs_from_lexicographic_and_we_use_numeric():
     numeric = [migration_number(path) for path in m03_migration_files()]
     assert numeric == sorted(numeric)
     assert [int(name.split("_", 1)[0]) for name in M03_MIGRATIONS] == [301, 302, 303, 304, 305,
-                                                                      306]
+                                                                      306, 307]
 
 
 def test_migrations_create_only_m03_tables(schema):
@@ -183,3 +186,58 @@ def test_rls_is_not_enabled_by_accident(schema):
             "SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
             " WHERE n.nspname = %s AND c.relrowsecurity", (schema,)).fetchall()
     assert rows == []
+
+
+# ─────────────────────────────────────────────────────── 307（C9a 双计枚举扩展）
+def _insert_usage_source(conn, request_id: str, usage_source: str | None) -> None:
+    """插一行最小元数据（只给必填列 + usage_source；正文列本表没有）。"""
+    import uuid as _uuid
+
+    conn.execute("INSERT INTO api_request_log (id, request_id, status, http_status, usage_source)"
+                 " VALUES (%s, %s, 'completed', 200, %s)",
+                 (str(_uuid.uuid4()), request_id, usage_source))
+
+
+def test_307_widens_usage_source_enum_without_rewriting_history(schema):
+    """C9a（PROBE-TOKEN-AUDIT §5）：307 只**放宽**枚举——新行 dual 可插、非法值仍拒、
+    约束仍是 NOT VALID（历史行不校验、不重写表）。"""
+    apply_migrations(schema, m03_migration_files())
+    with session(schema) as conn:
+        _insert_usage_source(conn, "r-legacy", "actual")              # 301 口径照旧
+        _insert_usage_source(conn, "r-dual", "dual")                  # 307 之后新增值
+        with pytest.raises(psycopg.errors.CheckViolation):
+            _insert_usage_source(conn, "r-bad", "client_reported")    # 非法值仍拒（23514）
+        definition = conn.execute(
+            "SELECT pg_get_constraintdef(con.oid) FROM pg_constraint con"
+            " JOIN pg_class c ON c.oid = con.conrelid"
+            " JOIN pg_namespace n ON n.oid = con.connamespace"
+            " WHERE n.nspname = %s AND c.relname = 'api_request_log'"
+            " AND con.conname = 'api_request_log_usage_source_ck'", (schema,)).fetchone()[0]
+    assert "dual" in definition
+    assert "NOT VALID" in definition
+
+
+def test_307_is_repeatable_and_reversible(schema):
+    """307 重跑幂等；status 能识别；回滚后旧两值 CHECK 生效且**不重写**已有 dual 行。"""
+    apply_migrations(schema, m03_migration_files())
+    path = ROOT / "migrations" / "307_api_request_log_usage_source_dual.sql"
+    assert run_migrations([path], schema).returncode == 0            # 幂等重跑
+
+    marker = "307_api_request_log_usage_source_dual.sql"
+    applied = {row["name"]: row["applied"]
+               for row in gateway_migrate.status(schema)["module_migrations"]}
+    assert applied[marker] is True                                   # 约束定义已含 dual
+
+    rollback = dict(gateway_migrate.DOWN_SQL)[marker]
+    with session(schema) as conn:
+        _insert_usage_source(conn, "r-keep", "dual")                 # 回滚前的 dual 行
+        conn.execute(rollback)                                       # 只改 CHECK，不重写表
+        with pytest.raises(psycopg.errors.CheckViolation):
+            _insert_usage_source(conn, "r-after", "dual")            # 旧两值 CHECK 生效
+        kept = conn.execute("SELECT usage_source FROM api_request_log"
+                            " WHERE request_id = 'r-keep'").fetchone()[0]
+    assert kept == "dual"                                            # 历史行不动
+
+    applied = {row["name"]: row["applied"]
+               for row in gateway_migrate.status(schema)["module_migrations"]}
+    assert applied[marker] is False

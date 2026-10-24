@@ -77,7 +77,9 @@ PROTOCOL_MAJOR_SUPPORTED: tuple[int, ...] = (1,)
 # --------------------------------------------------------------------------- 枚举（M03 §5 / spec）
 SERVICE_TIERS: tuple[str, ...] = ("realtime", "batch")
 REQUEST_STATUSES: tuple[str, ...] = ("completed", "failed", "interrupted")
-USAGE_SOURCES: tuple[str, ...] = ("estimated", "actual")
+USAGE_SOURCES: tuple[str, ...] = ("estimated", "actual", "dual")
+"""用量口径（INV-M03-07 只加不改）：``actual`` 上游给的、``estimated`` 本地估算、
+``dual`` 上游给了但本地 tokenizer 已复核（C9a；**数值仍以上游为准**，差异 >1% 只告警）。"""
 BATCH_STATUSES: tuple[str, ...] = ("queued", "running", "succeeded", "failed", "canceled")
 BATCH_TERMINAL_STATUSES: tuple[str, ...] = ("succeeded", "failed", "canceled")
 BATCH_KINDS: tuple[str, ...] = ("chat", "completion")
@@ -169,6 +171,14 @@ SLO_FIRST_BYTE_P95_MS: int = 1_200
 
 SLO_GATEWAY_OVERHEAD_MS: int = 20
 """网关额外开销 ≤20 ms（03-facts §10；只用于指标与断言）。"""
+
+# --------------------------------------------------------------------------- 双计（C9a，M03 §5）
+TOKEN_DUAL_SWITCH: str = "gateway.token.dual.enabled"
+"""双计闸门名（在 :mod:`app.gateway.features` 登记三字段；**默认关闭**）。"""
+
+TOKEN_DUAL_MISMATCH_RATIO: float = 0.01
+"""双计差异告警阈值：|local - upstream| / upstream **>1%** 才记 ``gateway.token_mismatch``
+（PROBE-TOKEN-AUDIT §5 C9；与 M05 §8.2 的 1% 校正阈值同口径；只告警，不改写数值）。"""
 
 # --------------------------------------------------------------------------- 保留期（M03 §5）
 REQUEST_LOG_RETENTION_DAYS: int = 7

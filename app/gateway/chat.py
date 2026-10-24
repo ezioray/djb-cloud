@@ -31,7 +31,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from . import (clock, config_source, dispatch, errors, events, facts, features, idempotency,
-               models, outbox, providers, quota, ratelimit, store, validation)
+               models, outbox, providers, quota, ratelimit, store, tokenizer, validation)
 
 log = logging.getLogger("djb.gateway.chat")
 
@@ -52,22 +52,35 @@ def _limit_headers(decision: ratelimit.LimitDecision | None) -> dict[str, str]:
     return {} if decision is None else decision.headers()
 
 
-def _estimate_tokens(text: str) -> int:
-    """粗略 token 估算（仅在上游未给用量时兜底，标 ``estimated``）。"""
-    return max(1, len(text or "") // 4)
+def _usage_of(result: models.NodeResult, messages: tuple[dict[str, str], ...], *,
+              model: str | None = None, request_id: str = "") -> tuple[int, int, str]:
+    """用量与口径（C9a）。
 
-
-def _usage_of(result: models.NodeResult, messages: tuple[dict[str, str], ...]) -> tuple[int,
-                                                                                       int, str]:
-    """用量与口径：上游给了两端 → ``actual``；缺一端 → 按内容估算并标 ``estimated``。"""
-    prompt_text = "".join(item.get("content") or "" for item in messages)
-    tokens_in = result.tokens_in
-    tokens_out = result.tokens_out
-    if tokens_in is None or tokens_out is None:
-        tokens_in = _estimate_tokens(prompt_text) if tokens_in is None else int(tokens_in)
-        tokens_out = _estimate_tokens(result.content) if tokens_out is None else int(tokens_out)
-        return int(tokens_in), int(tokens_out), "estimated"
-    return int(tokens_in), int(tokens_out), "actual"
+    * **上游两端都有**：开关 ``gateway.token.dual.enabled``（默认关闭）打开时做本地双计——
+      用 :mod:`app.gateway.tokenizer` 计 prompt / completion，差异 >1% 记
+      ``gateway.token_mismatch`` 告警（只含数字与标识），并标 ``usage_source="dual"``；
+      **返回的数值仍是上游的**（响应 / 计费口径不变）。关闭时行为与以前一致（``actual``）。
+    * **上游缺一端**：用本地 tokenizer 补齐（替代旧的 ``len // 4``，中文不再低估约 4 倍），
+      标 ``estimated``。
+    """
+    upstream_in, upstream_out = result.tokens_in, result.tokens_out
+    if upstream_in is not None and upstream_out is not None:
+        if not features.enabled(facts.TOKEN_DUAL_SWITCH):
+            return int(upstream_in), int(upstream_out), "actual"
+        local_in = tokenizer.count_prompt_tokens(model, messages)
+        local_out = tokenizer.count_completion_tokens(model, result.content)
+        for event in tokenizer.dual_mismatch_events(
+                request_id=request_id, model=model,
+                local_in=local_in, upstream_in=int(upstream_in),
+                local_out=local_out, upstream_out=int(upstream_out),
+                threshold=facts.TOKEN_DUAL_MISMATCH_RATIO):
+            log.warning("gateway.token_mismatch", extra=event)
+        return int(upstream_in), int(upstream_out), "dual"
+    estimated_in = (int(upstream_in) if upstream_in is not None
+                    else max(1, tokenizer.count_prompt_tokens(model, messages)))
+    estimated_out = (int(upstream_out) if upstream_out is not None
+                     else max(1, tokenizer.count_completion_tokens(model, result.content)))
+    return estimated_in, estimated_out, "estimated"
 
 
 def _completion_payload(*, request_id: str, model: str, content: str, finish_reason: str,
@@ -200,8 +213,9 @@ def complete(c: Any, *args: Any, principal: models.Principal, body: Mapping[str,
         decision = outcome.decision
         assert result is not None and decision is not None       # dispatch 保证
 
-        # ---- 7) 用量与口径
-        tokens_in, tokens_out, usage_source = _usage_of(result, validated.messages)
+        # ---- 7) 用量与口径（C9a：dual 只告警，数值仍以上游为准）
+        tokens_in, tokens_out, usage_source = _usage_of(
+            result, validated.messages, model=validated.model, request_id=request_id)
         latency_ms = (result.latency_ms if result.latency_ms is not None
                       else clock.elapsed_ms(started))
         first_byte_ms = (result.first_byte_ms if result.first_byte_ms is not None
