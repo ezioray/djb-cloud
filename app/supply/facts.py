@@ -66,6 +66,15 @@ MAX_UPSTREAMS_PER_NODE = 16        # 单节点上游上限（超出 40001）
 MAX_MODELS_PER_UPSTREAM = 200      # 单上游模型上限（超出 40001）
 MAX_CAPABILITIES_PER_ANNOUNCEMENT = 200   # 公告单批上限（超出 40001）
 
+PROBE_FRESH_S = 900               # 上游体检结论新鲜度（C9b：容量公告只认 ≥ now-900s 的 verified）
+"""心跳公告门控的新鲜窗口（C9b 硬化）。
+
+口径：``node_upstreams.state='verified'`` **且** ``verified_at >= now - PROBE_FRESH_S``
+**且** 该模型在上游 ``models`` 里，才保留客户端公告的 ``max_qps``；否则置 0（保留条目与 seq）。
+900 s = 客户端本地体检回执的默认有效窗口（M02 §6.3「服务端不探测，只登记结论位」：
+结论位不能永久有效，否则一次体检可以永久换容量）。不是 §8.1 配置键，故留在本文件。
+"""
+
 BINDING_CODE_TTL_S = 600           # 一次性绑定码默认时效（spec：一次性、短时效；库层 ≤1 h）
 BINDING_CODE_MAX_ATTEMPTS = 5      # 单码最多尝试次数（防爆破）
 BINDING_CODE_ENTROPY_BYTES = 24    # 192 bit

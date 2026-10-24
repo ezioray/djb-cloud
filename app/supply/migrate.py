@@ -13,7 +13,9 @@ CI 的执行方式是 ``for f in $(printf '%s\\n' migrations/*.sql | sort -V)``�
     python -m app.supply.migrate --schema m02_t12_x --status
 
 ``--up`` 会先应用存量基线 001/002/003（``nodes`` 由 **003_nodes.sql** 建立，
-M02 §5「迁移：只加不改；003_nodes.sql 保留为历史」）。2xx 段：200–207。
+M02 §5「迁移：只加不改；003_nodes.sql 保留为历史」）。2xx 段：200–209。
+
+209（``v_supply_upstream_verified``）只加**只读视图**：不新增表 / 列，回滚只 DROP VIEW。
 """
 from __future__ import annotations
 
@@ -37,6 +39,9 @@ MODULE_MIGRATIONS: tuple[str, ...] = tuple(
 
 #: 回滚：逆序删本模块新增对象；**存量对象只删新增列**（00-conventions §7.2）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("209_supply_verified_view.sql", """
+        DROP VIEW IF EXISTS v_supply_upstream_verified;
+    """),
     ("208_supply_heartbeat.sql", """
         DROP VIEW IF EXISTS v_supply_capacity_latest;
         DROP VIEW IF EXISTS v_supply_node_snapshot;
@@ -133,6 +138,7 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "206_supply_idempotency.sql": ("table", "supply_idempotency", ""),
     "207_supply_binding_codes.sql": ("table", "node_binding_codes", ""),
     "208_supply_heartbeat.sql": ("column", "nodes", "heartbeat_seq"),
+    "209_supply_verified_view.sql": ("view", "v_supply_upstream_verified", ""),
 }
 
 
@@ -201,6 +207,10 @@ def _exists(conn: psycopg.Connection, kind: str, table: str, column: str = "") -
         if kind == "table":
             cur.execute(
                 """SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = current_schema() AND table_name = %s""", (table,))
+        elif kind == "view":
+            cur.execute(
+                """SELECT 1 FROM information_schema.views
                     WHERE table_schema = current_schema() AND table_name = %s""", (table,))
         else:
             cur.execute(
