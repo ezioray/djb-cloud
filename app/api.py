@@ -20,6 +20,7 @@ from .audit.router import create_router as create_audit_router
 from .config_center.router import create_router as create_config_center_router
 from .data_gov.router import create_router as create_data_gov_router
 from .identity.router import router as identity_router
+from .integrity.router import router as integrity_router, set_admin_authenticator as set_integrity_admin_auth
 from .ledger.router import router as ledger_router
 from .metering.router import router as metering_router, set_admin_authenticator as set_metering_admin_auth, set_user_authenticator as set_metering_user_auth
 from .nodes import router as node_router
@@ -76,6 +77,7 @@ app.include_router(ledger_router)
 # W1 模块接线（Lead 合并窗口）：M02 / M04 / M05 / M10 的路由由各模块自带，
 # 鉴权/连接默认 fail-closed；生产部署再注入 provider（见各模块 router 头部说明）。
 app.include_router(supply_router)
+app.include_router(integrity_router)
 app.include_router(scheduling_router)
 app.include_router(metering_router)
 app.include_router(create_config_center_router())
@@ -152,6 +154,7 @@ def _user_principal_step_up(request: Request) -> dict | None:
 set_supply_user_auth(_user_principal_step_up)
 set_metering_user_auth(_user_principal)
 set_metering_admin_auth(_admin_dev_principal)
+set_integrity_admin_auth(_admin_dev_principal)
 
 
 app.include_router(create_audit_router(
