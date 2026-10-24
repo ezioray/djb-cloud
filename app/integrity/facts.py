@@ -191,3 +191,41 @@ CHALLENGE_COLUMNS: Final[str] = (
 ATTEST_EVENT_COLUMNS: Final[str] = (
     "event_id, attestation_id, challenge_id, node_id, model, event, level, detail,"
     " actor, created_at")
+
+# ───────────────────────────────────────────────────────── C14b 可验证随机抽检（M17 §5.10 / §5.11）
+# 只加不改：本段不修改上面任何常量。
+SAMPLING_FLAG: Final[str] = "supply.sampling.enabled"
+SAMPLING_ENV: Final[str] = "DJB_SAMPLING"
+"""S2 测试网显式激活：``DJB_SAMPLING=1``；代码默认仍关闭。"""
+
+SAMPLING_SEED_BYTES: Final[int] = 32
+"""seed = 32 字节随机（256 bit）；库里只存 sha256 承诺与揭示后的十六进制值。"""
+
+SAMPLING_EPOCH_STATES: Final[tuple[str, ...]] = ("committed", "revealed", "expired")
+SAMPLING_DRAW_STATUSES: Final[tuple[str, ...]] = ("pending", "passed", "failed", "missed")
+SAMPLING_EVENTS: Final[tuple[str, ...]] = (
+    "committed", "revealed", "drawn", "passed", "failed", "missed")
+
+SAMPLING_MAX_CONTRIBUTIONS: Final[int] = 10000
+SAMPLING_MAX_DRAW_COUNT: Final[int] = 1000
+SAMPLING_WEIGHT_MAX: Final[int] = 10**15
+"""单条贡献权重上限（bigint 安全；0 = 不参与抽签）。"""
+
+SAMPLING_CONTRIBUTION_KEYS: Final[tuple[str, ...]] = ("node_id", "model", "weight")
+SAMPLING_ACTOR_SYSTEM: Final[str] = "system:sampling"
+
+#: 抽检建议阈值（与 M17 §6.1 的 I0/I1/I2 行对齐：单次 → I0；24h 内 2 次 → I1；7d 内 3 次 → I2）
+SAMPLING_ESCALATION_24H: Final[timedelta] = timedelta(hours=24)
+SAMPLING_ESCALATION_7D: Final[timedelta] = timedelta(days=7)
+SAMPLING_LEVEL_24H_I0: Final[int] = 1
+SAMPLING_LEVEL_24H_I1: Final[int] = 2
+SAMPLING_LEVEL_7D_I2: Final[int] = 3
+
+SAMPLING_EPOCH_COLUMNS: Final[str] = (
+    "id, epoch_no, seed_commit, seed_reveal, contributions, state, committed_at,"
+    " revealed_at, draw_count, created_at")
+SAMPLING_DRAW_COLUMNS: Final[str] = (
+    "id, epoch_id, node_id, model, weight, rank, challenge_id, status, level, detail,"
+    " created_at, resolved_at")
+SAMPLING_EVENT_COLUMNS: Final[str] = (
+    "event_id, epoch_id, draw_id, event, detail, actor, created_at")

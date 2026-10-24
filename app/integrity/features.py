@@ -78,6 +78,16 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
         description=("M17 §5 模型身份证明（C12 服务端 L3+ 核心）：默认关闭，S2 测试网用 "
                      "DJB_ATTEST=1 显式激活；关闭时读接口只读"),
     ),
+    FeatureSwitch(
+        name="supply.sampling.enabled",
+        owner="lead",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭 → 停止开新轮次 / 揭示 / 回填结果（写接口 503/50001，fail-closed）；"
+                       "已揭示轮次的承诺、抽样框与抽签结果保留只读、可继续复算；"
+                       "未完成的 pending 抽检不再推进（不判 missed、不改账本）"),
+        description=("M17 §5.10 可验证随机抽检（C14b commit-reveal + 贡献加权）：默认关闭，"
+                     "S2 测试网用 DJB_SAMPLING=1 显式激活；关闭时读接口只读"),
+    ),
 )
 
 

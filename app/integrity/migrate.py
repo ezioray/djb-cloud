@@ -31,23 +31,26 @@ __all__ = [
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "migrations"
 
 #: M17 段（1700–1799，M17 §7 / 01-ownership 待登记）
-#: 1710/1711 = C14 冻结；1720 = C12 证明
+#: 1710/1711 = C14 冻结；1720/1721 = C12 证明；1730 = C14b 抽检
 MODULE_RANGE = (1700, 1799)
 
 #: 本模块拥有的域表（M17 §7）
 M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",
     "model_attestations", "attestation_challenges", "attestation_events",
+    "sampling_epochs", "sampling_draws", "sampling_events",
 )
 
 #: 本模块拥有的只读视图
-M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen",)
+M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen", "v_supply_model_attested")
 
 #: 本模块新增的函数 / 触发器函数
 M17_FUNCTIONS: tuple[str, ...] = (
     "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
     "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
     "m17_attest_forbid_truncate",
+    "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
+    "m17_sampling_forbid_truncate",
 )
 
 
@@ -70,6 +73,20 @@ BASE_MIGRATIONS: tuple[str, ...] = _sorted_names(lambda name: not _is_module(nam
 
 #: 回滚：逆序删本模块对象（1710）。全部 IF EXISTS，可重复执行；不触碰账本对象。
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1730_sampling.sql", """
+        -- 触发器随表删除；先删 draws（FK→challenges / epochs），再删 events / epochs。
+        DROP TABLE IF EXISTS sampling_events;
+        DROP TABLE IF EXISTS sampling_draws;
+        DROP TABLE IF EXISTS sampling_epochs;
+        DROP FUNCTION IF EXISTS m17_sampling_event_guard();
+        DROP FUNCTION IF EXISTS m17_sampling_draw_guard();
+        DROP FUNCTION IF EXISTS m17_sampling_epoch_guard();
+        DROP FUNCTION IF EXISTS m17_sampling_forbid_truncate();
+    """),
+    ("1721_supply_model_attested_view.sql", """
+        -- C12 只读视图依赖 model_attestations：必须先于 1720 删除（逆序回滚）
+        DROP VIEW IF EXISTS v_supply_model_attested;
+    """),
     ("1720_model_attestations.sql", """
         -- 触发器随表一起删除（DROP TABLE 会级联删自身触发器），因此这里不再单独 DROP TRIGGER：
         -- 可重复执行，且不需要「表不存在时 DROP TRIGGER ... ON 表」的额外判断。
@@ -131,7 +148,7 @@ def up(conn: psycopg.Connection, *, with_base: bool = True) -> list[str]:
 
 
 def down(conn: psycopg.Connection) -> list[str]:
-    """逆序回滚本模块（1720 → 1711 → 1710）；只删本模块对象，可重复执行。"""
+    """逆序回滚本模块（1730 → 1721 → 1720 → 1711 → 1710）；只删本模块对象，可重复执行。"""
     return _apply(conn, tuple(name for name, _ in DOWN_SQL), direction="down")
 
 
@@ -144,6 +161,10 @@ def status(conn: psycopg.Connection) -> dict[str, str]:
         "1720_model_attestations.sql": ("table", "model_attestations"),
         "1720_model_attestations.sql#challenges": ("table", "attestation_challenges"),
         "1720_model_attestations.sql#events": ("table", "attestation_events"),
+        "1721_supply_model_attested_view.sql": ("view", "v_supply_model_attested"),
+        "1730_sampling.sql": ("table", "sampling_epochs"),
+        "1730_sampling.sql#draws": ("table", "sampling_draws"),
+        "1730_sampling.sql#events": ("table", "sampling_events"),
     }
     result: dict[str, str] = {}
     with conn.cursor() as cur:
