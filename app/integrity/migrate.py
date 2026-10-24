@@ -31,7 +31,7 @@ __all__ = [
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "migrations"
 
 #: M17 段（1700–1799，M17 §7 / 01-ownership 待登记）
-#: 1710/1711 = C14 冻结；1720/1721 = C12 证明；1730 = C14b 抽检
+#: 1710/1711 = C14 冻结；1720/1721 = C12 证明；1730 = C14b 抽检；1740 = C13 canary
 MODULE_RANGE = (1700, 1799)
 
 #: 本模块拥有的域表（M17 §7）
@@ -39,6 +39,7 @@ M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",
     "model_attestations", "attestation_challenges", "attestation_events",
     "sampling_epochs", "sampling_draws", "sampling_events",
+    "canary_prompts", "canary_runs", "canary_events",
 )
 
 #: 本模块拥有的只读视图
@@ -51,6 +52,8 @@ M17_FUNCTIONS: tuple[str, ...] = (
     "m17_attest_forbid_truncate",
     "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
     "m17_sampling_forbid_truncate",
+    "m17_canary_prompt_guard", "m17_canary_run_guard", "m17_canary_event_guard",
+    "m17_canary_forbid_truncate",
 )
 
 
@@ -73,6 +76,16 @@ BASE_MIGRATIONS: tuple[str, ...] = _sorted_names(lambda name: not _is_module(nam
 
 #: 回滚：逆序删本模块对象（1710）。全部 IF EXISTS，可重复执行；不触碰账本对象。
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1740_canary.sql", """
+        -- 触发器随表删除；先删事件（FK→runs）再删 runs / prompts。
+        DROP TABLE IF EXISTS canary_events;
+        DROP TABLE IF EXISTS canary_runs;
+        DROP TABLE IF EXISTS canary_prompts;
+        DROP FUNCTION IF EXISTS m17_canary_event_guard();
+        DROP FUNCTION IF EXISTS m17_canary_run_guard();
+        DROP FUNCTION IF EXISTS m17_canary_prompt_guard();
+        DROP FUNCTION IF EXISTS m17_canary_forbid_truncate();
+    """),
     ("1730_sampling.sql", """
         -- 触发器随表删除；先删 draws（FK→challenges / epochs），再删 events / epochs。
         DROP TABLE IF EXISTS sampling_events;
@@ -148,7 +161,7 @@ def up(conn: psycopg.Connection, *, with_base: bool = True) -> list[str]:
 
 
 def down(conn: psycopg.Connection) -> list[str]:
-    """逆序回滚本模块（1730 → 1721 → 1720 → 1711 → 1710）；只删本模块对象，可重复执行。"""
+    """逆序回滚本模块（1740 → 1730 → 1721 → 1720 → 1711 → 1710）；只删本模块对象。"""
     return _apply(conn, tuple(name for name, _ in DOWN_SQL), direction="down")
 
 
@@ -165,6 +178,9 @@ def status(conn: psycopg.Connection) -> dict[str, str]:
         "1730_sampling.sql": ("table", "sampling_epochs"),
         "1730_sampling.sql#draws": ("table", "sampling_draws"),
         "1730_sampling.sql#events": ("table", "sampling_events"),
+        "1740_canary.sql": ("table", "canary_prompts"),
+        "1740_canary.sql#runs": ("table", "canary_runs"),
+        "1740_canary.sql#events": ("table", "canary_events"),
     }
     result: dict[str, str] = {}
     with conn.cursor() as cur:

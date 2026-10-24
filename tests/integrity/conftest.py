@@ -107,7 +107,8 @@ def _reset_integrity_hooks(monkeypatch):
     monkeypatch.delenv("DJB_ATTEST", raising=False)
     monkeypatch.delenv("DJB_FREEZE", raising=False)
     monkeypatch.delenv("DJB_SAMPLING", raising=False)
-    from app.integrity import attest_router, providers, sampling_router
+    monkeypatch.delenv("DJB_CANARY", raising=False)
+    from app.integrity import attest_router, canary_router, providers, sampling_router
     from app.integrity import router as hold_router
 
     providers.reset_token_counter()
@@ -117,6 +118,7 @@ def _reset_integrity_hooks(monkeypatch):
         attest_router.set_node_authenticator(None)
         attest_router.set_admin_authenticator(None)
         sampling_router.set_admin_authenticator(None)
+        canary_router.set_admin_authenticator(None)
         hold_router.set_admin_authenticator(None)
         providers.reset_token_counter()
 

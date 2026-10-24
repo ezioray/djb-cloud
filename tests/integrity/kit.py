@@ -32,6 +32,7 @@ M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",          # 1710（C14 冻结）
     "model_attestations", "attestation_challenges", "attestation_events",  # 1720（C12 证明）
     "sampling_epochs", "sampling_draws", "sampling_events",           # 1730（C14b 抽检）
+    "canary_prompts", "canary_runs", "canary_events",                 # 1740（C13 canary）
 )
 M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen", "v_supply_model_attested")
 M17_FUNCTIONS: tuple[str, ...] = (
@@ -40,6 +41,8 @@ M17_FUNCTIONS: tuple[str, ...] = (
     "m17_attest_forbid_truncate",
     "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
     "m17_sampling_forbid_truncate",
+    "m17_canary_prompt_guard", "m17_canary_run_guard", "m17_canary_event_guard",
+    "m17_canary_forbid_truncate",
 )
 M17_INDEXES: tuple[str, ...] = (
     # 1710
@@ -59,6 +62,11 @@ M17_INDEXES: tuple[str, ...] = (
     "idx_sampling_events_epoch", "idx_sampling_events_draw",
     "sampling_epochs_pkey", "sampling_epochs_epoch_no_key", "sampling_draws_pkey",
     "sampling_events_pkey",
+    # 1740
+    "idx_canary_prompts_state", "uq_canary_runs_issued", "idx_canary_runs_node",
+    "idx_canary_runs_status", "idx_canary_runs_prompt", "idx_canary_events_run",
+    "canary_prompts_pkey", "canary_prompts_prompt_key_key", "canary_runs_pkey",
+    "canary_events_pkey",
 )
 
 ADMIN_PRINCIPAL = {
@@ -381,3 +389,33 @@ def build_sampling_client(connection: Any, monkeypatch: Any, *,
 def sampling_contributions(*rows: tuple[str, str, int]) -> list[dict[str, Any]]:
     return [{"node_id": node, "model": model, "weight": weight}
             for node, model, weight in rows]
+
+
+CANARY_ADMIN_PRINCIPAL = {
+    "admin_id": "admin-canary-1",
+    "scopes": ["integrity.read", "integrity.write"],
+}
+
+
+def build_canary_client(connection: Any, monkeypatch: Any, *,
+                        admin: Mapping[str, Any] | None = None,
+                        now: datetime | None = None, feature: bool = True) -> Any:
+    """构造带 C13 canary 路由的 ASGI 客户端（SAVEPOINT 连接、时钟钉死、开关按需）。
+
+    ``admin=None`` 表示**不注入鉴权钩子**（fail-closed → 401）。
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.integrity import canary_router
+    from app.integrity import clock as clock_module
+    from app.integrity import features
+
+    monkeypatch.setattr(canary_router, "_connection", savepoint_factory(connection))
+    monkeypatch.setattr(clock_module, "utcnow", lambda: now or FIXED_NOW)
+    monkeypatch.setattr(features, "enabled", lambda name: feature)
+    canary_router.set_admin_authenticator(
+        (lambda request: dict(admin)) if admin is not None else None)
+    app = FastAPI()
+    app.include_router(canary_router.router)
+    return TestClient(app)
