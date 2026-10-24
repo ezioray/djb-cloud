@@ -22,7 +22,23 @@ def _entry(**overrides):
     return entry
 
 
+def _seed_verified_for(conn, node, entries, moment):
+    """C9b 夹具：心跳公告只认「已验证且新鲜」的上游——按公告条目补种一条 verified 上游。
+
+    本文件守的是心跳机制（限流 / seq / 事件 / 响应形状），不是门控本身；
+    门控的正负例在 ``test_capacity_gate.py``。种上游用**同一事务连接**，随用例回滚。
+    """
+    from supplykit import seed_verified_upstream
+
+    for entry in entries or ():
+        if not isinstance(entry, dict) or entry.get("kind") not in facts.CAPACITY_KINDS:
+            continue                                  # 未知 kind 本来就会被 normalize 丢掉
+        seed_verified_upstream(conn, node.id, access=entry["access"],
+                               models=(entry["model"],), verified_at=moment)
+
+
 def _pulse(conn, node, moment, **overrides):
+    _seed_verified_for(conn, node, overrides.get("capacity_entries"), moment)
     params = {"protocol_version": "1.0.0", "policy_version": node.policy_version,
               "now": moment, "trace_id": "trace-hb"}
     params.update(overrides)

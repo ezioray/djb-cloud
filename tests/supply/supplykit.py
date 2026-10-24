@@ -11,12 +11,14 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import re
 import subprocess
 import uuid
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Iterable, Sequence
 
 import psycopg
@@ -25,7 +27,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = ROOT / "migrations"
 
-#: 本任务新增的迁移（200–207）
+#: 本任务新增的迁移（200–209）
 M02_MIGRATIONS = (
     "200_supply_nodes.sql",
     "201_supply_upstreams.sql",
@@ -36,6 +38,7 @@ M02_MIGRATIONS = (
     "206_supply_idempotency.sql",
     "207_supply_binding_codes.sql",
     "208_supply_heartbeat.sql",
+    "209_supply_verified_view.sql",
 )
 
 #: M02 拥有的表（01-ownership §2 + 本模块 outbox / 幂等 / 绑定码）
@@ -231,6 +234,48 @@ def fingerprint(schema: str, tables: Sequence[str] | None = None) -> dict[str, l
     return result
 
 
+# ─────────────────────────────────────────────────────── 上游夹具（M02 自有表）
+def seed_verified_upstream(conn: psycopg.Connection, node_id: str, *,
+                           access: str = "A1",
+                           models: Iterable[str] = ("gpt-4o-mini",),
+                           state: str = "verified",
+                           verified_at: datetime | None = None,
+                           base_url: str | None = None) -> uuid.UUID:
+    """在**测试连接**上种一条上游（默认 ``state='verified'``）。
+
+    C9b 起容量公告与调度候选都只认「已验证且新鲜」的上游，所以凡是要发公告的用例
+    都必须先有这条上游。用**测试自己的连接**写（事务型 ``conn`` 也能用），
+    避免跨连接等 FK 锁；``verified_at`` 缺省用**库内 now()**（不写死用例时钟，
+    免得与固定 ``NOW`` 相撞）。
+
+    ``state`` 传 ``declared`` / ``rejected`` / ``probing`` 可造负例；
+    ``verified_at`` 传旧时刻可造「verified 但过期」。
+    """
+    model_list = [str(item) for item in models]
+    url = base_url or f"http://127.0.0.1:9/{access.lower()}/" + "+".join(model_list)
+    identifier = uuid.uuid4()
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO node_upstreams
+                   (id, node_id, access_type, base_url, models, state, verified_at,
+                    rejected_reason_code)
+               VALUES (%s, %s, %s, %s, %s::jsonb, %s,
+                       CASE WHEN %s = 'verified' THEN COALESCE(%s::timestamptz, now()) END,
+                       CASE WHEN %s = 'rejected' THEN 'unreachable' END)
+               ON CONFLICT (node_id, access_type, base_url) DO NOTHING
+               RETURNING id""",
+            (identifier, node_id, access, url, json.dumps(model_list), state,
+             state, verified_at, state))
+        row = cur.fetchone()
+        if row is None:                                  # 已存在（同 node/access/base_url）
+            cur.execute(
+                """SELECT id FROM node_upstreams
+                    WHERE node_id = %s AND access_type = %s AND base_url = %s""",
+                (node_id, access, url))
+            row = cur.fetchone()
+    return row[0]
+
+
 # ─────────────────────────────────────────────────────── 账户夹具（M01 只读依赖）
 def seed_account(schema: str, account_id: uuid.UUID | None = None, *,
                  state: str = "normal") -> uuid.UUID:
@@ -263,4 +308,5 @@ __all__ = [
     "migration_number", "migration_files", "m02_migration_files", "base_migration_files",
     "run_migration", "run_migrations", "apply_migrations",
     "table_names", "column_names", "function_names", "fingerprint", "seed_account",
+    "seed_verified_upstream",
 ]

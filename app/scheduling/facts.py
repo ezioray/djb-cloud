@@ -96,6 +96,14 @@ CONFIG_KEYS: dict[str, str] = {
 """M04 §8.1 配置键全名。运行时值来自 config-center；本模块不缓存、不写、不读环境变量。"""
 
 CANDIDATE_FRESHNESS_S = 45          # routing.candidate_freshness_s，30–120，P1
+CANDIDATE_PROBE_FRESH_S = 900       # 上游体检结论新鲜度（C9b 门控；非 §8.1 配置键）
+"""候选集的**上游验证**新鲜窗口（C9b「调度只认已验证上游」）。
+
+候选必须来自 M02 只读视图 ``v_supply_upstream_verified`` 中 ``verified_at >= now - 900s`` 的行
+（同一 ``(node_id, access, model)``）。理由同 M02 ``PROBE_FRESH_S``：``verified`` 是客户端本地
+体检的结论位（M02 §6.3 服务端不探测），不能永久有效——否则一次体检可以永久换容量。
+本常量**不是** §8.1 配置键（M10 未登记），留作模块内算法常量；接线后由 config-center 下发。
+"""
 QUOTEBOOK_REFRESH_S = 60            # routing.quotebook_refresh_s，30–120，P1
 MAX_TENANT_SHARE_PCT = 25           # routing.max_tenant_share_pct，5–50，P2
 QUOTA_FREEZE_S = 60                 # §4.7.3 P3「全部违反 → 冻结该租户 60 s」
@@ -182,6 +190,7 @@ EVENT_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
 # --------------------------------------------------------------------------- 只读依赖（01-ownership §2）
 NODE_SNAPSHOT_VIEW = "v_supply_node_snapshot"        # M02 只读视图（禁止 import 对方包）
 CAPACITY_LATEST_VIEW = "v_supply_capacity_latest"    # M02 只读视图（已过滤过期与 0 容量）
+UPSTREAM_VERIFIED_VIEW = "v_supply_upstream_verified"  # M02 只读视图（209：verified 上游 × 模型）
 
 #: 决策锚点的默认 policy_version（M10 未接线时用固定 12 位十六进制，保持可复算）
 DEFAULT_POLICY_VERSION = "000000000000"

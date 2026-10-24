@@ -57,7 +57,8 @@ BASE_TABLES = ("nodes", "capacity_announcements", "users", "user_accounts", "api
                "tenant_quotas")
 
 #: M02 提供给 M04 的只读视图（M04 只能读它们，不能读 nodes 基表）
-SUPPLY_VIEWS = ("v_supply_node_snapshot", "v_supply_capacity_latest")
+SUPPLY_VIEWS = ("v_supply_node_snapshot", "v_supply_capacity_latest",
+                "v_supply_upstream_verified")
 
 
 # ─────────────────────────────────────────────────────── 连接与迁移
@@ -283,18 +284,59 @@ def seed_node(schema: str, node_id: str, *, account_id: uuid.UUID | None = None,
     return node_id
 
 
+def seed_upstream(schema: str, node_id: str, *, access: str = "A1",
+                  models: Iterable[str] = ("m1",), state: str = "verified",
+                  verified_at: datetime | None = None,
+                  base_url: str | None = None) -> None:
+    """种一条上游（M02 ``node_upstreams``；M04 只经视图 ``v_supply_upstream_verified`` 读）。
+
+    C9b 起调度候选必须命中「已验证且新鲜」的上游（``facts.CANDIDATE_PROBE_FRESH_S``），
+    所以 ``seed_capacity`` 默认会顺手种一条 verified 上游。``verified_at`` 缺省用**库内 now()**：
+    用例时钟固定在 ``NOW``（2026-10-23），用库时间才不会与固定 NOW 相撞。
+    """
+    import json
+
+    model_list = [str(item) for item in models]
+    url = base_url or f"http://127.0.0.1:9/{access.lower()}/" + "+".join(model_list)
+    with session(schema) as conn:
+        conn.execute(
+            """INSERT INTO node_upstreams
+                   (id, node_id, access_type, base_url, models, state, verified_at,
+                    rejected_reason_code)
+               VALUES (gen_random_uuid(), %s, %s, %s, %s::jsonb, %s,
+                       CASE WHEN %s = 'verified' THEN COALESCE(%s::timestamptz, now()) END,
+                       CASE WHEN %s = 'rejected' THEN 'unreachable' END)
+               ON CONFLICT (node_id, access_type, base_url) DO NOTHING""",
+            (node_id, access, url, json.dumps(model_list), state, state, verified_at, state))
+
+
 def seed_capacity(schema: str, node_id: str, *, models: Iterable[str] = ("m1",),
                   access: str = "A1", kind: str = "token_relay", unit: str = "token",
                   max_qps: int = 20, ask_price: str = "9.00", seq: int = 1,
                   announced_at: datetime | None = None,
-                  expires_at: datetime | None = None) -> None:
-    """种一条容量公告（M02 ``capacity_announcements``，M04 只读视图）。"""
+                  expires_at: datetime | None = None,
+                  verified: bool = True,
+                  verified_at: datetime | None = None,
+                  upstream_suffix: str = "") -> None:
+    """种一条容量公告（M02 ``capacity_announcements``，M04 只读视图）。
+
+    ``verified=True``（默认）顺手种一条**同 access / 同 models** 的 verified 上游——
+    这是 C9b 门控上线后的最小可用夹具；负例传 ``verified=False``（declared 上游）
+    或用 ``verified_at`` 造「verified 但过期」。
+    """
     import json
 
+    model_list = [str(item) for item in models]
     items = [{"kind": kind, "access": access, "model": model, "max_qps": max_qps,
-              "ask_price": ask_price, "unit": unit} for model in models]
+              "ask_price": ask_price, "unit": unit} for model in model_list]
     moment = announced_at or NOW
     expiry = expires_at or moment.replace(day=28)
+    if verified is not None:
+        seed_upstream(schema, node_id, access=access, models=model_list,
+                      state="verified" if verified else "declared",
+                      verified_at=verified_at, base_url=(
+                          f"http://127.0.0.1:9/{access.lower()}/"
+                          + "+".join(model_list) + upstream_suffix))
     with session(schema) as conn:
         conn.execute(
             """INSERT INTO capacity_announcements (node_id, seq, announced_at, expires_at,
@@ -347,5 +389,6 @@ __all__ = [
     "migration_number", "migration_files", "m04_migration_files", "prerequisite_files",
     "base_migration_files", "run_migrations", "run_migration", "apply_migrations",
     "table_names", "view_names", "column_names", "function_names", "fingerprint",
-    "seed_tenant", "seed_node", "seed_capacity", "seed_quote", "quote_row", "owner_of",
+    "seed_tenant", "seed_node", "seed_upstream", "seed_capacity", "seed_quote",
+    "quote_row", "owner_of",
 ]

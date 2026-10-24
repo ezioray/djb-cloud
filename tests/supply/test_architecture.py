@@ -27,9 +27,10 @@ ALLOWED_APP_PREFIXES = ("app.supply", "app.db")
 #: 允许读的**只读视图**（00-conventions §7.4：v_<module>_<object>）
 ALLOWED_FOREIGN_OBJECTS = {"v_identity_accounts"}
 #: M02 自己建的只读视图（供 M04 读；属于本模块对象）
-OWN_VIEWS = {"v_supply_capacity_latest", "v_supply_node_snapshot"}
-#: 形如 "UPDATE SKIP LOCKED" / "INTO ..." 的 SQL 关键字组合不是表名
-SQL_NON_TABLE_TOKENS = {"skip", "set", "only", "where", "select"}
+OWN_VIEWS = {"v_supply_capacity_latest", "v_supply_node_snapshot",
+             "v_supply_upstream_verified"}
+#: 形如 "UPDATE SKIP LOCKED" / "CROSS JOIN LATERAL ..." 的 SQL 关键字组合不是表名
+SQL_NON_TABLE_TOKENS = {"skip", "set", "only", "where", "select", "lateral"}
 
 SQL_TABLE_RE = re.compile(
     r"\b(?:FROM|INTO|UPDATE|JOIN)\s+([a-z_][a-z0-9_]*)", re.IGNORECASE)

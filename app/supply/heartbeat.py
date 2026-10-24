@@ -12,13 +12,19 @@
 * **不触发同步 fan-out**：M04 从快照视图 / 事件读（M02 §6.2）；
 * **不把运行态落成枚举**：``runtime_state`` 只是可选自述，未知值忽略不报错，
   且受特性开关 ``supply.heartbeat_runtime_state`` 控制（默认关闭，T1/T2 已登记契约）。
+
+公告**门控**（C9b「容量与调度只认已验证上游」）：落库前用本模块自有表 ``node_upstreams``
+核对 ``(access_type, model)`` 是否有「``state='verified'`` 且 ``verified_at`` 新鲜」的上游；
+不在其中的条目把 ``max_qps`` 置 0（**保留条目与 seq**，便于审计「报了多少 / 认了多少」），
+公告照落、响应 schema 不变，只把计数进 :class:`HeartbeatResult.gated_count` 并打日志。
+容量校验 / 归一化的口径不变（``capacity.normalize`` 仍是唯一校验点）。
 """
 from __future__ import annotations
 
 import dataclasses
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from . import (capacity, clock, config_source, facts, features, models, protocol,
@@ -44,6 +50,7 @@ class HeartbeatResult:
     runtime_state: str | None
     interval_s: int
     stale_after_s: int
+    gated_count: int = 0                        # 被门控置 0 的公告条目数（内部字段，不进响应）
 
 
 def _now(now: datetime | None) -> datetime:
@@ -91,10 +98,18 @@ def pulse(c, *, node, protocol_version: Any, policy_version: Any,
 
     entries, ignored = ([], ())
     announcement: capacity.Announcement | None = None
+    gated_count = 0
     if capacity_entries is not None:
         entries, ignored = capacity.normalize(capacity_entries)
+        gated_count = _gate_unverified(c, node_id=node.id, entries=entries, moment=moment)
         announcement = capacity.record(c, node_id=node.id, entries=entries, ttl_seconds=ttl_s,
                                        now=moment)
+        if gated_count:
+            # 只记计数：模型名 / 端点不进日志（排障靠 node_upstreams + 公告快照）
+            log.info("supply.capacity.gated",
+                     extra={"event": "capacity.gated", "node_id": node.id,
+                            "entries": len(entries), "gated": gated_count,
+                            "trace_id": trace_id})
 
     runtime_seen = None
     if features.enabled(RUNTIME_STATE_SWITCH):
@@ -124,7 +139,48 @@ def pulse(c, *, node, protocol_version: Any, policy_version: Any,
         policy_updated=bool(policy_updated), announcement=announcement,
         accepted=bool(announcement.accepted) if announcement else False,
         ignored_kinds=ignored, runtime_state=runtime_seen,
-        interval_s=interval_s, stale_after_s=stale_after)
+        interval_s=interval_s, stale_after_s=stale_after, gated_count=gated_count)
+
+
+def _verified_pairs(c, *, node_id: str, cutoff: datetime) -> set[tuple[str, str]]:
+    """该节点「已验证且新鲜」的 ``(access_type, model)`` 集合。
+
+    判定口径与迁移 209 的只读视图 ``v_supply_upstream_verified`` 一致
+    （``state='verified'`` × ``models`` 展开）；差别只在新鲜度：视图暴露 ``verified_at`` 真值，
+    由各读取方按自己的窗口过滤（DDL 里不固化运营参数）。
+    本函数读的是**本模块自有表**，所以心跳写路径不依赖 209 是否已应用。
+    """
+    with c.cursor() as cur:
+        cur.execute(
+            """SELECT u.access_type, m.model
+                 FROM node_upstreams u
+                 CROSS JOIN LATERAL jsonb_array_elements_text(u.models) AS m(model)
+                WHERE u.node_id = %s
+                  AND u.state = 'verified'
+                  AND u.verified_at IS NOT NULL
+                  AND u.verified_at >= %s""",
+            (node_id, cutoff))
+        return {(row["access_type"], row["model"]) for row in models._rows(cur)}
+
+
+def _gate_unverified(c, *, node_id: str, entries: list[dict[str, Any]],
+                     moment: datetime) -> int:
+    """公告门控（C9b）：未落在「已验证且新鲜」上游里的条目把 ``max_qps`` 置 0。
+
+    只做信任裁剪，不改校验口径：``kind`` 已由 :func:`capacity.normalize` 过滤，
+    ``max_qps`` 已归一成非负 float。返回被置 0 的条目数。
+    """
+    if not entries:
+        return 0
+    verified = _verified_pairs(c, node_id=node_id,
+                               cutoff=moment - timedelta(seconds=facts.PROBE_FRESH_S))
+    gated = 0
+    for entry in entries:
+        if (entry["access"], entry["model"]) in verified:
+            continue
+        entry["max_qps"] = 0.0
+        gated += 1
+    return gated
 
 
 def _record_runtime_state(c, node, value: Any, moment: datetime) -> str | None:

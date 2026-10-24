@@ -47,9 +47,24 @@ def _capacity(**overrides):
     return [entry]
 
 
+def _verified_upstream(api, node, *, access="A1", models=("gpt-4o-mini",)):
+    """C9b 前置：心跳公告只认已验证上游——先申报再回执体检通过（走真实 API 路径）。"""
+    declared = api.post(UPSTREAM, json={"access_type": access,
+                                        "base_url": f"http://127.0.0.1:9/{access.lower()}",
+                                        "models": list(models)},
+                        headers={"X-Client-Key": node["client_key"]})
+    assert declared.status_code == 200, declared.text
+    ack = api.post(PROBE, json={"upstream_id": declared.json()["upstream_id"],
+                                "reachable": True},
+                   headers={"X-Client-Key": node["client_key"]})
+    assert ack.status_code == 200, ack.text
+    return ack.json()
+
+
 # --------------------------------------------------------------------------- 心跳
 def test_heartbeat_returns_spec_fields(api, admin_hook):
     node = _active(api)
+    _verified_upstream(api, node)                  # 公告要被「认」（verified + 新鲜）
     response = api.post(HEARTBEAT, json={"node_id": node["node_id"],
                                          "protocol_version": "1.0.0",
                                          "policy_version": "0",

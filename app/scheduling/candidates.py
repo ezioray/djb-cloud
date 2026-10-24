@@ -5,6 +5,8 @@
 
 * ``v_supply_capacity_latest``（M02）——每个 ``(node_id, kind, model)`` 的最新公告，
   已过滤过期与 0 容量；
+* ``v_supply_upstream_verified``（M02，209）——``state='verified'`` 的上游 × 模型；
+  候选必须命中其中一条**且** ``verified_at`` 在 ``CANDIDATE_PROBE_FRESH_S`` 内（C9b）；
 * ``v_supply_node_snapshot``（M02）——节点身份 / 版本 / ``last_seen_at``（在线判定输入）；
 * ``quotes``（本模块）——**报价以报价簿为准**，公告里的 ``ask_price`` 只做展示口径。
 
@@ -16,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import circuit, clock, facts, models
@@ -97,8 +99,28 @@ class RouteInput:
                 "max_price_minor": self.max_price_minor}
 
 
-def _view_rows(c, *, model: str) -> list[Mapping[str, Any]]:
-    """默认市场来源：M02 两个只读视图（报价另从 ``quotes`` 取，见 :func:`collect`）。"""
+def _probe_join(now: datetime, probe_freshness_s: int | None) -> tuple[str, dict[str, Any]]:
+    """上游验证门控的 JOIN 片段（C9b）。
+
+    ``probe_freshness_s is None`` = 不过滤（**仅供兼容测试**：证明其余 P1 逻辑与门控解耦）。
+    子查询先 ``DISTINCT`` 掉同 ``(node, access, model)`` 的多条 verified 上游，
+    避免一条公告被放大成多行候选（JOIN 语义保持，行数不放大）。
+    """
+    if probe_freshness_s is None:
+        return "", {}
+    join = (
+        f"JOIN (SELECT DISTINCT node_id, access_type, model"
+        f"        FROM {facts.UPSTREAM_VERIFIED_VIEW}"
+        f"       WHERE verified_at >= %(cutoff)s) v"
+        f"  ON v.node_id = c.node_id AND v.access_type = c.access AND v.model = c.model")
+    return join, {"cutoff": now - timedelta(seconds=int(probe_freshness_s))}
+
+
+def _view_rows(c, *, model: str, now: datetime,
+               probe_freshness_s: int | None = facts.CANDIDATE_PROBE_FRESH_S
+               ) -> list[Mapping[str, Any]]:
+    """默认市场来源：M02 三个只读视图（报价另从 ``quotes`` 取，见 :func:`collect`）。"""
+    probe_join, probe_params = _probe_join(now, probe_freshness_s)
     with c.cursor() as cur:
         cur.execute(
             f"""SELECT s.node_id, s.account_id, s.tenant_id, s.region, s.lifecycle_state,
@@ -106,8 +128,10 @@ def _view_rows(c, *, model: str) -> list[Mapping[str, Any]]:
                        c.resource_level, c.announced_at
                   FROM {facts.CAPACITY_LATEST_VIEW} c
                   JOIN {facts.NODE_SNAPSHOT_VIEW} s ON s.node_id = c.node_id
-                 WHERE c.model = %s
-                 ORDER BY s.node_id, c.access""", (model,))
+                  {probe_join}
+                 WHERE c.model = %(model)s
+                 ORDER BY s.node_id, c.access""",
+            {"model": model, **probe_params})
         names = [column.name for column in cur.description]
         return [dict(zip(names, row)) for row in cur.fetchall()]
 
@@ -173,15 +197,21 @@ def collect(c, route: RouteInput, *, now: datetime | None = None,
             freshness_s: int = facts.CANDIDATE_FRESHNESS_S,
             quotebook_refresh_s: int = facts.QUOTEBOOK_REFRESH_S,
             bid: models.Bid | None = None,
-            check_isolation: bool = True) -> SnapshotResult:
+            check_isolation: bool = True,
+            probe_freshness_s: int | None = facts.CANDIDATE_PROBE_FRESH_S) -> SnapshotResult:
     """P1：把市场快照过滤成候选集，淘汰项带 F1–F5 码（顺序即判定顺序）。
 
     ``stale`` 的口径（M04 §7）：报价簿最近一次刷新距今超过 ``quotebook_refresh_s``
     → 用最后有效快照放行并打 ``stale``；心跳过期不产生 stale，而是 F2 直接淘汰。
+
+    ``probe_freshness_s``（C9b）：候选必须命中「已验证且新鲜」的上游。
+    ``None`` 只用于兼容测试（**默认关闭门控仅限测试**）；生产路径必须用默认 900 s。
+    门控在 SQL 层完成（未命中 = 不进候选集），因此不产生额外的淘汰码。
     """
     moment = now or clock.utcnow()
     rows = list(_market(c, model=route.model) if _market is not None
-                else _view_rows(c, model=route.model))
+                else _view_rows(c, model=route.model, now=moment,
+                                probe_freshness_s=probe_freshness_s))
     book = _book(c, model=route.model, now=moment)
     quote_map = {(quote.node_id, quote.access, quote.unit): quote for quote in book}
     quote_version = _quote_version(c, now=moment)
