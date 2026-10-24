@@ -28,9 +28,15 @@ M12_MIGRATIONS = (
     "1203_webhook_subscriptions.sql",
     "1204_delivery_attempts.sql",
     "1205_notification_preferences.sql",
+    "1206_node_notifications.sql",
+    "1207_node_notification_deliveries.sql",
+    "1208_node_notification_events.sql",
+    "1209_node_notifications_guard.sql",
 )
 M12_TABLES = ("notifications", "notification_outbox", "webhook_subscriptions",
-              "delivery_attempts", "notification_preferences")
+              "delivery_attempts", "notification_preferences",
+              "node_notifications", "node_notification_deliveries",
+              "node_notification_events")
 #: 被 M12 只读依赖、但**不允许**直读的上游基表（架构门禁反例清单）
 UPSTREAM_BASE_TABLES = ("user_accounts", "api_keys", "sessions", "accounts", "journal_entry",
                         "ledger_entry", "usage_records", "config_items")

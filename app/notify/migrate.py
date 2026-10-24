@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M12 迁移执行器：1201–1205 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
+"""M12 迁移执行器：1201–1209 正向升级 + 可执行回滚（验收「空库 / 升级 / 回滚」三跑）。
 
 为什么回滚 SQL 放在 Python 里而不是 ``migrations/12xx_*_down.sql``：
 CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执行（M02/M04/M05/M06/M10 同因），
@@ -13,7 +13,7 @@ CI 与本地都按 ``sort -V`` 把 ``migrations/*.sql`` 当**正向迁移**执�
     python -m app.notify.migrate --schema m12_t12_x --status
 
 ``--up`` 先应用**前置段**（编号 < 1200 的全部迁移：001–006 / 1xx–10xx / 14xx 除外），
-再按数字序应用 1201–1205——M12 只依赖 M01 的账户口径，其余模块与本模块无关。
+再按数字序应用 1201–1209——M12 只依赖 M01 的账户口径，其余模块与本模块无关。
 ``--down`` 只回滚 12xx，**不动**任何前置对象；可重复执行（``IF EXISTS``）。
 """
 from __future__ import annotations
@@ -52,10 +52,33 @@ _MARKERS: dict[str, tuple[str, str, str]] = {
     "1203_webhook_subscriptions.sql": ("table", "webhook_subscriptions", ""),
     "1204_delivery_attempts.sql": ("table", "delivery_attempts", ""),
     "1205_notification_preferences.sql": ("table", "notification_preferences", ""),
+    "1206_node_notifications.sql": ("table", "node_notifications", ""),
+    "1207_node_notification_deliveries.sql": ("table", "node_notification_deliveries", ""),
+    "1208_node_notification_events.sql": ("table", "node_notification_events", ""),
+    # 1209 的对象是「护栏 + 观测视图」：用视图存在性判定（information_schema.tables 也含视图）
+    "1209_node_notifications_guard.sql": ("table", "v_node_notifications_pending", ""),
 }
 
 #: 回滚：逆序删本模块新增对象（**不碰**任何前置对象；可重复执行）
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1209_node_notifications_guard.sql", """
+        DROP VIEW IF EXISTS v_node_notifications_pending;
+        DROP TRIGGER IF EXISTS node_notifications_no_truncate ON node_notifications;
+        DROP TRIGGER IF EXISTS node_notifications_guard ON node_notifications;
+        DROP FUNCTION IF EXISTS m12_node_notification_guard();
+    """),
+    ("1208_node_notification_events.sql", """
+        DROP TABLE IF EXISTS node_notification_events;
+        DROP FUNCTION IF EXISTS m12_node_event_guard();
+    """),
+    ("1207_node_notification_deliveries.sql", """
+        DROP TABLE IF EXISTS node_notification_deliveries;
+        DROP FUNCTION IF EXISTS m12_node_delivery_immutable();
+    """),
+    ("1206_node_notifications.sql", """
+        DROP TABLE IF EXISTS node_notifications;
+        DROP FUNCTION IF EXISTS m12_node_payload_bad_key();
+    """),
     ("1205_notification_preferences.sql", """
         DROP TABLE IF EXISTS notification_preferences;
     """),
@@ -130,7 +153,7 @@ def up(conn: psycopg.Connection, *, files: Iterable[pathlib.Path] | None = None)
 
 
 def down(conn: psycopg.Connection) -> list[dict]:
-    """回滚（逆序 1205→1201）：可重复执行；只删本模块新增对象。"""
+    """回滚（逆序 1209→1201）：可重复执行；只删本模块新增对象。"""
     results: list[dict] = []
     for name, script in DOWN_SQL:
         try:

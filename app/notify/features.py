@@ -82,6 +82,17 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
         description=("静默时段 / 摘要聚合的生效闸门：打开后 P1/P2 在 quiet_hours 内延后、"
                      "按 digest 聚合；P0 永远立即投递（INV-01）"),
     ),
+    FeatureSwitch(
+        name="notify.node_push.enabled",
+        owner="lead",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭后停止新入队与新投递（enqueue / pull 返回 503 / 50001），"
+                       "已排队的通知保留可查（ack / read / unread_count / 管理面列表仍可用）；"
+                       "已投递的行不回滚、不删除，保留期照常 180 天"),
+        description=("C15 节点通知队列闸门：打开后服务端为**节点**排队并投递通知"
+                     "（GET /api/v1/node/notifications 拉取 + ack/read）；"
+                     "S2 由显式 DJB_NODE_PUSH=1 激活，生产打开需改代码 + 评审"),
+    ),
 )
 
 
