@@ -229,3 +229,42 @@ SAMPLING_DRAW_COLUMNS: Final[str] = (
     " created_at, resolved_at")
 SAMPLING_EVENT_COLUMNS: Final[str] = (
     "event_id, epoch_id, draw_id, event, detail, actor, created_at")
+
+# ───────────────────────────────────────────────────────── C13 canary / L4 行为指纹（M17 §5.2 / §5.4）
+# 只加不改：本段不修改上面任何常量。
+CANARY_FLAG: Final[str] = "supply.canary.enabled"
+CANARY_ENV: Final[str] = "DJB_CANARY"
+"""S2 测试网显式激活：``DJB_CANARY=1``；代码默认仍关闭。"""
+
+CANARY_STATUSES: Final[tuple[str, ...]] = ("issued", "passed", "failed", "missed")
+CANARY_EVENTS: Final[tuple[str, ...]] = ("issued", "passed", "failed", "missed")
+CANARY_EXPECTED_KINDS: Final[tuple[str, ...]] = ("exact", "contains", "regex")
+"""expected_kind：exact = 归一化后全等；contains = 归一化后包含；regex = 轻归一化后 re.search。"""
+
+CANARY_DEADLINE: Final[timedelta] = timedelta(seconds=120)
+"""运行截止：issue 后 120s 内必须回填，否则 expire_due 翻 missed。"""
+
+CANARY_PASS_SCORE: Final[float] = 1.0
+CANARY_FAIL_SCORE: Final[float] = 0.0
+CANARY_L4_STREAK: Final[int] = 3
+"""连续 3 次 pass → ``behavioral_evidence`` 给 L4 线索（不直接写 M17 定级）。"""
+
+CANARY_NONCE_BYTES: Final[int] = 8
+CANARY_NONCE_MIN_HEX: Final[int] = 16
+"""运行级 nonce = 8 字节 → 16 hex；只用于防缓存与审计串号，不是凭据。"""
+
+CANARY_PROMPT_KEYS: Final[tuple[str, ...]] = (
+    "arith.2plus2", "capital.france", "echo.token", "sequence.evens", "color.hex")
+"""内置 5 条合成 canary（题面与 expected 写死在 1740 迁移）。"""
+
+CANARY_STATS_DEFAULT_WINDOW: Final[int] = 20
+CANARY_STATS_MAX_WINDOW: Final[int] = 200
+CANARY_RESPONSE_MAX_LEN: Final[int] = 8192
+"""响应正文上限（只在内存里比对；库中只留 hash，正文绝不落盘/入日志）。"""
+
+CANARY_COLUMNS_PROMPT: Final[str] = (
+    "id, prompt_key, prompt, expected_kind, expected_value, max_tokens, state, created_at")
+CANARY_COLUMNS_RUN: Final[str] = (
+    "id, node_id, upstream_id, model, prompt_id, nonce, status, response_hash, score,"
+    " detail, created_at, deadline_at, resolved_at")
+CANARY_COLUMNS_EVENT: Final[str] = "event_id, run_id, event, detail, created_at"

@@ -88,6 +88,15 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
         description=("M17 §5.10 可验证随机抽检（C14b commit-reveal + 贡献加权）：默认关闭，"
                      "S2 测试网用 DJB_SAMPLING=1 显式激活；关闭时读接口只读"),
     ),
+    FeatureSwitch(
+        name="supply.canary.enabled",
+        owner="risk-seat",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭 → 停发新 canary、停止回填（写接口 503/50001，fail-closed）；"
+                       "历史 run / 事件保留只读，不自动翻 missed；不删除题面；不改账本"),
+        description=("M17 §5.4 canary / L4 行为指纹（C13）：默认关闭，S2 测试网用 "
+                     "DJB_CANARY=1 显式激活；关闭时读接口只读"),
+    ),
 )
 
 
