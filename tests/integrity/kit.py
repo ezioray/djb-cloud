@@ -28,8 +28,29 @@ MIGRATIONS_DIR = REPO_ROOT / "migrations"
 
 FIXED_NOW = datetime(2026, 10, 24, 0, 0, tzinfo=timezone.utc)
 
-M17_TABLES: tuple[str, ...] = ("supplier_integrity_holds", "supplier_integrity_events")
-M17_FUNCTIONS: tuple[str, ...] = ("m17_holds_guard", "m17_events_guard", "m17_forbid_truncate")
+M17_TABLES: tuple[str, ...] = (
+    "supplier_integrity_holds", "supplier_integrity_events",          # 1710（C14 冻结）
+    "model_attestations", "attestation_challenges", "attestation_events",  # 1720（C12 证明）
+)
+M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen",)           # 1711
+M17_FUNCTIONS: tuple[str, ...] = (
+    "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
+    "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
+    "m17_attest_forbid_truncate",
+)
+M17_INDEXES: tuple[str, ...] = (
+    # 1710
+    "uq_integrity_holds_active", "idx_integrity_holds_node", "idx_integrity_holds_level",
+    "idx_integrity_holds_expiry", "idx_integrity_events_hold", "idx_integrity_events_node",
+    "supplier_integrity_holds_pkey", "supplier_integrity_events_pkey",
+    # 1720
+    "uq_attestations_active", "idx_attestations_node", "idx_attestations_level",
+    "idx_attestations_expiry", "idx_challenges_node", "idx_challenges_expiry",
+    "idx_attestation_events_attestation", "idx_attestation_events_challenge",
+    "idx_attestation_events_node", "model_attestations_pkey",
+    "attestation_challenges_pkey", "attestation_challenges_nonce_key",
+    "attestation_events_pkey",
+)
 
 ADMIN_PRINCIPAL = {
     "admin_id": "admin-integrity-1",
@@ -39,6 +60,8 @@ HIGH_ADMIN_PRINCIPAL = {
     "admin_id": "admin-integrity-high",
     "scopes": ["integrity.read", "integrity.write", "integrity:release:high"],
 }
+NODE_PRINCIPAL = {"node_id": "node-alpha", "client_key_id": "kid-alpha-1"}
+OTHER_NODE_PRINCIPAL = {"node_id": "node-beta", "client_key_id": "kid-beta-1"}
 
 
 # ───────────────────────────────────────────────────────── 连接 / schema
@@ -289,3 +312,29 @@ def hold_args(**overrides: Any) -> dict[str, Any]:
     }
     values.update(overrides)
     return values
+
+
+def build_attest_client(connection: Any, monkeypatch: Any, *, node: Mapping[str, Any] | None = None,
+                        admin: Mapping[str, Any] | None = None,
+                        now: datetime | None = None, feature: bool = True) -> Any:
+    """构造带 C12 证明路由的 ASGI 客户端（SAVEPOINT 连接、时钟钉死、开关按需）。
+
+    ``node=None`` / ``admin=None`` 表示**不注入鉴权钩子**（fail-closed → 401）。
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.integrity import attest_router
+    from app.integrity import clock as clock_module
+    from app.integrity import features
+
+    monkeypatch.setattr(attest_router, "_connection", savepoint_factory(connection))
+    monkeypatch.setattr(clock_module, "utcnow", lambda: now or FIXED_NOW)
+    monkeypatch.setattr(features, "enabled", lambda name: feature)
+    attest_router.set_node_authenticator(
+        (lambda request: dict(node)) if node is not None else None)
+    attest_router.set_admin_authenticator(
+        (lambda request: dict(admin)) if admin is not None else None)
+    app = FastAPI()
+    app.include_router(attest_router.router)
+    return TestClient(app)

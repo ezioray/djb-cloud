@@ -27,7 +27,7 @@ def test_m17_objects_exist_in_fully_migrated_schema(migrated):
     assert {"uq_integrity_holds_active", "idx_integrity_holds_node",
             "idx_integrity_holds_expiry"} <= indexes
     numbers = [int(path.name.split("_", 1)[0]) for path in m17_migration_files()]
-    assert numbers == [1710]
+    assert numbers == [1710, 1711, 1720]
     base = [int(path.name.split("_", 1)[0]) for path in base_migration_files()]
     assert base == sorted(base)
     assert max(base) < 1700
@@ -70,12 +70,9 @@ def test_upgrade_only_adds_m17_objects(base_schema):
         after_fingerprint = relation_fingerprint_on(conn, base_schema, sorted(before_tables))
         assert after_fingerprint == before_fingerprint, "1710 改动了上游对象结构"
         assert set(migrate.M17_FUNCTIONS) <= function_names_on(conn, base_schema)
-        assert index_names_on(conn, base_schema) - before_indexes == {
-            # 3 个显式索引 + 2 张表的 pkey（PRIMARY KEY 自动建）+ 2 个事件索引
-            "uq_integrity_holds_active", "idx_integrity_holds_node",
-            "idx_integrity_holds_level", "idx_integrity_holds_expiry",
-            "idx_integrity_events_hold", "idx_integrity_events_node",
-            "supplier_integrity_holds_pkey", "supplier_integrity_events_pkey"}
+        from kit import M17_INDEXES
+
+        assert index_names_on(conn, base_schema) - before_indexes == set(M17_INDEXES)
         assert function_names_on(conn, base_schema) - before_functions == set(
             migrate.M17_FUNCTIONS)
         conn.rollback()

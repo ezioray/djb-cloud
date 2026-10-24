@@ -30,16 +30,25 @@ __all__ = [
 
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "migrations"
 
-#: M17 段（1700–1799，M17 §7 / 01-ownership 待登记；本卡只落 1710）
+#: M17 段（1700–1799，M17 §7 / 01-ownership 待登记）
+#: 1710/1711 = C14 冻结；1720 = C12 证明
 MODULE_RANGE = (1700, 1799)
 
 #: 本模块拥有的域表（M17 §7）
 M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",
+    "model_attestations", "attestation_challenges", "attestation_events",
 )
 
+#: 本模块拥有的只读视图
+M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen",)
+
 #: 本模块新增的函数 / 触发器函数
-M17_FUNCTIONS: tuple[str, ...] = ("m17_holds_guard", "m17_events_guard", "m17_forbid_truncate")
+M17_FUNCTIONS: tuple[str, ...] = (
+    "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
+    "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
+    "m17_attest_forbid_truncate",
+)
 
 
 def _number(name: str) -> int:
@@ -61,6 +70,20 @@ BASE_MIGRATIONS: tuple[str, ...] = _sorted_names(lambda name: not _is_module(nam
 
 #: 回滚：逆序删本模块对象（1710）。全部 IF EXISTS，可重复执行；不触碰账本对象。
 DOWN_SQL: tuple[tuple[str, str], ...] = (
+    ("1720_model_attestations.sql", """
+        -- 触发器随表一起删除（DROP TABLE 会级联删自身触发器），因此这里不再单独 DROP TRIGGER：
+        -- 可重复执行，且不需要「表不存在时 DROP TRIGGER ... ON 表」的额外判断。
+        DROP TABLE IF EXISTS attestation_events;
+        DROP TABLE IF EXISTS attestation_challenges;
+        DROP TABLE IF EXISTS model_attestations;
+        DROP FUNCTION IF EXISTS m17_attest_event_guard();
+        DROP FUNCTION IF EXISTS m17_challenge_guard();
+        DROP FUNCTION IF EXISTS m17_attestation_guard();
+        DROP FUNCTION IF EXISTS m17_attest_forbid_truncate();
+    """),
+    ("1711_supply_integrity_frozen_view.sql", """
+        DROP VIEW IF EXISTS v_supply_integrity_frozen;
+    """),
     ("1710_supplier_integrity_holds.sql", """
         DROP TRIGGER IF EXISTS supplier_integrity_events_no_truncate
           ON supplier_integrity_events;
@@ -108,7 +131,7 @@ def up(conn: psycopg.Connection, *, with_base: bool = True) -> list[str]:
 
 
 def down(conn: psycopg.Connection) -> list[str]:
-    """逆序回滚本模块（当前只有 1710）；只删本模块对象，可重复执行。"""
+    """逆序回滚本模块（1720 → 1711 → 1710）；只删本模块对象，可重复执行。"""
     return _apply(conn, tuple(name for name, _ in DOWN_SQL), direction="down")
 
 
@@ -117,6 +140,10 @@ def status(conn: psycopg.Connection) -> dict[str, str]:
     markers: dict[str, tuple[str, str]] = {
         "1710_supplier_integrity_holds.sql": ("table", "supplier_integrity_holds"),
         "1710_supplier_integrity_holds.sql#events": ("table", "supplier_integrity_events"),
+        "1711_supply_integrity_frozen_view.sql": ("view", "v_supply_integrity_frozen"),
+        "1720_model_attestations.sql": ("table", "model_attestations"),
+        "1720_model_attestations.sql#challenges": ("table", "attestation_challenges"),
+        "1720_model_attestations.sql#events": ("table", "attestation_events"),
     }
     result: dict[str, str] = {}
     with conn.cursor() as cur:
@@ -128,7 +155,7 @@ def status(conn: psycopg.Connection) -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.integrity.migrate",
-                                     description="M17 迁移执行器（1700–1799，本卡 1710）")
+                                     description="M17 迁移执行器（1700–1799：1710/1711/1720）")
     parser.add_argument("--schema", required=False, default=None,
                         help="目标 schema（测试 / 演练用；缺省用连接默认 search_path）")
     group = parser.add_mutually_exclusive_group(required=True)

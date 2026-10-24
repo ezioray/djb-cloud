@@ -103,3 +103,91 @@ COARSE_REASONS: Final[tuple[str, ...]] = (
     "conflict", "server_error",
 )
 """对外 reason 只给这些短码（机器可判，不含阈值 / 名单 / PII）。"""
+
+# ───────────────────────────────────────────────────────── C12 模型身份证明（M17 §5.1–5.3 / §5.7）
+# 只加不改：本段不修改上面任何冻结段常量。
+ATTEST_LEVELS: Final[tuple[str, ...]] = ("L0", "L1", "L2", "L3", "L4", "L5")
+"""§5.1 证据等级：declared / reachable / inference / tokenizer / behavioral / provider。"""
+
+ATTEST_LEVEL_RANK: Final[dict[str, int]] = {
+    level: index for index, level in enumerate(ATTEST_LEVELS)}
+"""等级单调序（只升不降的判据，与 DB 触发器 CASE 一致）。"""
+
+ATTEST_LEVEL_LABELS: Final[dict[str, str]] = {
+    "L0": "declared", "L1": "reachable", "L2": "inference",
+    "L3": "tokenizer", "L4": "behavioral", "L5": "provider",
+}
+
+ATTEST_LEVEL_TTL: Final[dict[str, timedelta]] = {
+    "L1": timedelta(hours=24),
+    "L2": timedelta(hours=24),
+    "L3": timedelta(days=7),
+    "L4": timedelta(days=30),
+    "L5": timedelta(days=90),
+}
+"""§5.7 TTL（L4/L5 本卡不产出，但表与常量先留好）。"""
+
+ATTEST_STATES: Final[tuple[str, ...]] = ("active", "expired", "suspended")
+ATTEST_SOURCES: Final[tuple[str, ...]] = ("server_challenge", "client_report", "provider")
+ATTEST_SERVICE_MIN_LEVEL: Final[str] = "L3"
+"""§5.1：容量公告 / 调度 / 结算只认 L3+ 且未过期。"""
+
+ATTEST_FLAG: Final[str] = "supply.attestation.enabled"
+ATTEST_ENV: Final[str] = "DJB_ATTEST"
+"""S2 测试网显式激活：``DJB_ATTEST=1``；代码默认仍关闭。"""
+
+CHALLENGE_TTL: Final[timedelta] = timedelta(minutes=5)
+CHALLENGE_NONCE_BYTES: Final[int] = 16
+"""nonce = 16 字节随机 → 32 hex；DB CHECK ``^[0-9a-f]{16,64}$``。"""
+
+TOKENIZER_TOLERANCE_PCT: Final[float] = 1.0
+TOKENIZER_MIN_TOLERANCE: Final[int] = 1
+"""§5.1 / §5.3 容差：``max(1, ceil(prompt_tokens * 1%))``（整数化，边界可复算）。"""
+
+EVIDENCE_RESULTS: Final[tuple[str, ...]] = (
+    "reachable", "inference_ok", "tokenizer_match", "failed")
+"""客户端上报的 result 枚举（Lead 1.2.11 定稿）；**等级由服务端判**，不采信该字段。"""
+
+ATTEST_EVENTS: Final[tuple[str, ...]] = (
+    "challenge_issued", "evidence_submitted", "tokenizer_mismatch", "failed",
+    "level_up", "expired", "suspended")
+
+PROMPT_MIN_LEN: Final[int] = 32
+PROMPT_MAX_LEN: Final[int] = 2048
+PROMPT_TOKENS_MAX: Final[int] = 100000
+RESPONSE_HASH_MAX_LEN: Final[tuple[int, int]] = (64, 71)
+"""``response_hash``：64 hex 或 ``sha256:<64 hex>``（71 字符）。"""
+
+LATENCY_MAX_MS: Final[int] = 3_600_000
+ERROR_CLASS_MAX_LEN: Final[int] = 64
+
+SYNTHETIC_PROMPTS: Final[tuple[str, ...]] = (
+    "You are a tokenizer probe. Repeat the following sentence exactly once, word for word, "
+    "then stop: the quick brown fox jumps over the lazy dog while the calm river keeps "
+    "flowing past the old stone bridge.",
+    "Tokenizer probe: write the numbers one through twelve in words, separated by commas, "
+    "then add the single word done and stop immediately without any extra commentary.",
+    "请把下面这句话逐字复述一遍，不要添加任何解释：清晨的河面很安静，远处的山脊上还留着"
+    "一层薄薄的雾，渔船慢慢划过水面，留下了一道很长的波纹。",
+    "语言抽样检查：请依次写出春、夏、秋、冬四个字，每个字之间用顿号分隔，然后在最后"
+    "加上「完成」两个字并停止，不要输出多余内容。",
+    "Synthetic probe (no user data): list the first eight prime numbers separated by spaces, "
+    "then output the word end and terminate the response immediately.",
+    "合成探针（不含任何用户数据）：依次写出从一到十的阿拉伯数字，用逗号分隔，"
+    "最后输出「结束」并停止，不要添加解释或标题。",
+)
+"""合成 prompt 池：固定、非用户数据、英文 / 中文各 3 条（§T9 最小探针与隐私）。
+
+nonce 由 service 追加为独立一行（``challenge nonce: <hex>``），保证每次 prompt 计数不同、
+不可预先缓存，同时仍然**不含任何用户正文**。
+"""
+
+ATTESTATION_COLUMNS: Final[str] = (
+    "id, node_id, upstream_id, model, level, state, source, tokenizer_version,"
+    " evidence_ref, verified_at, expires_at, created_at, updated_at")
+CHALLENGE_COLUMNS: Final[str] = (
+    "id, node_id, upstream_id, model, prompt, prompt_tokens, nonce, state,"
+    " expires_at, created_at, consumed_at")
+ATTEST_EVENT_COLUMNS: Final[str] = (
+    "event_id, attestation_id, challenge_id, node_id, model, event, level, detail,"
+    " actor, created_at")
