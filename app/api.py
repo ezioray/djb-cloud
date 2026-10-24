@@ -21,6 +21,8 @@ from .config_center.router import create_router as create_config_center_router
 from .data_gov.router import create_router as create_data_gov_router
 from .identity.router import router as identity_router
 from .integrity import providers as integrity_providers
+from .integrity.canary_router import router as canary_router
+from .integrity.canary_router import set_admin_authenticator as set_canary_admin_auth
 from .integrity.attest_router import router as attest_router
 from .integrity.attest_router import set_admin_authenticator as set_attest_admin_auth
 from .integrity.attest_router import set_node_authenticator as set_attest_node_auth
@@ -91,6 +93,7 @@ app.include_router(ledger_router)
 app.include_router(supply_router)
 app.include_router(integrity_router)
 app.include_router(sampling_router)
+app.include_router(canary_router)
 app.include_router(create_node_push_router(
     connection_factory=db.conn,
     node_auth=lambda request: _node_principal(request),
@@ -178,6 +181,7 @@ set_metering_user_auth(_user_principal)
 set_metering_admin_auth(_admin_dev_principal)
 set_integrity_admin_auth(_admin_dev_principal)
 set_sampling_admin_auth(_admin_dev_principal)
+set_canary_admin_auth(_admin_dev_principal)
 set_attest_admin_auth(_admin_dev_principal)
 
 
