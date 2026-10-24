@@ -106,6 +106,17 @@ FEATURE_SWITCHES: tuple[FeatureSwitch, ...] = (
                      "差异 >1% 记 gateway.token_mismatch 告警并标 usage_source=dual；"
                      "关闭时保持既有 actual 行为（PROBE-TOKEN-AUDIT §5 C9）"),
     ),
+    FeatureSwitch(
+        name="gateway.channel.enabled",
+        owner="lead",
+        expire_at=date(2026, 12, 31),
+        rollback_rule=("关闭后回到 Echo / 原 NodeClient（接线方按 enabled() 判定），"
+                       "内存队列里的在途任务与排队任务直接丢弃——它们只存在于进程内存、"
+                       "不落库，丢弃不产生持久化事实；已完成的请求不受影响"),
+        description=("C10b 的数据面闸门：打开后上游调用走 app.gateway.channel 的内存队列 + "
+                     "ChannelNodeClient（节点 poll/submit，lease 30s、重派 ≤2 次、"
+                     "每节点 ≤16 / 全局 ≤2048）；关闭时仍用 EchoNodeClient"),
+    ),
 )
 
 
