@@ -25,9 +25,16 @@ from .integrity.attest_router import router as attest_router
 from .integrity.attest_router import set_admin_authenticator as set_attest_admin_auth
 from .integrity.attest_router import set_node_authenticator as set_attest_node_auth
 from .integrity.router import router as integrity_router, set_admin_authenticator as set_integrity_admin_auth
+from .integrity.sampling_router import router as sampling_router
+from .integrity.sampling_router import set_admin_authenticator as set_sampling_admin_auth
 from .ledger.router import router as ledger_router
 from .metering.router import router as metering_router, set_admin_authenticator as set_metering_admin_auth, set_user_authenticator as set_metering_user_auth
 from .nodes import router as node_router
+from .model_sync.router import admin_router as model_sync_admin_router
+from .model_sync.router import router as model_sync_router
+from .model_sync.router import set_admin_authenticator as set_model_sync_admin_auth
+from .model_sync.router import set_node_authenticator as set_model_sync_node_auth
+from .notify.node_push_router import create_router as create_node_push_router
 from .notify.router import create_router as create_notify_router
 from .recon.router import create_router as create_recon_router
 from .reputation.router import create_router as create_reputation_router
@@ -83,7 +90,15 @@ app.include_router(ledger_router)
 # 鉴权/连接默认 fail-closed；生产部署再注入 provider（见各模块 router 头部说明）。
 app.include_router(supply_router)
 app.include_router(integrity_router)
+app.include_router(sampling_router)
+app.include_router(create_node_push_router(
+    connection_factory=db.conn,
+    node_auth=lambda request: _node_principal(request),
+    admin_auth=lambda request: _admin_dev_principal(request),
+))
 app.include_router(attest_router)
+app.include_router(model_sync_router)
+app.include_router(model_sync_admin_router)
 app.include_router(scheduling_router)
 app.include_router(metering_router)
 app.include_router(create_config_center_router())
@@ -162,6 +177,7 @@ set_supply_user_auth(_user_principal_step_up)
 set_metering_user_auth(_user_principal)
 set_metering_admin_auth(_admin_dev_principal)
 set_integrity_admin_auth(_admin_dev_principal)
+set_sampling_admin_auth(_admin_dev_principal)
 set_attest_admin_auth(_admin_dev_principal)
 
 
@@ -183,6 +199,8 @@ def _node_principal(request: Request) -> dict | None:
 
 
 set_attest_node_auth(_node_principal)
+set_model_sync_node_auth(_node_principal)
+set_model_sync_admin_auth(_admin_dev_principal)
 
 
 def _integrity_token_count(prompt: str, model: str) -> int:

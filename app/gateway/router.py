@@ -195,7 +195,7 @@ def list_models(request: Request) -> JSONResponse:
 
 
 _MODEL_FIELDS = ("id", "object", "created", "owned_by", "context_window", "unit", "price",
-                   "available", "probe")
+                   "available", "probe", "tokenizer_version", "model_sync_version")
 
 
 def _model_payload(item: dict[str, Any]) -> dict[str, Any]:
