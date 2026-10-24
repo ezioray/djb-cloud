@@ -8,6 +8,7 @@ import json
 import os
 import time
 import uuid
+from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -32,6 +33,43 @@ from .treasury.router import create_router as create_treasury_router
 from .wiring.treasury import M06LedgerPoster, make_attestation_verifier
 
 app = FastAPI(title="djb-cloud", version="0.1.0")
+
+# ── M03 真实网关路径（M03-R2）───────────────────────────────────────────────
+# ``DJB_GATEWAY_M03=1``：装配 ``app.wiring.install``（M01/M04/M05/M02 的注入点）并把 M03
+# gateway router **先**挂上——``/v1/chat/completions`` / ``/v1/models`` 由 M03 命中，
+# 下方 legacy demo 同路径路由保留但被遮蔽（不删，M03-R3 再清）。
+# 默认（不设该 env）整块不执行：import 图、providers、路由表与合并前逐字节一致。
+# ``DJB_NODE_CHANNEL=1``：``install(channel=True)``——上游走 M03 内存队列 +
+# ``ChannelNodeClient``（节点侧经 M02 ``/api/v1/node/channel/*`` 取任务，C10a/C10d）。
+# 特性开关 ``gateway.channel.enabled`` 仍默认关：只认这个**显式 env**，避免误切生产流量。
+GATEWAY_M03_ENV = "DJB_GATEWAY_M03"
+NODE_CHANNEL_ENV = "DJB_NODE_CHANNEL"
+M03_WIRING: Any = None
+
+
+def _env_flag(name: str) -> bool:
+    """环境开关只认显式 ``=1``（``true`` / 空串 / 其它一律视为关）。"""
+    return (os.environ.get(name) or "").strip() == "1"
+
+
+def _install_m03_gateway() -> Any:
+    """装配 M03 providers 并挂 router；缺 ``DJB_DSN`` → **导入期**报错（不静默回 legacy）。"""
+    if not (os.environ.get("DJB_DSN") or "").strip():
+        raise RuntimeError(
+            "DJB_GATEWAY_M03=1 需要 DJB_DSN：M03 网关路径 fail-closed，"
+            "缺数据库连接串时不允许静默降级到 legacy demo")
+    from .gateway.router import router as gateway_router      # 同包；仅 M03 模式才 import
+    from .wiring import Database, install as install_wiring
+
+    wiring = install_wiring(Database(schema="public", dsn=os.environ["DJB_DSN"]),
+                            channel=_env_flag(NODE_CHANNEL_ENV))
+    app.include_router(gateway_router)   # 先注册 → 同路径 M03 优先，legacy 被遮蔽
+    return wiring
+
+
+if _env_flag(GATEWAY_M03_ENV):
+    M03_WIRING = _install_m03_gateway()
+
 app.include_router(node_router)
 app.include_router(identity_router)
 app.include_router(ledger_router)
