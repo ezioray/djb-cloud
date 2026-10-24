@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """请求体校验（spec ``ChatCompletionRequest`` / ``ChatMessage`` / M03 §8.2 上限）。
 
 口径：

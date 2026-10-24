@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 迁移执行器：1301–1304 正向升级 + 可执行回滚（空库 / 升级 / 回滚 / 幂等四跑）。
 
 为什么回滚 SQL 放在 Python 里而不是 ``migrations/13xx_*_down.sql``：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 事件 outbox：与通知同事务入队 + 至少一次派发（02-events §2 / INV-08）。
 
 为什么必须同事务：通知落库了但事件丢了，下游（M14 后台、退订统计）就看不到这条通知；

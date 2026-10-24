@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """报表渲染（本轮：REP-01 recon-daily / REP-02 exceptions）。
 
 纪律（INV-07）：报表数字**只来自当期 run / 差异**，不做二次估算、不填空壳。

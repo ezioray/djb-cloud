@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """鉴权 fail-closed / 请求标识回显 / 未注册路径 / 错误信封形状。"""
 from __future__ import annotations
 

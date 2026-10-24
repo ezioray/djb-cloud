@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M06-T1 账本测试工具：迁移执行、结构指纹、凭证夹具、余额派生。
 
 只读契约（本文件不改实现代码）：

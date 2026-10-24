@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """写入 1 条双签收据 + 2 条分录（demo）。"""
 import hashlib, uuid
 from datetime import datetime, timedelta, timezone

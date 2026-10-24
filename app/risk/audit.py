@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 处置审计钩子（INV-07：处置动作必须同时写审计并留 decision 理由）。
 
 本模块**不拥有** audit_log（M16）：S1 只定义记录形状与注入点，合并期由 Lead 注入

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CR-4 契约读取测试：``contracts/facts.yaml`` 是 M01 常量的唯一来源。
 
 这里既校验**真实契约**（当前 facts.yaml 解析出的值与 03-facts §8 原文一致），

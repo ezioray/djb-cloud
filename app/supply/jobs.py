@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """内部 job（M02 §4.3）：心跳超时 → 派生 offline + 事件。
 
 规则（M02 §7 失败矩阵「心跳超时」）：

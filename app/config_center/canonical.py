@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """规范化 JSON 与内容摘要（INV-01 / INV-08）。
 
 INV-01：``content_digest = sha256(canonical_json({key, value, schema_ref, unit}))``，可复算。

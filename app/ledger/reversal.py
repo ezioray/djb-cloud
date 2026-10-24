@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """冲正：整单等额取反（INV-07 / R5 / M06 §6「冲正」/ §7 失败表 / §8.2 冷却 24h）。
 
 协议（顺序不能变，逐条对应 600/601 的库内护栏）::

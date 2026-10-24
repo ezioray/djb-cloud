@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件生产（M03 §4.2 / 02-events §1 信封 / §2 至少一次）。
 
 本模块只发两个事件：

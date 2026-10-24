@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 admin-data · 数据治理（导出 / 删除 / 保留）+ Ops 只读面（S1 只读 / S2 完整）。
 
 责任边界（M14 §1）::

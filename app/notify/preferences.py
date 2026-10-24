@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """偏好读写与投递时效规则（INV-01：P0 不可退订 / 静默时段与摘要对 P0 无效）。
 
 三条硬规则在本文件里落地：

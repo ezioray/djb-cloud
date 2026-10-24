@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08a 支付订单 / 回调 / E3-E4 记账（HTTP + 域内）。"""
 from __future__ import annotations
 

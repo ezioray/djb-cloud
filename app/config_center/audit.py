@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M16 审计接入（T5）：只定义接口 + 本地测试 sink，**不持有任何审计链凭据**。
 
 M10 §1「不做」：不拥有 audit_log / audit_anchors，不直接写审计表，只调审计 API。

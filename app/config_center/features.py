@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本模块的特性开关登记（硬约束：三字段 + 默认关闭 + T1/T2 不提供可写面）。
 
 为什么单独一个文件：M10 的**业务**配置走 config_items / config_versions（可发布、可回滚、有审计）；

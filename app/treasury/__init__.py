@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 payments-treasury：支付订单 / PSP / 钱包池 / 归集 / 分润 / 退款 / gas / 签名意图。
 
 阶段（M08 §0 / README §1.1）：S1 接口与数据模型（不接 PSP / 主网）；S2 测试网闭环；

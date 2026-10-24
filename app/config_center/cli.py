@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``djb-config`` 只读 CLI（T5）：verify / replay / tick / dlq。
 
 只读保证：``verify`` 与 ``replay`` 用 ``default_transaction_read_only=on`` 的连接，数据库层面

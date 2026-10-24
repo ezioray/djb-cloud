@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 E6 计量结算的**注入式**对接（M05 §6 流程 2 / CR-3 / 20-payment-ledger §20.3 E6）。
 
 边界（硬规则）：

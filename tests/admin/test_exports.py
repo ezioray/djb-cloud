@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """导出闭环：权限 / step-up / 幂等 / 双人复核 / TTL / 一次性链接 / 水印 / 审计 / 取消 / 过期。"""
 from __future__ import annotations
 

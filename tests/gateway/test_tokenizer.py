@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本地 token 计数（C9a / PROBE-TOKEN-AUDIT §2.2）：纯函数口径、确定性、可选 tiktoken。
 
 不依赖 DB、不联网；``tiktoken`` 缺失时全部走字符口径（本仓库默认环境即如此），

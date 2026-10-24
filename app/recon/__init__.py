@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 recon-reports · 三方对账 / 差异台账 / 复核凭证 / 报表（S1：receipt + daily_close）。
 
 模块分层（对外只暴露这几层，测试与接线都从这里进）::

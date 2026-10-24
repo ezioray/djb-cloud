@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 node-supply · 领域模型与唯一写入口（DEV-M02 T1+T2）。
 
 范围（M02 §10.1）：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 HTTP 路由工厂（独立模块，**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 覆盖 spec 1.2.3 里 M12 的七条操作::

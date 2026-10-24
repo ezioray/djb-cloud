@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """慢任务（T4 / M03 §6 流程 3 / §3.1 状态机 / INV-M03-06 / INV-M03-09）。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """节点级熔断（M04 §7 失败矩阵 / §8.2「熔断：κ ≥2.50 持续 60 s 或失败率 >30%；10 min」）。
 
 规则（全部来自 §8.2，模块内不写第二份数字）：

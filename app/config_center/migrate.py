@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 迁移执行器（up / down / status），迁移段 1000–1099（01-ownership §5）。
 
 三种跑法（验收「空库 / 升级 / 回滚三跑」）：

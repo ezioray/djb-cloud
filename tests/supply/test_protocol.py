@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """协议矩阵（INV-05 / M02 §1）：N / N-1 / N-2、42601 与能力交集。纯函数。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 risk.* 只读绑定：只解析版本（不读值）+ LKG 降级（INV-01 / §7）。"""
 from __future__ import annotations
 

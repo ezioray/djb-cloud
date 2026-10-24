@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """配额口径：``min(租户, Key, 节点)`` + 每日花费上限（M03 §4.4 的 ``42902``）。
 
 分工（M03 §1 / §4「判定结果由 M01 / M11 的 API 或配额快照提供」）：

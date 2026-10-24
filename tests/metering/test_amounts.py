@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """金额 / 用量 / 单价的整数换算（INV-05 / 00-conventions §3）。不需要 DB。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """站内信：游标分页 / 过滤 / 已读幂等 / 账户隔离（M12 §4.1 / INV-02）。"""
 from __future__ import annotations
 

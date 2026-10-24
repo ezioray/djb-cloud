@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """策略版本、digest 与 304（M02 §6.4 / INV-06 / §4.1 GET /node/policy）。
 
 铁律：

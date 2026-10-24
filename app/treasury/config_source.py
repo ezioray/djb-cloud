@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M10 配置只读绑定（M08 §8.1 / 00-conventions §1.5 / 01-ownership §6）。
 
 规则：

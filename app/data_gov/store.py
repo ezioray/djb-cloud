@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 数据访问层：自有 3 表 + outbox 的 SQL；只读视图 / audit_log 适配。
 
 边界（INV-01 / 01-ownership §6）：

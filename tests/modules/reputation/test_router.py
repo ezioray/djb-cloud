@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """十条端点 HTTP 层测试（spec 1.2.4）：错误信封、错误码、鉴权 fail-closed、幂等、分页。
 
 任务卡验收 2/3：十条端点 ⊆ spec、required 字段齐、错误信封 ``{error:{type,code,message,

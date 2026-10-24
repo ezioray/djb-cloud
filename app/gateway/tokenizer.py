@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本地 token 计数（C9a 消费侧双计）：**纯函数 + 无第三方硬依赖**。
 
 背景（``ops/audit/reports/PROBE-TOKEN-AUDIT-20261024T0017Z.md`` §2.2 / §5 C9）：

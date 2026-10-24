@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M03 gateway-protocol · OpenAI 兼容入口与协议门面（T1+T2）。
 
 分层（00-conventions §2「代码包 app/<module>/，模块内分层」）：

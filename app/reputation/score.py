@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 评分引擎（**纯函数**；规则 + 指标事件重算，配置可注入）。
 
 对应规格：

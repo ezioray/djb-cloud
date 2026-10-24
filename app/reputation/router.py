@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 HTTP 路由工厂（独立模块，**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 覆盖 spec 1.2.4 里 M07 的**十条**操作::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """链校验内核（**纯函数**，无 DB / 无网络；append 与 verify 共用同一策略与算式）。
 
 逐条重算，判定 6 件事（M16 §6.3 / INV-M16-01/02）：

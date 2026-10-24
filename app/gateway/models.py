@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M03 领域模型：UUIDv7、跨模块 provider 的入参 / 出参、请求元数据记录。
 
 三条口径：

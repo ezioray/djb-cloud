@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移三跑（空库 / 升级 / 回滚）+ 只追加护栏 + 约束（需要 DJB_DSN）。
 
 对应验收：1400–1403 空库跑通、单文件重复执行幂等、回滚干净、不触碰其它模块表。

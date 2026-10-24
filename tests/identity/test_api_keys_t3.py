@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T3 · API Key 生命周期 + 网关鉴权（tasks-15 验收）。
 
 覆盖：

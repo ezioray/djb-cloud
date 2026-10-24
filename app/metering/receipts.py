@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """收据受理：双签验签 + 24h 窗口 + 幂等 + 同事务落 ``metering_receipts`` / ``usage_records``。
 
 对应 M05 §6 流程 1（同步）与 §7 失败矩阵：

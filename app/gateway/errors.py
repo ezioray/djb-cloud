@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M03 错误模型：M03 §4.4 错误映射表 + spec ``Error`` 信封（唯一出口）。
 
 口径：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 状态机（M02 §3「一层权威 + 一层派生，不得混用」）。
 
 **权威层**：``nodes.lifecycle_state``（= 存量列 ``state``）四态机::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UUIDv7 生成（00-conventions §2：时间有序）。
 
 stdlib 3.11 没有 ``uuid.uuid7``，这里按 RFC 9562 布局实现（与 M01/M02 同口径）：

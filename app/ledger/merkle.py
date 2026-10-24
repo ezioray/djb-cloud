@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Merkle 期间根（journal / daily_close）：计算 → 锚定（写入即发布）→ 读回 → 可复现校验。
 
 口径（INV-13 / M06 §4.2 / spec 1.2.1 MerkleCommitment）：

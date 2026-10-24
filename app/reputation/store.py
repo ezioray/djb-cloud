@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 仓储层：评分当前态 / 指标事实 / 后台只读列表（**不含 COP 台账**，那个在 cop.py）。
 
 边界：

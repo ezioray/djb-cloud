@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计条目的形态层：UUIDv7、请求体解析、审批链结构校验、幂等指纹。
 
 这里只做**纯函数**（无 DB、无网络、无时钟副作用）：把 ``AuditAppendRequest`` 变成一份

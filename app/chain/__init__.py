@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """链上收款域（一期仅 Polygon PoS，决策 K6）。
 
 本包只做链上**收款**：地址派生 → 扫描事件 → E1/E2 入账 → 错链/假充值冲正。

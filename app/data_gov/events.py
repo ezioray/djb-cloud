@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 事件：02-events 信封 + outbox（同事务 / 幂等 / 指数退避）。
 
 生产事件只有两条（02-events §3 已登记）::

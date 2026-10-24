@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计策略（纯函数）：高危判定 / 高危字段 / 审批链非自批 —— append 与 verify 共用同一份。"""
 from __future__ import annotations
 

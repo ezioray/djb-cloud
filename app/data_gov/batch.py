@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """批量操作五步（INV-03）：预览 → 二次认证 → 双人复核 → 执行（≤200）→ 10 分钟撤销。
 
 硬规则（M14 §6 流程 3）::

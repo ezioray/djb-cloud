@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """运营管理中心服务层（§22.23 · §6.6 · 〔决策K3〕〔决策K4〕· 配置中心 §21.12）。
 
 本模块是「运营配置」在**服务层**的唯一入口：一块只读视图 + 三个受控写入口，

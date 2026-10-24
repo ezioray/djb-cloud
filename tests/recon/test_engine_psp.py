@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """scope=psp 三方对账：payment_attempts ↔ E3/E4 + PSP 结算文件（§20.5.3）。"""
 from __future__ import annotations
 

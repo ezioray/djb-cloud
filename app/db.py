@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """最小 DB 访问层（psycopg3，无 ORM）。"""
 from contextlib import contextmanager
 

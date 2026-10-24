@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Ops 只读面：七块健康总览 / 变更日历（只读视图 + audit_log 聚合，INV-01）。"""
 from __future__ import annotations
 

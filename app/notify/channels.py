@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """渠道适配器（S1 骨架：**不发真实邮件、不出网**，但把语义与留痕做全）。
 
 为什么先做骨架：M12 §4.3 的邮件供应商与出网白名单属于 T4（S2），S1 的验收重点是

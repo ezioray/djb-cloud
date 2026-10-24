@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """三源漂移（T4，M10 §6 流程 4 / §21.11.5）。
 
 三源定义（product/v4/src/21-config-management.md §21.11.5）：

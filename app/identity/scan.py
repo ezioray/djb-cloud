@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """扫码登录中间态（M01 §6.1、§8.2：中间态 TTL ≤120 s，一次性）。
 
 状态机（库层 ``identity_scan_tickets_shape_chk`` 同步约束）::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/supply 测试工具：迁移执行、结构指纹、账户夹具、断言小工具。
 
 只读契约：

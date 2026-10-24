@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 错误码（M05 §4.1 / §7 失败矩阵 / 00-conventions §5 码段 / spec 1.2.0 ``Error``）。
 
 约定（与 M02/M04 同款）：

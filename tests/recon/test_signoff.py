@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """双人签核（INV-03 / INV-05）：阻断、幂等、step-up、凭证前置。"""
 from __future__ import annotations
 

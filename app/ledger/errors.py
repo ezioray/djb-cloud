@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 账本错误类型（码值按 CR-L1 裁决，HTTP 映射归 T4）。
 
 CR-L1（已裁决，_CR-REGISTER M06 行）：账本错误码 ``40920–40924`` / ``42220–42223``。

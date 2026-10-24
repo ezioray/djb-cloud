@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """撮合与取价（M04 §6 流程 1 / INV-01 / INV-02 / §9 验收 ①③）。
 
 纯函数在前、落库在后：

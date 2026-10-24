@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """签发一枚用方 Key：明文只打印这一次，库里只存 sha256。"""
 import hashlib, secrets, sys
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 管理面 HTTP 路由工厂（**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 覆盖 spec 1.2.4 的 9 条操作（与 M11 §4.1 一一对应）::

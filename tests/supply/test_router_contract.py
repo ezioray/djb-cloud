@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 契约（spec 1.2.0/1.2.1 M02 T2 六端点）：状态码 / 信封 / 幂等 / 认证 / 40305 / 42601。
 
 用法：``api`` fixture 把 ``router._connection`` 指到隔离 schema，并钉死时钟。

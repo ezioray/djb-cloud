@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M12 测试工具：迁移执行、schema 隔离、夹具（账户 / 事件 / 连接工厂）。
 
 只读契约（本文件不改实现代码）：

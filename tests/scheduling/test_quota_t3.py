@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T3 配额记账：占比（自有计数）/ 降权槽位 / 软停 / 等待 / 三窗口（M04 §4.7.3 P3 / INV-08）。"""
 from __future__ import annotations
 

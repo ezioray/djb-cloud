@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Gate: every emitted event name must be registered in 02-events.md §3.
 
 Convention: modules emit events through a helper call or an explicit

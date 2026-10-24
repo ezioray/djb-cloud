@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M16 审计链错误码（M16 §4.1 / 00-conventions §5 码段 / spec 1.2.2 ``Error``）。
 
 约定（与 M02/M04/M05/M10 同款）：

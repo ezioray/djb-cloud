@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 管理面 HTTP 路由工厂（**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 十条端点（M14 §4.1；CR-2 待 Lead 裁决后写入 spec）::

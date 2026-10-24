@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """密钥读取（fail-closed）：只认 0600 文件或注入式 provider；缺失 / 弱 / 权限错都拒绝。"""
 from __future__ import annotations
 

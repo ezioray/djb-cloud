@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """版本存储 + digest + 幂等（T2）。
 
 本层只回答「怎么把一次草稿变成一个不可变版本，并且能复算、能幂等重放」，不回答

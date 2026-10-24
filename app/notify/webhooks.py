@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Webhook 订阅管理与 SSRF 校验（M12 §4.1 / §6.3 / INV-05）。
 
 三条硬约束：

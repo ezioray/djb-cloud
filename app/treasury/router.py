@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 HTTP 路由工厂（**不接 app/api.py** —— 由 Lead 合并时统一 include）。
 
 严格对齐 spec 1.2.5 的 M08 段：**17 路径 / 21 操作，operationId 逐字一致**（route-vs-spec 差集 0）::

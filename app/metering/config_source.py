@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``metering.*`` 配置的**注入式只读视图**（M05 §8.1 / 00-conventions §1.5 / §6）。
 
 规则：

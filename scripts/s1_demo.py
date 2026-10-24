@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S1 端到端 demo：一次聊天请求 → 双签收据 → usage → E6 账本 → 复算 0。
 
 只使用 M03 网关的 ``chat.complete`` 入口；收据由 M05 的受理函数生成，

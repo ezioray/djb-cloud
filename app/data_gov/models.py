@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 请求解析 / 行映射 / 游标（S3：拒绝未知字段、枚举与长度前置校验）。
 
 列表信封沿用本仓内部 API 习惯：``{"data": [...], "page": {cursor, has_more, next_cursor}}``

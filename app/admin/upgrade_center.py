@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """技术升级中心服务层（§22.22 · §18.7.1 · §22.9 · 〔决策K8〕）。
 
 本模块把「技术升级」做成**可以判定、可以停、可以回滚、可以复算**的服务层：

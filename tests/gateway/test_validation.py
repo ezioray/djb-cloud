@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """请求体校验（M03 §8.2 上限 / spec ``ChatCompletionRequest`` / INV-M03-07 容错读取）。"""
 from __future__ import annotations
 

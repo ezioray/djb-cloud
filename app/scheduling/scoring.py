@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P2 打分与 tie-break（M04 §6 流程 2 第 2 步 / INV-04 / product §4.7.3）。
 
 公式（product §4.7.3，与 §13.4.3 同一公式）::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 纯策略测试：状态机 / 池深度 / cap / 归集 / 出款 / 退款 / 签名 / 白名单（INV-01…INV-14）。"""
 from __future__ import annotations
 

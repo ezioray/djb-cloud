@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """余额派生：``account_balances`` 版本化只追加（INV-10 / CR-L3 / M06 §6 事务边界）。
 
 口径（与 602 迁移、T1 注释一致）::

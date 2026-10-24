@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 申诉领域服务（受理 / 窗口 / SLA / 裁决 / 误伤恢复）。
 
 * 受理：30 天窗口（APPEAL_WINDOW_D）+ 同案件最多 1 条未结（部分唯一索引）→ 409/48003；

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """可注入时钟（与 ``app/identity/clock.py`` 同款约定）。
 
 00-conventions §10 要求测试确定性，§4 要求「时间比较只用服务端时间」。

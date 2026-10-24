@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 记账适配层：**只 propose 凭证形状**，真正的落账由注入的 M06 posting API 完成。
 
 边界（00-conventions §1.2 / _boundary-checks §1）：本模块**不 import app.ledger**；

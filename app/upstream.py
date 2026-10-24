@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """stub 上游：不调外部模型，确定性回复（用于打通链路；生产替换为真实路由）。
 
 计费口径：prompt/completion token 用**字符数/4**估算（stub 专用近似），

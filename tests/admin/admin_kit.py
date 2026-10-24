@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """tests/admin 脚手架：schema 隔离 / 迁移四跑 / 审计链种子 / 行夹具 / 假端口。
 
 隔离约定（与 tests/risk 同款）：

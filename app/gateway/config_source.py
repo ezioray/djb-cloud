@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """配置来源（M03 §8.1 两个键；Owner = M10）。
 
 边界（00-conventions §1.5 / §1.2）：

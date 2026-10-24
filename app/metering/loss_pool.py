@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """亏损池（M05 §3 INV-09 / §5 / §6 流程 3 第 3 步）：只记「上游已消耗、用户未计费」。
 
 铁律：

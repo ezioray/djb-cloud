@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """运维中心 + 配置中心服务层（§22.21 / §21.12 / §21.4 / RPT-0002 §3）。
 
 本模块是 §21.12.2 那 8 条管理面操作在**服务层**的唯一实现入口，外加运维中心

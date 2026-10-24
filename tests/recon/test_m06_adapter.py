@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 只读适配层：与 M06 公开 API 逐单位对拍（口径漂移立刻红）。
 
 本文件**只读** M06 的代码与表：不写 journal_*，不 import 会改数据的东西。

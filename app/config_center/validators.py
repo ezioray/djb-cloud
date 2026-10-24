@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """校验器（T1）：类型 / 单位 / 范围 / 枚举 / 跨字段 / 危险键 / 密钥形态 / 过期要求。
 
 四道校验里的第①道（提交时）与第②道（发布前）都用这一层（§21.3.4）；第③道（消费端加载）

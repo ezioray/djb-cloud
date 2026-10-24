@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """向**上游节点**发起调用并做首字节前的重试（M03 §6.1 / §7 / INV-M03-01）。
 
 不变量：

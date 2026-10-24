@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计策略（append 与 verify **共用一份**，避免两侧集合漂移 —— 对应 ops/audit/policy.mjs）。
 
 判定口径（M16 INV-M16-02 / §6.3）：

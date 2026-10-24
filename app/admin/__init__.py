@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """管理后台域（§22.21 管理后台运维中心 · §21.12 配置中心）。
 
 本包只放**管理面服务层**逻辑，不注册任何 HTTP 路由（路由接线见

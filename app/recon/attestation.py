@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """复核凭证（M09 §3.1 / §3.2 / §6.2 第 3 步）：提交、查询、出款前 validate。
 
 三条不变量落点：

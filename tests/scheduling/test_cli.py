@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """运维 CLI（M04 §4.1「CLI djb-sched replay 只读」/ 02-events §2.4 人工重放）。"""
 from __future__ import annotations
 

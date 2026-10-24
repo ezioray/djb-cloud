@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 risk-abuse 常量与枚举（规格 §3 / §5 / §8.2 / 02-events §3）。
 
 **INV-01 在此文件里的落地方式**：本文件只有**枚举、时长常量、事件 payload 白名单**，

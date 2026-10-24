@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """熔断与背压（M04 §7 失败矩阵 / §8.2 水位与熔断参数）。
 
 熔断：κ ≥2.50 持续 60 s 或失败率 >30% → 停接新 + 熔断 10 min；

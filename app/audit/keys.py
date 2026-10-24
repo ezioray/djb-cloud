@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """审计 HMAC 密钥的读法（**只读引用，绝不落库 / 落日志 / 落证据**）。
 
 M16 §1「密钥」：KMS / Secret 引用、路径注入；审计链 HMAC 密钥由决策人保管并以**文件路径**注入。

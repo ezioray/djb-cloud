@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件出站：本地事务 + outbox（02-events §2 / M05 §5 / CR-5，迁移 506）。
 
 三条语义（与 M04/M06 同款，口径必须一致）：

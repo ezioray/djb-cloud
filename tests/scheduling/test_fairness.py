@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """公平观测与计数（M04 §8.2 / §4.7.5 / INV-08）。
 
 T3 做的三件事：**基尼**（纯函数，整数）、**单租户占比**（自有计数）、

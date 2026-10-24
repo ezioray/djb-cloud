@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M03 `/v1/models` 的可用性投影（C9 收尾 / spec 1.2.8）。
 
 数据来源只有两个 **M02 只读视图**（不 join 基表、不写任何表）：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """消费 M03/M04 事件：估算落库、失败不计费、成交价核对、配置发布（需要 DJB_DSN）。"""
 from __future__ import annotations
 

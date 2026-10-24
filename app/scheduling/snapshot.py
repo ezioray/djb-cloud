@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """公开快照（M04 §1 责任 / §4.1 ``GET /api/v1/schedule/snapshot/{period}``）。
 
 **只发布输入**：报价区间、``quote_version``、计数与时间；不发布权重、阈值、ρ/κ 明细、

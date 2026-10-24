@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """限流（M03 §4.1 / §4.4 的 42901 / INV-M03-05：429 必须带 Retry-After）。不需要 DB。"""
 from __future__ import annotations
 

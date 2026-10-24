@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P1 过滤：候选集与逐条淘汰码（M04 §6 流程 2 第 1 步 / product §4.7.3 F1–F5）。
 
 数据来源（01-ownership §2 的**只读依赖**，不 import 他人的包、不 join 基表）：

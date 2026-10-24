@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """规范化 JSON 与摘要（INV-01 / INV-08）：同内容同 digest、可复算、不接受非 JSON 类型。"""
 from __future__ import annotations
 

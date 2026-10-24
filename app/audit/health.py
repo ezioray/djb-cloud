@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """/healthz（spec-1.2.2 ``HealthStatus``；M16 §4.1「只返回状态与版本，不暴露拓扑」）。
 
 约定：

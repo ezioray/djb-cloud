@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """契约门禁：十条端点 / operationId / 与冻结 spec 1.2.5 逐字一致 / 错误码已登记。
 
 路由差集必须为 0（Lead 合并前跑 route-vs-spec）：本测试从 ROOT/spec/openapi.yaml 反查；

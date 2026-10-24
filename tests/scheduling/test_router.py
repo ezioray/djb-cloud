@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 契约（spec 1.2.x 的 6 个 M04 操作 / 00-conventions §5 / M04 §9 安全）。
 
 重点在三件容易做错的事：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Merkle 期间根验收（INV-13 / spec 1.2.1 MerkleCommitment）：根可复现、写入即发布、根不可改。
 
 根算法：叶子 = 凭证 hash；内部节点 = sha256(0x01‖left‖right)；奇数节点上提；空期间有定义好的空根。

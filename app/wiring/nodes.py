@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S1 demo 的上游节点通道与模型目录（非生产实现，只在 demo / 测试里用）。"""
 from __future__ import annotations
 

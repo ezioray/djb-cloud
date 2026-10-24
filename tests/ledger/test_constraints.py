@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """约束边界：42 科目白名单（INV-03）、单位（INV-04）、借贷平衡（INV-01）、
 1:1 绑定（INV-02）、幂等键（INV-06）、冲正等额取反（INV-07）、期间根与事件契约。
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """版本存储 / digest / 幂等 / 只追加护栏（T2，需要 DJB_DSN）。
 
 覆盖 M10 §3 不变量：

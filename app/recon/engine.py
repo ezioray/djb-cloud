@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """对账引擎（M09 §6.1 / §6.3）：五个 scope 全部实现。
 
     receipt      M05 逐条核对（usage_records ↔ metering_receipts），四类差异 + 重复入账。

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M11 请求解析 / 行映射 / 对客序列化。
 
 红线（INV-01 / INV-02 / INV-05）：

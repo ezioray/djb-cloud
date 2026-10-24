@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T4：回滚 / kill switch / 快照 / 漂移 / 事件派发（需要 DJB_DSN）。
 
 时间基线：``NOW = 2026-10-21T02:30Z`` = 周三 10:30（UTC+8）。

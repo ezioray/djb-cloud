@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """verify / seal（需要 DJB_DSN）：篡改必报、不修链、日根幂等、断链拒绝封盘。"""
 from __future__ import annotations
 

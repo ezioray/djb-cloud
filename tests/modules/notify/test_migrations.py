@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 迁移验收：空库 001→1205、12xx 重复执行幂等、回滚两次干净、DB 层护栏。
 
 对应任务卡验收 1：空库全通过 / 1201–1205 连跑两遍幂等 / 回滚两次干净。

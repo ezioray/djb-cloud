@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """本地事件投递（m06_outbox）：事件构造 + 同事务落库（02-events §1/§2/§3）。
 
 M06 只生产三个事件（02-events §3）：

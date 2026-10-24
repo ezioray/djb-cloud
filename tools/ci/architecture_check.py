@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Gate: no cross-module imports between app/<module>/ packages.
 
 Legacy top-level modules (app/*.py) and app/admin, app/chain are transitional

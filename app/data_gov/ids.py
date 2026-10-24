@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UUIDv7 生成（00-conventions §2：时间有序；RFC 9562 布局，与本仓其它模块一致）。"""
 from __future__ import annotations
 

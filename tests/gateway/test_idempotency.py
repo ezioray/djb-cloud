@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """幂等与指纹去重（M03 §3.1 / §8.2 / INV-M03-03）。纯函数 + DB 两段。"""
 from __future__ import annotations
 

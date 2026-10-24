@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """校正在案（M05 §3 状态机 / INV-06 / INV-07 / INV-08 / §6 流程 3）。
 
 四条硬规则：

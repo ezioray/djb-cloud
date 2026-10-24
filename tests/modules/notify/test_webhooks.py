@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Webhook 订阅：secret 一次性 / 只存哈希 / SSRF / 唯一与幂等 / 账户隔离。"""
 from __future__ import annotations
 

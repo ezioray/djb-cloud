@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """config_outbox（1005）：三个事件的契约、幂等追加、只追加护栏（需要 DJB_DSN）。"""
 from __future__ import annotations
 

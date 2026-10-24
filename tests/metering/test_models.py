@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """收据解析 / UUIDv7 / 时间窗口 / 分页游标（纯函数，不需要 DB）。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 旧路径（001 的 ledger_entries + accounts 余额）：只追加 + hash 链 + 可复算。
 
 **位置迁移说明（DEV-M06-T2）**：本文件的内容从 ``app/ledger.py``（integration@fd5325b）

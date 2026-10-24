@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """S2 资金闭环 demo（M08 支付/资金 ↔ M06 账本 ↔ M09 对账），按 ops/runbooks/S2-TREASURY-LOOP.md 十二步。
 
 运行（独立 schema，结束自动 DROP）::

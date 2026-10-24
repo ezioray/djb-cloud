@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """分派与投递：状态机 / 重试次数 / 降级 / 事件（INV-04 / INV-06）。用独立 schema 隔离全表扫描。"""
 from __future__ import annotations
 

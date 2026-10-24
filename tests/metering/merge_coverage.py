@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """把多段覆盖率会话（每个 pytest 进程一份 JSON）合并成一份：**按行取并集**。
 
 NAS 上单进程跑完整套 + settrace 会超时（护栏 --timeout 480），所以把用例拆成几段分别跑，

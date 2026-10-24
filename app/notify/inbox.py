@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """站内信列表与已读（spec 1.2.3 ``/api/v1/user/notifications``，M12 §4.1 / INV-02）。
 
 要点：

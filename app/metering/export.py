@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M05 §4.1 账单导出（spec 1.2.6 ``exportUserBilling``）：``GET /api/v1/user/billing/export``。
 
 口径（spec 1.2.6 + M05 §4.1）：

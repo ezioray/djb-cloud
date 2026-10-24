@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 时钟工具：一律 UTC + 显式注入（00-conventions §10：用例不依赖墙上时间）。
 
 为什么单独一个文件：``created_at`` 同时参与**合并去重**（INV-03 的 ``dedupe_bucket``）、

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移 1301–1304：空库 / 幂等 / 回滚 / CLI 四跑 + 库层护栏（M14 §5 / §9）。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 契约（T3/T4）：心跳 / 上游申报 / 体检回执（spec 1.2.x 路径与状态码）。"""
 from __future__ import annotations
 

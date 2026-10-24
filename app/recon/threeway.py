@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """三方对账 planner（M09 §6.1）：scope=psp / chain / bank。
 
 本模块只产出 engine.Observation（纯数据），落库 / INV-04 幂等 / 差异台账 / 状态机 /

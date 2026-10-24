@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P4 抢占判定（M04 §6 流程 2 第 4 步 / INV-09 / INV-10 / §8.2 抢占参数）。
 
 四条硬规则：

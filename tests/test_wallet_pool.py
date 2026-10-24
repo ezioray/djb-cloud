@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-0001 钱包池自动扩容（§19.4.3 / §19.4.10，决策 K5）。
 
 覆盖：14 天滚动预测与 2× 目标、>60% 预生成、min_spare、池空不停收款、批次 24h 过期作废、

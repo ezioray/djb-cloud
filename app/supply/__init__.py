@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M02 node-supply（DEV-M02 T1+T2：模型 / 迁移 / 状态机 + 注册 / pair / binding / 审核）。
 
 本包是 M02 的**唯一写入口**，也是以下表的唯一写者（01-ownership §2 / M02 §5）::

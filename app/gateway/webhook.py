@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """对外批次 Webhook（T4 / M03 §4.3「属对客户的外部投递，不走内部事件总线」）。
 
 契约（本模块定义，写入 ``app/gateway/WIRING.md``）：

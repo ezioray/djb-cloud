@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """容量公告（M02 §3 / §6.2 / INV-07 / §8.2）：校验、seq 单调、过期与 0 容量过滤、快照视图。"""
 from __future__ import annotations
 

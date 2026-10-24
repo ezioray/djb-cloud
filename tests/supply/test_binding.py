@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """binding（M02 §6.5 / INV-08 / CR-4：绑定存 nodes 列 + node_events 历史）与一次性绑定码。"""
 from __future__ import annotations
 

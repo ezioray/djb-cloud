@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M01 identity-tenant · 账户五态机 / 冻结期限 / 注销三步（DEV-M01-T1）。
 
 唯一口径（M01 §3；03-facts §8）::

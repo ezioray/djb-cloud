@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08b 钱包池：预生成 / 激活 / 切换 / 退休 / 平台收款地址（HTTP + 域内）。"""
 from __future__ import annotations
 

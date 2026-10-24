@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """复算回放（M04 §6 流程 3 / INV-03 / 验收 ②⑤）。
 
 只做三件事，且**只读**线上日志（不改历史决策、不改日志）：

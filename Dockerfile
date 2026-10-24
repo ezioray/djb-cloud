@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # DJB cloud · 最小运行镜像（FastAPI + psycopg）
 FROM python:3.11-slim AS runtime
 

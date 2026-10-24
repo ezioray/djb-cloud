@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """最小 API：严格按 spec/openapi.yaml 实现（契约测试会比对）。"""
 from __future__ import annotations
 

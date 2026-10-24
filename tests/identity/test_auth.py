@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """T2 登录 / 刷新 / 登出 / 会话时效（tasks-11 验收）。
 
 覆盖：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 notification（DEV-M12 · S1 主体 + Webhook 订阅）。
 
 模块职责（M12 §1）：消费业务事件 → 按事件矩阵定级别 / 渠道 → 站内信落库与已读 →

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """公开快照 / 事件生产（M04 §1「只发布输入」/ §4.1 snapshot / §4.2 / 02-events §1）。
 
 两个门禁：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """错误映射与信封（M03 §4.4 / spec ``Error`` / INV-M03-05 / INV-M03-08）。不需要 DB。"""
 from __future__ import annotations
 

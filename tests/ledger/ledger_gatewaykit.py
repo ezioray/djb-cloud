@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEV-M06-T2 网关测试夹具：凭证构造器 + 只读断言工具。
 
 约定：

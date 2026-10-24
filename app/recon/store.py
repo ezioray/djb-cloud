@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M09 存储层（psycopg3，无 ORM）：对账批次 / 差异 / 凭证的读写。
 
 边界纪律：

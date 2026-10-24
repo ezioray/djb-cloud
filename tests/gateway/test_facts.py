@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """常量与配置键（M03 §8.1 / §8.2、03-facts §10、00-conventions §1.5）。不需要 DB。"""
 from __future__ import annotations
 

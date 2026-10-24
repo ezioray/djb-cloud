@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 错误码（规格 §4.1 / 00-conventions §5 码段 / spec 1.2.3 ``Error``）。
 
 约定（与 M02/M04/M05/M16 同款）：

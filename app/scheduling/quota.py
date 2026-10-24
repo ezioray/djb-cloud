@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """P3 约束：配额 / 并发 / 亲和（M04 §6 流程 2 第 3 步 / INV-07 / INV-08）。
 
 三个硬约束与两个可见标记：

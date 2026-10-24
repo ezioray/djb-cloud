@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 本模块常量与可注入配置（规格 §8.1 配置键 / §8.2 本模块常量）。
 
 **为什么常量单独一处**：00-conventions §10「禁止硬编码常量」指的是散落数字；

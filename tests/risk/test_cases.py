@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """案件：开案去重（INV-06）/ 证据（INV-03）/ 处置分级与只提案（INV-04）/ 状态机 / SoD。"""
 from __future__ import annotations
 

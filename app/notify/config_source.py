@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 配置来源（规格 §8.1 ``notify.*``）：默认值 + 注入钩子，S1 不直连 M10。
 
 为什么不在读取时直连 M10：配置中心自己也要在“配置可用”之前启动；M12 只依赖

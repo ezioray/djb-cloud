@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """链校验内核（纯函数）：篡改必报 / 断链定位 / 算法降级 / 字段完整 / 自批 / pending 超时。"""
 from __future__ import annotations
 

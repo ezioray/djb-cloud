@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """纯函数层：分级 / SLA / 账龄 / 请求解析 / 游标 / 幂等指纹（不需要 DJB_DSN）。"""
 from __future__ import annotations
 

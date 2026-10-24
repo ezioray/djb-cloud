@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 领域对象（dataclass）+ 行映射 + 对客序列化（spec 1.2.3 schemas）。
 
 分层原则：

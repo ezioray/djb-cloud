@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """偏好：P0 不可退订（INV-01）、覆盖式写入、静默时段 / 摘要规则。"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """发布单流程（T3，S1 子集）：创建 → 复核 ≠ 发起 → 调度 → 生效 → 收口；过期/取消。
 
 M10 §6 流程 1 的九步在 S1 落成六个可调用动作（灰度/预发的 S2 部分用特性开关挡住）：

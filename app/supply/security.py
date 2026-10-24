@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """凭据与隐私原语：指纹再哈希、客户端密钥、疑似凭据字段扫描（INV-03 / INV-04 / INV-10）。
 
 铁律：

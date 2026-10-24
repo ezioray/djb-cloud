@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """容量公告（M02 §3 CapacityAnnouncement / §6.2 / INV-07 / §8.2 上限）。
 
 要点：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """评分引擎单元测试（纯函数，不连库）：§8.2 规则 / INV-07 / INV-08。
 
 覆盖点：加权、惩罚上限、系数区间与步长、等级升降（**会掉级**）、L5 只能人工、

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """事件派发器（T4，02-events §2「至少一次投递」）。
 
 职责边界：

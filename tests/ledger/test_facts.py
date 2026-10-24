@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """常量来源验收：facts.yaml 读取、最小解析器正确性、与迁移 CHECK 的三方对齐。
 
 验收来源：T2 任务卡第 3 条「常量从 contracts/facts.yaml 读取（不得硬编码）」

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """报价簿（M04 §3 Quote / §6 流程 1 前半 / §5 quotes）。
 
 三条规则：

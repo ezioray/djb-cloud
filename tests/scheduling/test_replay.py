@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """复算回放（M04 §6 流程 3 / INV-03 / 验收 ⑤「同锚点重跑 1,000 次一致率 100%」）。
 
 三条：**重算能复现 chosen/tie_break/fallback_used**、**差异能被抓出来**、**并发 1**。

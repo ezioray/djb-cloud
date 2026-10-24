@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M04 领域模型：金额换算、UUIDv7、聚合数据类与行映射。
 
 三条铁律：

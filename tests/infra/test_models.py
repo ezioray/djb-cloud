@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """请求解析（纯函数）：形态 / 枚举 / 长度 / 审批链结构 / 幂等指纹。"""
 from __future__ import annotations
 

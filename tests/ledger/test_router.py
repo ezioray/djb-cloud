@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """管理面 6 端点验收（spec 1.2.1）：operationId 契约、响应必填字段、错误码、step-up / 权限拒绝。
 
 路由器不改 app/api.py：本测试用独立 FastAPI 实例挂载 ``app.ledger.router.router``，

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """凭据派生：口令 / MFA 因子 / 会话令牌。**任何明文都不入库、不入日志。**
 
 算法选择（09 安全：密钥只以引用出现；无 KMS 时不引入外部依赖）：

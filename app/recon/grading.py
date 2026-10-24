@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """差异分级与 SLA（INV-02 / 03-facts §7）。纯函数，不碰 DB。
 
 分级口径（03-facts §7，整数最小单位）：

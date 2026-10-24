@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """HTTP 层（M03 §4.1 / 00-conventions §5 / INV-M03-05 / INV-M03-08）：信封、头、状态码。"""
 from __future__ import annotations
 

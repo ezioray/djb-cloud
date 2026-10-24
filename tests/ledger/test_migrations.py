@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """迁移验收：空库建库、重复执行幂等、账本指纹不变、兼容视图。
 
 验收来源：W1-EXECUTION-PLAN §2 DEV-M06-T1 验收 1（空库 001–604 全通过 / 单文件重复执行幂等）

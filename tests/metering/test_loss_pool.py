@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """亏损池：只记「上游已消耗、用户未计费」；去重 / 只追加 / 注入 sink（需要 DJB_DSN）。"""
 from __future__ import annotations
 

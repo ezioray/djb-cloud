@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """钱包池与自动扩容（设计 v4 §19.4.3 / §19.4.10，决策 K5）。
 
 本模块只做三件事，**不签名、不转账、不写账本**：

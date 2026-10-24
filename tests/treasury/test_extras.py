@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 补充用例：审计钩子 / 时钟 / 取消 / 只查询 / 归集 / 签名视图 / 数据映射分支。"""
 from __future__ import annotations
 

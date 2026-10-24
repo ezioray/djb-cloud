@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """单层邀请测试（INV-03 / INV-04 / §6.2）：一层、唯一、自邀、同簇、过期、状态机、概览。
 
 任务卡验收 3：「邀请一层 + ``(inviter, invitee)`` 唯一」。

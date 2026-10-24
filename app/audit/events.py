@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``audit.appended`` 事件信封（02-events §1 信封 / §3 目录 / M16 §4.2）。
 
 payload 铁律：只放运维事实 ``audit_id / actor / action / hash / seq``，

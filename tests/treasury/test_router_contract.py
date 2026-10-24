@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08 路由契约：spec 1.2.5 M08 段 21 操作逐字对齐 + 鉴权 fail-closed + 错误信封。"""
 from __future__ import annotations
 

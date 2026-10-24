@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M14 极简行覆盖率（stdlib 实现，零依赖；沿用 tests/risk、tests/recon 的做法）。
 
 · 只统计 ``app/data_gov/*.py`` 与 ``app/admin/data_gov.py``（本模块代码）；

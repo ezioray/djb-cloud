@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SupplyAvailability（C9 收尾）：M03 `/v1/models` 的真实可用性四态。
 
 只读 M02 两个视图；数据用 schedulingkit 夹具扮演上游，不写 ledger。

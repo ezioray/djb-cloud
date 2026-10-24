@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """校验器测试：类型 / 范围 / 枚举 / 跨字段 / 危险键 / 密钥形态 / expire_at / 升级审批。
 
 对应 M10 §9 验收场景 1–2 与 §3 不变量中与校验相关的部分：

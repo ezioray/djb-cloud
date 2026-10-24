@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """协议版本与能力协商（T4 / M03 §4.3）：426/42601、能力交集、Sunset。"""
 from __future__ import annotations
 

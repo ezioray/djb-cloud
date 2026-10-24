@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """UTC 时钟与时间解析（M08 全模块统一口径：库里 timestamptz，序列化一律 UTC ISO）。"""
 from __future__ import annotations
 

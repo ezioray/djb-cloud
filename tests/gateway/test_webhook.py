@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """对外 Webhook（T4 / M03 §4.3）：签名、载荷、重试、台账、密钥缺失不投递。"""
 from __future__ import annotations
 

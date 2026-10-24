@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """节点接入闭环：注册 → 策略 → 上报双签收据 → 双边对账 diff=0；篡改必须被拒。"""
 import hashlib
 import hmac

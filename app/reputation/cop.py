@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M07 COP 适配层（**薄封装** ``app/points.py``；COP 唯一账本仍是 ``points_*``）。
 
 Lead 裁决（task-5）：**COP 账本不重建**。``app/points.py``（DEV-0003 / migration 006）是 COP

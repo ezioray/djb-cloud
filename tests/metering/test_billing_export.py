@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """spec 1.2.6 账单导出（M05 §4.1）：GET /api/v1/user/billing/export。
 
 覆盖：成功（csv / json）/ 未认证 / 越权（只导本人）/ 边界（format、时间窗、cursor 无关）/

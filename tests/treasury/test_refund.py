@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M08c 退款（14 天 / 原路 / 双人 24h 冷却；INV-12）。"""
 from __future__ import annotations
 

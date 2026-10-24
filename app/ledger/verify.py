@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """账本复算入口：链 + 余额派生 + 全局净额（T4 的 recompute 直接复用这份实现）。
 
     verify_ledger(conn) -> {

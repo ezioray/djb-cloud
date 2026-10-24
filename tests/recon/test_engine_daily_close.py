@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """scope=daily_close 对账引擎：M06 试算平衡 + 科目余额漂移（按单位各一条 run）。"""
 from __future__ import annotations
 

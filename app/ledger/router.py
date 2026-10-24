@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M06 管理面路由（6 端点）：试算 / 科目余额 / Merkle / 复算 / 凭证 / 冲正。
 
 **不修改 ``app/api.py``**：本文件只导出 ``router``，接线由 lead 合并时做::

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M12 Webhook 签名与密钥（INV-05）。
 
 签名串（规格 §3 INV-05 / §6.3，与产品 §12.5.2 的 API 签名窗口同口径）::

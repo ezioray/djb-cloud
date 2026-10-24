@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """协议能力 / 弃用清单（M02 §1 / INV-05 / spec ProtocolCapabilities · DeprecationList）。"""
 from __future__ import annotations
 

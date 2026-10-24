@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """分派与投递（M12 §6.2 / INV-04 / INV-06 / INV-08 的 S1 骨架）。
 
 一次 ``dispatch_batch`` 做的事：

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """追加/查询/锚点（需要 DJB_DSN）：幂等、串行化 seq、同事务 outbox、密钥 fail-closed。"""
 from __future__ import annotations
 

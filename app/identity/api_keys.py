@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """API Key 生命周期与网关鉴权（DEV-M01-T3）。
 
 职责边界：

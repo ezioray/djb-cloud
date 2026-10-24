@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """M16 审计链常量（与 ``ops/audit/policy.mjs`` 一一对应，改一处必须同步改另一处）。
 
 来源：M16-platform-infra.md §3（不变量）/ §4.1（接口）/ §5（表与索引）/ §6.3（流程）/ §8.2（常量）

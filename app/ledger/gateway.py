@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """记账网关：校验 → 落账 → 哈希链 → outbox，全部在调用方的**同一个事务**里。
 
 落账顺序（与 600/601 迁移的约束逐条对应，顺序不能变）::

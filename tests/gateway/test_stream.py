@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SSE 流式（T3 / M03 §6 流程 2 / §4.3 / INV-M03-04）：分帧、中断、估算用量、建立去重。"""
 from __future__ import annotations
 
