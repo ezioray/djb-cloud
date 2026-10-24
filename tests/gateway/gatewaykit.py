@@ -58,10 +58,11 @@ NOW = datetime(2026, 10, 23, 4, 0, tzinfo=timezone.utc)
 
 # ─────────────────────────────────────────────────────── 连接与迁移
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     value = os.environ.get("DJB_DSN")
     if not value:
         raise RuntimeError("缺环境变量 DJB_DSN（见 W1-EXECUTION-PLAN §3）")
-    return value
+    return safe_dsn(value)
 
 
 def connect(schema: str, autocommit: bool = True) -> psycopg.Connection:

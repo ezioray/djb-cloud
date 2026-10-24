@@ -56,10 +56,11 @@ TEST_CONSUMER_KEY = b"m05-t12-consumer-fixture-key-fedcba9876543210"
 
 # ─────────────────────────────────────────────────────── 连接与迁移
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     value = os.environ.get("DJB_DSN")
     if not value:
         raise RuntimeError("缺环境变量 DJB_DSN（见 product/v4/modules/W1-EXECUTION-PLAN.md §3）")
-    return value
+    return safe_dsn(value)
 
 
 def _admin_connect() -> psycopg.Connection:

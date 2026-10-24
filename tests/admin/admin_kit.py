@@ -68,10 +68,11 @@ OTHER_TENANT_PRINCIPAL: dict[str, Any] = {
 
 # ───────────────────────────────────────────────────────────── 连接 / schema
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     value = os.environ.get("DJB_DSN")
     if not value:
         raise SystemExit("缺环境变量 DJB_DSN（凭据只注入环境，不入库 / 不入提交）")
-    return value
+    return safe_dsn(value)
 
 
 def connect(schema: str, *, autocommit: bool = True) -> psycopg.Connection:

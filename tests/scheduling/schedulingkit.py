@@ -62,10 +62,11 @@ SUPPLY_VIEWS = ("v_supply_node_snapshot", "v_supply_capacity_latest")
 
 # ─────────────────────────────────────────────────────── 连接与迁移
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     value = os.environ.get("DJB_DSN")
     if not value:
         raise RuntimeError("缺环境变量 DJB_DSN（见 W1-EXECUTION-PLAN §3）")
-    return value
+    return safe_dsn(value)
 
 
 def connect(schema: str, autocommit: bool = True) -> psycopg.Connection:

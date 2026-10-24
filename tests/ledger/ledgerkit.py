@@ -69,10 +69,11 @@ ENTRY_TYPES = (
 
 # ─────────────────────────────────────────────────────── 连接与迁移
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     v = os.environ.get("DJB_DSN")
     if not v:
         raise RuntimeError("缺环境变量 DJB_DSN（见 product/v4/modules/W1-EXECUTION-PLAN.md §3）")
-    return v
+    return safe_dsn(v)
 
 
 def connect(schema: str, autocommit: bool = True) -> psycopg.Connection:

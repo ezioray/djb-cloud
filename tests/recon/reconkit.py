@@ -60,10 +60,11 @@ BASE_TABLES = (
 
 # ─────────────────────────────────────────────────────── 连接与 schema
 def dsn() -> str:
+    from tests.pgdsn import safe_dsn
     value = os.environ.get("DJB_DSN")
     if not value:
         raise RuntimeError("缺环境变量 DJB_DSN（凭据只注入环境，不入库 / 不入提交）")
-    return value
+    return safe_dsn(value)
 
 
 def connect(schema: str | None = None, autocommit: bool = True) -> psycopg.Connection:
