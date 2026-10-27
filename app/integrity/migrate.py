@@ -25,18 +25,19 @@ import psycopg
 
 __all__ = [
     "MIGRATIONS_DIR", "MODULE_RANGE", "MODULE_MIGRATIONS", "BASE_MIGRATIONS", "DOWN_SQL",
+    "DOWN_SQL_BY_NAME",
     "M17_TABLES", "M17_FUNCTIONS", "connect", "up", "down", "status", "dsn",
 ]
 
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parents[2] / "migrations"
 
 #: M17 段（1700–1799，M17 §7 / 01-ownership 待登记）
-#: 1710/1711 = C14 冻结；1720/1721 = C12 证明；1730 = C14b 抽检；1740 = C13 canary
+#: 1710/1711 = C14 冻结；1712 = C14 申诉；1720/1721 = C12 证明；1730 = C14b 抽检；1740 = C13 canary
 MODULE_RANGE = (1700, 1799)
 
 #: 本模块拥有的域表（M17 §7）
 M17_TABLES: tuple[str, ...] = (
-    "supplier_integrity_holds", "supplier_integrity_events",
+    "supplier_integrity_holds", "supplier_integrity_events", "supplier_integrity_appeals",
     "model_attestations", "attestation_challenges", "attestation_events",
     "sampling_epochs", "sampling_draws", "sampling_events",
     "canary_prompts", "canary_runs", "canary_events",
@@ -48,6 +49,7 @@ M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen", "v_supply_model_attes
 #: 本模块新增的函数 / 触发器函数
 M17_FUNCTIONS: tuple[str, ...] = (
     "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
+    "m17_appeal_guard", "m17_appeals_forbid_truncate",
     "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
     "m17_attest_forbid_truncate",
     "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
@@ -114,6 +116,12 @@ DOWN_SQL: tuple[tuple[str, str], ...] = (
     ("1711_supply_integrity_frozen_view.sql", """
         DROP VIEW IF EXISTS v_supply_integrity_frozen;
     """),
+    ("1712_supplier_integrity_appeals.sql", """
+        -- 只删本模块新增的申诉表（FK→holds，必须先于 1710 的 holds 删除）
+        DROP TABLE IF EXISTS supplier_integrity_appeals;
+        DROP FUNCTION IF EXISTS m17_appeals_forbid_truncate();
+        DROP FUNCTION IF EXISTS m17_appeal_guard();
+    """),
     ("1710_supplier_integrity_holds.sql", """
         DROP TRIGGER IF EXISTS supplier_integrity_events_no_truncate
           ON supplier_integrity_events;
@@ -128,6 +136,10 @@ DOWN_SQL: tuple[tuple[str, str], ...] = (
         DROP FUNCTION IF EXISTS m17_forbid_truncate();
     """),
 )
+
+
+DOWN_SQL_BY_NAME: dict[str, str] = dict(DOWN_SQL)
+"""迁移文件 → 回滚 SQL（供验收脚本 / 运维按单个迁移回滚）。"""
 
 
 def dsn() -> str:

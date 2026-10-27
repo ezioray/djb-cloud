@@ -38,6 +38,7 @@ from .ids import uuid7
 __all__ = [
     "feature_enabled", "require_feature", "ratio_bp_for", "frozen_amount", "create_or_escalate",
     "release", "expire_due", "active_holds", "frozen_total", "is_frozen", "get_hold",
+    "submit_appeal", "review_appeal", "list_appeals", "appeal_of", "expire_appeals",
     "list_holds", "list_events",
 ]
 
@@ -225,6 +226,122 @@ def release(conn: Any, hold_id: Any, *, reviewers: Sequence[str], reason: Any, a
                    actor=actor_text, now=moment)
     return {"action": "released", "hold": models.hold_payload(released),
             "event": models.event_payload(event)}
+
+
+# ───────────────────────────────────────────────────────── 申诉（7 天窗口）
+def _appeal_deadline(hold: Any) -> datetime:
+    return hold["created_at"] + facts.APPEAL_WINDOW
+
+
+def submit_appeal(conn: Any, hold_id: Any, *, appellant: Any, reason: Any,
+                  now: datetime | None = None) -> dict[str, Any]:
+    """提交申诉（**不改冻结状态、不动账本**）。
+
+    * 只有 ``active`` 的冻结可申诉（I0 不建 hold，因此无申诉对象）；
+    * 窗口 = ``hold.created_at + 7d``；窗口关闭 → 40919；
+    * 同一条 hold 只接受 1 次申诉（DB 部分唯一索引兜底并发）；
+    * 返回 ``{"action": "appealed", "appeal": payload, "hold": payload}``。
+    """
+    require_feature()
+    moment = now or clock.utcnow()
+    identifier = models.parse_hold_id(hold_id)
+    reason_text = models.validate_reason(reason)
+    appellant_text = models.normalize_actor(appellant)
+
+    hold = store.get_hold(conn, identifier, for_update=True)
+    if hold is None:
+        raise NotFound("冻结记录不存在", reason="not_found")
+    if hold["state"] != "active":
+        raise Conflict("只有 active 的冻结可申诉（已解除 / 已到期不可申诉）",
+                       reason="hold_not_active", level=str(hold["level"]))
+    deadline = _appeal_deadline(hold)
+    if moment > deadline:
+        raise Conflict("申诉窗口已过（7 天），不再受理", reason="appeal_window_closed",
+                       level=str(hold["level"]))
+    if store.list_appeals(conn, hold_id=identifier, limit=1):
+        raise Conflict("该冻结已提交过申诉，不重复受理", reason="appeal_exists",
+                       level=str(hold["level"]))
+
+    row = store.insert_appeal(
+        conn, appeal_id=_new_hold_id(), hold_id=identifier,
+        node_id=str(hold["node_id"]), model=str(hold["model"]),
+        reason=reason_text, appellant=appellant_text, created_at=moment,
+        deadline_at=deadline)
+    # 申诉流水只落 supplier_integrity_appeals（1710 的事件枚举与 CHECK 保持原样，
+    # 不因为新增申诉而改既有约束）；hold 状态与事件表均不变。
+    return {"action": "appealed", "appeal": models.appeal_payload(row),
+            "hold": models.hold_payload(hold)}
+
+
+def review_appeal(conn: Any, appeal_id: Any, *, decision: Any, reviewers: Sequence[str],
+                  reason: Any, actor: Any, now: datetime | None = None,
+                  scopes: Iterable[str] = ()) -> dict[str, Any]:
+    """复核申诉：``uphold``（维持冻结）或 ``release``（解除冻结）。
+
+    * ``release`` **复用** :func:`release` 的全部规则（复核人数 / 高级别 scope），
+      因此申诉不会成为绕过双人复核的旁路；
+    * ``uphold`` 只落申诉终态 + 事件，hold 保持 active（I1 仍按原 expires_at 到期）；
+    * 窗口外（deadline 已过）不再受理，先由 :func:`expire_appeals` 翻 expired。
+    """
+    require_feature()
+    moment = now or clock.utcnow()
+    text = str(decision or "").strip().lower()
+    decisions = {"uphold": facts.APPEAL_UPHELD, "release": facts.APPEAL_RELEASED}
+    if text not in decisions:
+        raise Conflict("decision 必须是 uphold/release", reason="bad_decision")
+    identifier = models.parse_hold_id(appeal_id)
+    reason_text = models.validate_reason(reason)
+    actor_text = models.normalize_actor(actor)
+    names = models.normalize_reviewers(list(reviewers))
+
+    appeal = store.get_appeal(conn, identifier, for_update=True)
+    if appeal is None:
+        raise NotFound("申诉记录不存在", reason="not_found")
+    if appeal["state"] != facts.APPEAL_OPEN:
+        raise Conflict("申诉已结案，不可重复复核", reason="appeal_closed",
+                       state=str(appeal["state"]))
+    if moment > appeal["deadline_at"]:
+        raise Conflict("申诉窗口已过（7 天），不再受理", reason="appeal_window_closed")
+
+    hold_id = uuid.UUID(str(appeal["hold_id"]))
+    if decisions[text] == facts.APPEAL_RELEASED:
+        released = release(conn, hold_id, reviewers=names, reason=reason_text,
+                           actor=actor_text, now=moment, scopes=scopes)
+        row = store.resolve_appeal(conn, identifier, state=facts.APPEAL_RELEASED,
+                                   reviewers=names, release_reason=reason_text,
+                                   resolved_at=moment)
+        return {"action": "released", "appeal": models.appeal_payload(row),
+                "hold": released["hold"]}
+
+    if not names:
+        raise Conflict("维持冻结需要至少 1 名复核人", reason="reviewers_insufficient")
+    row = store.resolve_appeal(conn, identifier, state=facts.APPEAL_UPHELD,
+                               reviewers=names, release_reason=None,
+                               resolved_at=moment)
+    hold = store.get_hold(conn, hold_id)
+    return {"action": "upheld", "appeal": models.appeal_payload(row),
+            "hold": models.hold_payload(hold) if hold else None}
+
+
+def expire_appeals(conn: Any, now: datetime | None = None) -> list[dict[str, Any]]:
+    """把窗口已过的 open 申诉翻成 expired（只改申诉表，不动 hold / 账本）。"""
+    require_feature()
+    rows = store.expire_open_appeals(conn, now or clock.utcnow())
+    return [models.appeal_payload(row) for row in rows]
+
+
+def appeal_of(conn: Any, hold_id: Any) -> dict[str, Any] | None:
+    """只读：某条冻结的申诉（最近一条）。"""
+    identifier = models.parse_hold_id(hold_id)
+    rows = store.list_appeals(conn, hold_id=identifier, limit=1)
+    return models.appeal_payload(rows[0]) if rows else None
+
+
+def list_appeals(conn: Any, *, node_id: Any = None, state: Any = None,
+                 limit: int = 50) -> list[dict[str, Any]]:
+    """只读：按节点 / 状态列申诉（管理面用）。"""
+    rows = store.list_appeals(conn, node_id=node_id, state=state, limit=limit)
+    return [models.appeal_payload(row) for row in rows]
 
 
 # ───────────────────────────────────────────────────────── 到期 / 查询

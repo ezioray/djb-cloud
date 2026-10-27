@@ -27,7 +27,7 @@ def test_m17_objects_exist_in_fully_migrated_schema(migrated):
     assert {"uq_integrity_holds_active", "idx_integrity_holds_node",
             "idx_integrity_holds_expiry"} <= indexes
     numbers = [int(path.name.split("_", 1)[0]) for path in m17_migration_files()]
-    assert numbers == [1710, 1711, 1720, 1721, 1730, 1740]
+    assert numbers == [1710, 1711, 1712, 1720, 1721, 1730, 1740]
     base = [int(path.name.split("_", 1)[0]) for path in base_migration_files()]
     assert base == sorted(base)
     assert max(base) < 1700

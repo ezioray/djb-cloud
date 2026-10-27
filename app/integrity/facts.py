@@ -46,6 +46,22 @@ EVENT_ESCALATED: Final[str] = "escalated"
 EVENT_RELEASED: Final[str] = "released"
 EVENT_EXPIRED: Final[str] = "expired"
 
+# ───────────────────────────────────────────────────────── 申诉（§6.1，1712）
+APPEAL_WINDOW: Final[timedelta] = timedelta(days=7)
+"""申诉窗口：自 hold.created_at 起 7 天（与 I1 自动到期同长）。"""
+
+APPEAL_STATES: Final[tuple[str, ...]] = ("open", "upheld", "released", "expired")
+APPEAL_OPEN: Final[str] = "open"
+APPEAL_UPHELD: Final[str] = "upheld"
+APPEAL_RELEASED: Final[str] = "released"
+APPEAL_EXPIRED: Final[str] = "expired"
+APPEAL_DECISIONS: Final[tuple[str, ...]] = (APPEAL_UPHELD, APPEAL_RELEASED)
+
+APPEAL_COLUMNS: Final[str] = (
+    "id, hold_id, node_id, model, state, reason, appellant, created_at, deadline_at, "
+    "resolved_at, resolution, release_reason, reviewer_a, reviewer_b, version, updated_at"
+)
+
 # ───────────────────────────────────────────────────────── 复核（双人）
 REVIEWERS_REQUIRED: Final[dict[str, int]] = {"I0": 1, "I1": 1, "I2": 2, "I3": 2, "I4": 2}
 """解除冻结所需**不同**复核人数（I2+ 双人复核，§6.1）。"""

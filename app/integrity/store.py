@@ -27,6 +27,8 @@ __all__ = [
     "active_predicate", "get_hold", "find_active_hold", "insert_hold",
     "escalate_hold", "mark_released", "expire_due", "insert_event", "list_events",
     "list_holds", "frozen_total", "count_active", "lock_node_model",
+    "insert_appeal", "get_appeal", "find_open_appeal", "resolve_appeal",
+    "list_appeals", "expire_open_appeals",
 ]
 
 ACTIVE_PREDICATE = "state = 'active' AND (expires_at IS NULL OR expires_at > %s)"
@@ -165,6 +167,107 @@ def insert_event(conn: Any, *, event_id: uuid.UUID, hold_id: uuid.UUID | None,
         row = cur.fetchone()
     assert row is not None
     return dict(row)
+
+
+# ───────────────────────────────────────────────────────── 申诉（1712）
+def insert_appeal(conn: Any, *, appeal_id: uuid.UUID, hold_id: uuid.UUID, node_id: str,
+                  model: str, reason: str, appellant: str, created_at: datetime,
+                  deadline_at: datetime) -> dict[str, Any]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"""
+            INSERT INTO supplier_integrity_appeals
+              (id, hold_id, node_id, model, state, reason, appellant, created_at,
+               deadline_at, version, updated_at)
+            VALUES (%s, %s, %s, %s, 'open', %s, %s, %s, %s, 1, %s)
+            RETURNING {facts.APPEAL_COLUMNS}
+            """,
+            (appeal_id, hold_id, node_id, model, reason, appellant, created_at,
+             deadline_at, created_at))
+        row = cur.fetchone()
+    assert row is not None
+    return dict(row)
+
+
+def get_appeal(conn: Any, appeal_id: uuid.UUID, *, for_update: bool = False
+               ) -> dict[str, Any] | None:
+    suffix = " FOR UPDATE" if for_update else ""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"SELECT {facts.APPEAL_COLUMNS} FROM supplier_integrity_appeals"
+            f" WHERE id = %s{suffix}", (appeal_id,))
+        return cur.fetchone()
+
+
+def find_open_appeal(conn: Any, hold_id: uuid.UUID, *, for_update: bool = False
+                     ) -> dict[str, Any] | None:
+    suffix = " FOR UPDATE" if for_update else ""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"SELECT {facts.APPEAL_COLUMNS} FROM supplier_integrity_appeals"
+            f" WHERE hold_id = %s AND state = 'open'{suffix}", (hold_id,))
+        return cur.fetchone()
+
+
+def resolve_appeal(conn: Any, appeal_id: uuid.UUID, *, state: str, reviewers: list[str],
+                   release_reason: str | None, resolved_at: datetime) -> dict[str, Any]:
+    """终态落库：open → upheld / released / expired（version+1，触发器兜底）。"""
+    reviewer_a = reviewers[0] if reviewers else None
+    reviewer_b = reviewers[1] if len(reviewers) > 1 else None
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"""
+            UPDATE supplier_integrity_appeals
+               SET state = %s, resolution = %s, resolved_at = %s, release_reason = %s,
+                   reviewer_a = %s, reviewer_b = %s,
+                   version = version + 1, updated_at = %s
+             WHERE id = %s AND state = 'open'
+            RETURNING {facts.APPEAL_COLUMNS}
+            """,
+            (state, state, resolved_at, release_reason, reviewer_a, reviewer_b,
+             resolved_at, appeal_id))
+        row = cur.fetchone()
+    if row is None:                                      # pragma: no cover - 调用方已校验 open
+        raise LookupError("申诉已不在 open 状态")
+    return dict(row)
+
+
+def list_appeals(conn: Any, *, hold_id: uuid.UUID | None = None,
+                 node_id: str | None = None, state: str | None = None,
+                 limit: int = 50) -> list[dict[str, Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if hold_id is not None:
+        clauses.append("hold_id = %s")
+        params.append(hold_id)
+    if node_id is not None:
+        clauses.append("node_id = %s")
+        params.append(node_id)
+    if state is not None:
+        clauses.append("state = %s")
+        params.append(state)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(max(1, min(int(limit), 200)))
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"SELECT {facts.APPEAL_COLUMNS} FROM supplier_integrity_appeals{where}"
+            f" ORDER BY created_at DESC, id DESC LIMIT %s", params)
+        return list(cur.fetchall())
+
+
+def expire_open_appeals(conn: Any, now: datetime) -> list[dict[str, Any]]:
+    """把窗口已过的 open 申诉翻成 expired（仍只改本表，不动 hold / 账本）。"""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            f"""
+            UPDATE supplier_integrity_appeals
+               SET state = 'expired', resolution = 'expired', resolved_at = %s,
+                   version = version + 1, updated_at = %s
+             WHERE state = 'open' AND deadline_at <= %s
+            RETURNING {facts.APPEAL_COLUMNS}
+            """,
+            (now, now, now))
+        return list(cur.fetchall())
 
 
 def list_events(conn: Any, hold_id: uuid.UUID, *, limit: int = 50) -> list[dict[str, Any]]:

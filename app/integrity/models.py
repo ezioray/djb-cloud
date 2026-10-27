@@ -58,6 +58,28 @@ def hold_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def appeal_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+    """申诉对外形状（白名单字段；时间 UTC ISO）。"""
+    return {
+        "id": _uuid_text(row["id"]),
+        "hold_id": _uuid_text(row["hold_id"]),
+        "node_id": row["node_id"],
+        "model": row["model"],
+        "state": row["state"],
+        "reason": row["reason"],
+        "appellant": row["appellant"],
+        "created_at": clock.iso(row["created_at"]),
+        "deadline_at": clock.iso(row.get("deadline_at")),
+        "resolved_at": clock.iso(row.get("resolved_at")),
+        "resolution": row.get("resolution"),
+        "release_reason": row.get("release_reason"),
+        "reviewer_a": row.get("reviewer_a"),
+        "reviewer_b": row.get("reviewer_b"),
+        "version": int(row["version"]),
+        "updated_at": clock.iso(row.get("updated_at")),
+    }
+
+
 def event_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "event_id": _uuid_text(row["event_id"]),

@@ -30,6 +30,7 @@ FIXED_NOW = datetime(2026, 10, 24, 0, 0, tzinfo=timezone.utc)
 
 M17_TABLES: tuple[str, ...] = (
     "supplier_integrity_holds", "supplier_integrity_events",          # 1710（C14 冻结）
+    "supplier_integrity_appeals",                                    # 1712（C14 申诉）
     "model_attestations", "attestation_challenges", "attestation_events",  # 1720（C12 证明）
     "sampling_epochs", "sampling_draws", "sampling_events",           # 1730（C14b 抽检）
     "canary_prompts", "canary_runs", "canary_events",                 # 1740（C13 canary）
@@ -37,6 +38,7 @@ M17_TABLES: tuple[str, ...] = (
 M17_VIEWS: tuple[str, ...] = ("v_supply_integrity_frozen", "v_supply_model_attested")
 M17_FUNCTIONS: tuple[str, ...] = (
     "m17_holds_guard", "m17_events_guard", "m17_forbid_truncate",
+    "m17_appeal_guard", "m17_appeals_forbid_truncate",
     "m17_attestation_guard", "m17_challenge_guard", "m17_attest_event_guard",
     "m17_attest_forbid_truncate",
     "m17_sampling_epoch_guard", "m17_sampling_draw_guard", "m17_sampling_event_guard",
@@ -49,6 +51,9 @@ M17_INDEXES: tuple[str, ...] = (
     "uq_integrity_holds_active", "idx_integrity_holds_node", "idx_integrity_holds_level",
     "idx_integrity_holds_expiry", "idx_integrity_events_hold", "idx_integrity_events_node",
     "supplier_integrity_holds_pkey", "supplier_integrity_events_pkey",
+    # 1712
+    "uq_integrity_appeals_open", "idx_integrity_appeals_hold",
+    "idx_integrity_appeals_node", "supplier_integrity_appeals_pkey",
     # 1720
     "uq_attestations_active", "idx_attestations_node", "idx_attestations_level",
     "idx_attestations_expiry", "idx_challenges_node", "idx_challenges_expiry",
